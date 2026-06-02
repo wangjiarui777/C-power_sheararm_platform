@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.DeviceTemperatureDataMapper">
+
+    <resultMap type="DeviceTemperatureData" id="DeviceTemperatureDataResult">
+        <result property="dataId"    column="data_id"    />
+        <result property="deviceCode"    column="device_code"    />
+        <result property="temperatureValue"    column="temperature_value"    />
+        <result property="collectionTime"    column="collection_time"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectDeviceTemperatureDataVo">
+        select data_id, device_code, temperature_value, collection_time, create_time, update_time, remark from device_temperature_data
+    </sql>
+
+    <select id="selectDeviceTemperatureDataList" parameterType="DeviceTemperatureData" resultMap="DeviceTemperatureDataResult">
+        <include refid="selectDeviceTemperatureDataVo"/>
+        <where>
+            <if test="deviceCode != null and deviceCode != ''"> and device_code = #{deviceCode}</if>
+            <if test="temperatureValue != null"> and temperature_value = #{temperatureValue}</if>
+        </where>
+        order by collection_time desc
+    </select>
+
+    <select id="selectRecentDeviceTemperatureDataList" resultMap="DeviceTemperatureDataResult">
+        <include refid="selectDeviceTemperatureDataVo"/>
+        order by collection_time desc
+        limit 20
+    </select>
+
+    <select id="selectDeviceTemperatureDataById" parameterType="Long" resultMap="DeviceTemperatureDataResult">
+        <include refid="selectDeviceTemperatureDataVo"/>
+        where data_id = #{dataId}
+    </select>
+
+    <insert id="insertDeviceTemperatureData" parameterType="DeviceTemperatureData" useGeneratedKeys="true" keyProperty="dataId">
+        insert into device_temperature_data
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="deviceCode != null and deviceCode != ''">device_code,</if>
+            <if test="temperatureValue != null">temperature_value,</if>
+            <if test="collectionTime != null">collection_time,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="deviceCode != null and deviceCode != ''">#{deviceCode},</if>
+            <if test="temperatureValue != null">#{temperatureValue},</if>
+            <if test="collectionTime != null">#{collectionTime},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateDeviceTemperatureData" parameterType="DeviceTemperatureData">
+        update device_temperature_data
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="deviceCode != null and deviceCode != ''">device_code = #{deviceCode},</if>
+            <if test="temperatureValue != null">temperature_value = #{temperatureValue},</if>
+            <if test="collectionTime != null">collection_time = #{collectionTime},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where data_id = #{dataId}
+    </update>
+
+    <delete id="deleteDeviceTemperatureDataById" parameterType="Long">
+        delete from device_temperature_data where data_id = #{dataId}
+    </delete>
+
+    <delete id="deleteDeviceTemperatureDataByIds" parameterType="String">
+        delete from device_temperature_data where data_id in
+        <foreach item="dataId" collection="array" open="(" separator="," close=")">
+            #{dataId}
+        </foreach>
+    </delete>
+</mapper>

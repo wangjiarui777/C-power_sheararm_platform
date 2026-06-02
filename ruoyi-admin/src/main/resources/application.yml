@@ -1,0 +1,95 @@
+# 项目相关配置
+ruoyi:
+  # 名称
+  name: 振动温度监测平台
+  # 版本
+  version: 3.9.2
+  # 版权年份
+  copyrightYear: 2026
+  # 文件路径 示例（ Windows配置D:/ruoyi/uploadPath，Linux配置 /home/ruoyi/uploadPath）
+  profile: D:/ruoyi/uploadPath
+  # 获取ip地址开关
+  addressEnabled: false
+  # 验证码类型 math 数字计算 char 字符验证
+  captchaType: math
+
+sensor:
+  netty:
+    port: 9000
+  tdengine:
+    enabled: true
+    database: power
+    url: jdbc:TAOS-WS://127.0.0.1:6041/power?user=root&password=taosdata&varcharAsString=true
+    raw-super-table: sensor_raw_wave_st
+    fft-super-table: sensor_fft_point_st
+    csv-super-table: sensor_vibration_csv_st
+
+spring:
+  profiles:
+    active: dev
+  config:
+    import: optional:classpath:application-druid.yml
+  datasource:
+    druid:
+      stat-view-servlet:
+        enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 10s
+  redis:
+    host: localhost
+    port: 6379
+    database: 0
+    timeout: 10s
+
+# XSS/Referer 过滤器默认配置，避免启动时占位符缺失
+filters:
+  enabled: false
+
+xss:
+  enabled: false
+  excludes: /system/notice/*,/monitor/operlog/*
+  urlPatterns: /*
+
+referer:
+  enabled: false
+  allowed-domains: localhost,127.0.0.1
+
+repeatable:
+  enabled: false
+
+user:
+  password:
+    maxRetryCount: 5
+    lockTime: 10
+
+# 明确开启验证码，避免后端配置缺失时被关闭
+sys:
+  account:
+    captchaEnabled: true
+
+token:
+  header: Authorization
+  secret: ruoyi-secret-key
+  expireTime: 30
+
+# 开发环境配置
+server:
+  # 服务器的HTTP端口，默认为8080
+  port: 8080
+  servlet:
+    # 应用的访问路径
+    context-path: /
+  tomcat:
+    # tomcat的URI编码
+    uri-encoding: UTF-8
+    # 连接数满后的排队数，默认为100
+    accept-count: 1000
+    threads:
+      # tomcat最大线程数，默认为200
+      max: 800
+      # Tomcat启动初始化的线程数，默认值10
+      min-spare: 100

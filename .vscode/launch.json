@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "TDenginetest",
+      "request": "launch",
+      "mainClass": "com.ruoyi.sensor.tdengine.TDenginetest",
+      "projectName": "ruoyi-sensor"
+    },
+    {
+      "type": "java",
+      "name": "RuoYi Admin (module)",
+      "request": "launch",
+      "mainClass": "com.ruoyi.RuoYiApplication",
+      "projectName": "ruoyi-admin",
+      "cwd": "${workspaceFolder}/ruoyi-admin",
+      "vmArgs": "-Dspring.profiles.active=default",
+      "console": "internalConsole",
+      "sourcePaths": [
+        "${workspaceFolder}/ruoyi-admin/src/main/java",
+        "${workspaceFolder}/ruoyi-framework/src/main/java",
+        "${workspaceFolder}/ruoyi-system/src/main/java",
+        "${workspaceFolder}/ruoyi-sensor/src/main/java",
+        "${workspaceFolder}/ruoyi-common/src/main/java",
+        "${workspaceFolder}/ruoyi-quartz/src/main/java",
+        "${workspaceFolder}/ruoyi-generator/src/main/java"
+      ]
+    },
+    {
+      "type": "java",
+      "name": "RuoYi Admin (Maven Run)",
+      "request": "launch",
+      "mainClass": "org.codehaus.mojo.exec.ExecJavaMojo",
+      "projectName": "ruoyi-admin",
+      "cwd": "${workspaceFolder}",
+      "vmArgs": "-Dspring.profiles.active=default"
+    }
+  ]
+}

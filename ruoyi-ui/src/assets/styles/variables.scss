@@ -1,0 +1,257 @@
+// base color
+$blue: #324157;
+$light-blue: #00ffff;
+$red: #ff6b81;
+$pink: #e65d6e;
+$green: #30b08f;
+$tiffany: #00ffff;
+$yellow: #fec171;
+$panGreen: #30b08f;
+
+// 深色科技模式全局配色
+$base-page-background: #00040d;
+$base-page-background-overlay: rgba(0, 4, 13, 0.82);
+$base-primary-color: #00ffff;
+$base-card-border: rgba(0, 255, 255, 0.55);
+$base-card-shadow: 0 0 12px rgba(0, 255, 255, 0.12), 0 0 24px rgba(0, 255, 255, 0.06);
+$base-grid-line: rgba(0, 255, 255, 0.08);
+
+// 默认菜单主题风格
+$base-menu-color: rgba(233, 255, 255, 0.78);
+$base-menu-color-active: #ffffff;
+$base-menu-background: #020713;
+$base-logo-title-color: #ffffff;
+
+$base-menu-light-color: rgba(233, 255, 255, 0.78);
+$base-menu-light-background: #020713;
+$base-logo-light-title-color: #00ffff;
+
+$base-sub-menu-background: #050d1f;
+$base-sub-menu-hover: rgba(0, 255, 255, 0.08);
+
+$base-sidebar-width: 200px;
+
+:root {
+  --tech-page-bg: #00040d;
+  --tech-page-overlay: rgba(0, 4, 13, 0.82);
+  --tech-primary: #00ffff;
+  --tech-card-border: rgba(0, 255, 255, 0.55);
+  --tech-card-shadow: 0 0 12px rgba(0, 255, 255, 0.12), 0 0 24px rgba(0, 255, 255, 0.06);
+  --tech-grid-line: rgba(0, 255, 255, 0.08);
+}
+
+// 全局深色科技模式
+html, body, #app {
+  min-height: 100%;
+  background-color: $base-page-background;
+  background-image:
+    linear-gradient(to right, $base-grid-line 1px, transparent 1px),
+    linear-gradient(to bottom, $base-grid-line 1px, transparent 1px),
+    radial-gradient(circle at top, rgba(0, 255, 255, 0.08), transparent 38%);
+  background-size: 50px 50px, 50px 50px, 100% 100%;
+  background-attachment: fixed;
+  color: rgba(235, 255, 255, 0.92);
+}
+
+body {
+  background-color: $base-page-background;
+  background-image:
+    linear-gradient(to right, $base-grid-line 1px, transparent 1px),
+    linear-gradient(to bottom, $base-grid-line 1px, transparent 1px),
+    linear-gradient(180deg, rgba(0, 6, 18, 0.88), rgba(0, 4, 13, 0.94));
+  background-size: 50px 50px, 50px 50px, 100% 100%;
+  background-attachment: fixed;
+}
+
+// 全局卡片深色科技样式
+.el-card {
+  position: relative;
+  overflow: hidden;
+  background: rgba(1, 12, 28, 0.72);
+  border: 1px solid $base-card-border;
+  border-radius: 0 !important;
+  box-shadow: $base-card-shadow;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease, clip-path 0.25s ease;
+  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(120deg, transparent 0%, rgba(0, 255, 255, 0.04) 42%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0.04) 58%, transparent 100%);
+    opacity: 0.28;
+    mix-blend-mode: screen;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border: 1px solid rgba(0, 255, 255, 0.25);
+    clip-path: inherit;
+    box-shadow: inset 0 0 18px rgba(0, 255, 255, 0.08);
+  }
+
+  > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  &:hover {
+    border-color: rgba(0, 255, 255, 0.8);
+    box-shadow: 0 0 16px rgba(0, 255, 255, 0.2), 0 0 30px rgba(0, 255, 255, 0.1);
+    transform: translateY(-1px);
+  }
+}
+
+.el-button {
+  border-radius: 0 !important;
+  background: rgba(1, 18, 40, 0.65);
+  border: 1px solid rgba(0, 255, 255, 0.45);
+  color: rgba(235, 255, 255, 0.92);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.12), inset 0 0 10px rgba(0, 255, 255, 0.04);
+  transition: all 0.25s ease;
+
+  &:hover,
+  &:focus {
+    color: #ffffff;
+    border-color: rgba(0, 255, 255, 0.9);
+    background: rgba(0, 255, 255, 0.12);
+    box-shadow: 0 0 14px rgba(0, 255, 255, 0.24), inset 0 0 12px rgba(0, 255, 255, 0.08);
+    transform: translateY(-1px);
+  }
+
+  &.el-button--primary {
+    background: rgba(0, 255, 255, 0.16);
+    border-color: rgba(0, 255, 255, 0.9);
+    color: #e9ffff;
+  }
+
+  &.el-button--text,
+  &.is-plain {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+.el-table {
+  background: rgba(1, 12, 28, 0.72);
+  color: rgba(235, 255, 255, 0.92);
+  border: 1px solid rgba(0, 255, 255, 0.28);
+  box-shadow: inset 0 0 16px rgba(0, 255, 255, 0.03), 0 0 12px rgba(0, 255, 255, 0.06);
+
+  &::before {
+    background-color: rgba(0, 255, 255, 0.2);
+  }
+
+  th,
+  td {
+    border-bottom: 1px solid rgba(0, 255, 255, 0.08) !important;
+  }
+
+  th {
+    background: rgba(0, 255, 255, 0.06) !important;
+    color: rgba(215, 255, 255, 0.96) !important;
+    font-weight: 600;
+  }
+
+  tr {
+    background: transparent !important;
+  }
+
+  .el-table__body tr:hover > td {
+    background-color: rgba(0, 255, 255, 0.06) !important;
+  }
+}
+
+.el-dialog {
+  background: rgba(1, 12, 28, 0.92);
+  border: 1px solid rgba(0, 255, 255, 0.45);
+  box-shadow: 0 0 18px rgba(0, 255, 255, 0.14), 0 0 38px rgba(0, 255, 255, 0.08);
+  border-radius: 0 !important;
+  overflow: hidden;
+
+  .el-dialog__header {
+    background: rgba(0, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(0, 255, 255, 0.18);
+  }
+
+  .el-dialog__title,
+  .el-dialog__body,
+  .el-dialog__footer {
+    color: rgba(235, 255, 255, 0.94);
+  }
+
+  .el-dialog__headerbtn .el-dialog__close {
+    color: rgba(0, 255, 255, 0.9);
+  }
+}
+
+.el-input__inner,
+.el-textarea__inner {
+  background: rgba(1, 12, 28, 0.78);
+  border: 1px solid rgba(0, 255, 255, 0.35);
+  color: rgba(235, 255, 255, 0.96);
+  border-radius: 0 !important;
+  box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.05);
+
+  &::placeholder {
+    color: rgba(235, 255, 255, 0.35);
+  }
+
+  &:focus {
+    border-color: rgba(0, 255, 255, 0.95);
+    box-shadow: 0 0 12px rgba(0, 255, 255, 0.12);
+  }
+}
+
+.el-tag {
+  border-radius: 0 !important;
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  color: rgba(235, 255, 255, 0.96);
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.08);
+}
+
+.el-tag--success,
+.el-tag--warning,
+.el-tag--danger,
+.el-tag--info,
+.el-tag--primary {
+  background: rgba(0, 255, 255, 0.08);
+  border-color: rgba(0, 255, 255, 0.4);
+  color: rgba(235, 255, 255, 0.96);
+}
+
+.el-tag,
+.el-table,
+.el-dialog,
+.el-input__inner,
+.el-textarea__inner {
+  font-family: 'Roboto Mono', 'Digital-7', 'Share Tech Mono', 'Courier New', monospace;
+}
+
+
+// the :export directive is the magic sauce for webpack
+// https://www.bluematador.com/blog/how-to-share-variables-between-js-and-sass
+:export {
+  menuColor: $base-menu-color;
+  menuLightColor: $base-menu-light-color;
+  menuColorActive: $base-menu-color-active;
+  menuBackground: $base-menu-background;
+  menuLightBackground: $base-menu-light-background;
+  subMenuBackground: $base-sub-menu-background;
+  subMenuHover: $base-sub-menu-hover;
+  sideBarWidth: $base-sidebar-width;
+  logoTitleColor: $base-logo-title-color;
+  logoLightTitleColor: $base-logo-light-title-color;
+  primaryColor: $base-primary-color;
+  pageBackground: $base-page-background;
+  cardBorder: $base-card-border;
+  cardShadow: $base-card-shadow;
+  gridLine: $base-grid-line
+}

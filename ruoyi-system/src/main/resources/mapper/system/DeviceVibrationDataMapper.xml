@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.system.mapper.DeviceVibrationDataMapper">
+
+    <resultMap type="DeviceVibrationData" id="DeviceVibrationDataResult">
+        <result property="dataId"    column="data_id"    />
+        <result property="deviceCode"    column="device_code"    />
+        <result property="channelId"    column="channel_id"    />
+        <result property="vibrationValue"    column="vibration_value"    />
+        <result property="accelerationValue"    column="acceleration_value"    />
+        <result property="sampleTime"    column="sample_time"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="remark"    column="remark"    />
+    </resultMap>
+
+    <sql id="selectDeviceVibrationDataVo">
+        select data_id, device_code, channel_id, vibration_value, acceleration_value, sample_time, create_time, update_time, remark from device_vibration_data
+    </sql>
+
+    <select id="selectDeviceVibrationDataList" parameterType="DeviceVibrationData" resultMap="DeviceVibrationDataResult">
+        <include refid="selectDeviceVibrationDataVo"/>
+        <where>
+            <if test="deviceCode != null and deviceCode != ''"> and device_code = #{deviceCode}</if>
+            <if test="channelId != null"> and channel_id = #{channelId}</if>
+            <if test="vibrationValue != null"> and vibration_value = #{vibrationValue}</if>
+            <if test="accelerationValue != null"> and acceleration_value = #{accelerationValue}</if>
+        </where>
+        order by sample_time desc
+    </select>
+
+    <select id="selectRecentDeviceVibrationDataList" resultMap="DeviceVibrationDataResult">
+        <include refid="selectDeviceVibrationDataVo"/>
+        order by sample_time desc
+        limit 100
+    </select>
+
+    <select id="selectDeviceVibrationDataById" parameterType="Long" resultMap="DeviceVibrationDataResult">
+        <include refid="selectDeviceVibrationDataVo"/>
+        where data_id = #{dataId}
+    </select>
+
+    <insert id="insertDeviceVibrationData" parameterType="DeviceVibrationData" useGeneratedKeys="true" keyProperty="dataId">
+        insert into device_vibration_data
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="deviceCode != null and deviceCode != ''">device_code,</if>
+            <if test="channelId != null">channel_id,</if>
+            <if test="vibrationValue != null">vibration_value,</if>
+            <if test="accelerationValue != null">acceleration_value,</if>
+            <if test="sampleTime != null">sample_time,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="deviceCode != null and deviceCode != ''">#{deviceCode},</if>
+            <if test="channelId != null">#{channelId},</if>
+            <if test="vibrationValue != null">#{vibrationValue},</if>
+            <if test="accelerationValue != null">#{accelerationValue},</if>
+            <if test="sampleTime != null">#{sampleTime},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <insert id="batchInsertDeviceVibrationData" parameterType="java.util.List">
+        insert into device_vibration_data (device_code, channel_id, vibration_value, acceleration_value, sample_time, create_time, update_time, remark)
+        values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.deviceCode}, #{item.channelId}, #{item.vibrationValue}, #{item.accelerationValue}, #{item.sampleTime}, #{item.createTime}, #{item.updateTime}, #{item.remark})
+        </foreach>
+    </insert>
+
+    <update id="updateDeviceVibrationData" parameterType="DeviceVibrationData">
+        update device_vibration_data
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="deviceCode != null and deviceCode != ''">device_code = #{deviceCode},</if>
+            <if test="channelId != null">channel_id = #{channelId},</if>
+            <if test="vibrationValue != null">vibration_value = #{vibrationValue},</if>
+            <if test="accelerationValue != null">acceleration_value = #{accelerationValue},</if>
+            <if test="sampleTime != null">sample_time = #{sampleTime},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where data_id = #{dataId}
+    </update>
+
+    <delete id="deleteDeviceVibrationDataById" parameterType="Long">
+        delete from device_vibration_data where data_id = #{dataId}
+    </delete>
+
+    <delete id="deleteDeviceVibrationDataByIds" parameterType="String">
+        delete from device_vibration_data where data_id in
+        <foreach item="dataId" collection="array" open="(" separator="," close=")">
+            #{dataId}
+        </foreach>
+    </delete>
+</mapper>

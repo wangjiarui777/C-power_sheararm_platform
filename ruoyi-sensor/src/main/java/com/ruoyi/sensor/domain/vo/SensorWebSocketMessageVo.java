@@ -1,0 +1,73 @@
+package com.ruoyi.sensor.domain.vo;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
+public class SensorWebSocketMessageVo
+{
+    private String type;
+    private String event;
+    private String deviceCode;
+    private Integer channelId;
+    private String batchId;
+    private String status;
+    private String resultState;
+    private String diagnosisResult;
+    private String diagnosisName;
+    private String diagnosisDetail;
+    private Double confidence;
+    private Double healthIndex;
+    private String riskLevel;
+    private Double rms;
+    private Double peak;
+    private LocalDateTime sampleTime;
+    private List<Double> waveform;
+    private List<Double> frequencyAxis;
+    private List<Double> spectrum;
+    private List<Map<String, Object>> evidence;
+    private String message;
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+    public String getEvent() { return event; }
+    public void setEvent(String event) { this.event = event; }
+    public String getDeviceCode() { return deviceCode; }
+    public void setDeviceCode(String deviceCode) { this.deviceCode = deviceCode; }
+    public Integer getChannelId() { return channelId; }
+    public void setChannelId(Integer channelId) { this.channelId = channelId; }
+    public String getBatchId() { return batchId; }
+    public void setBatchId(String batchId) { this.batchId = batchId; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getResultState() { return resultState; }
+    public void setResultState(String resultState) { this.resultState = resultState; }
+    public String getDiagnosisResult() { return diagnosisResult; }
+    public void setDiagnosisResult(String diagnosisResult) { this.diagnosisResult = diagnosisResult; }
+    public String getDiagnosisName() { return diagnosisName; }
+    public void setDiagnosisName(String diagnosisName) { this.diagnosisName = diagnosisName; }
+    public String getDiagnosisDetail() { return diagnosisDetail; }
+    public void setDiagnosisDetail(String diagnosisDetail) { this.diagnosisDetail = diagnosisDetail; }
+    public Double getConfidence() { return confidence; }
+    public void setConfidence(Double confidence) { this.confidence = confidence; }
+    public Double getHealthIndex() { return healthIndex; }
+    public void setHealthIndex(Double healthIndex) { this.healthIndex = healthIndex; }
+    public String getRiskLevel() { return riskLevel; }
+    public void setRiskLevel(String riskLevel) { this.riskLevel = riskLevel; }
+    public Double getRms() { return rms; }
+    public void setRms(Double rms) { this.rms = rms; }
+    public Double getPeak() { return peak; }
+    public void setPeak(Double peak) { this.peak = peak; }
+    public LocalDateTime getSampleTime() { return sampleTime; }
+    public void setSampleTime(LocalDateTime sampleTime) { this.sampleTime = sampleTime; }
+    public List<Double> getWaveform() { return waveform; }
+    public void setWaveform(List<Double> waveform) { this.waveform = waveform; }
+    public List<Double> getFrequencyAxis() { return frequencyAxis; }
+    public void setFrequencyAxis(List<Double> frequencyAxis) { this.frequencyAxis = frequencyAxis; }
+    public List<Double> getSpectrum() { return spectrum; }
+    public void setSpectrum(List<Double> spectrum) { this.spectrum = spectrum; }
+    public List<Map<String, Object>> getEvidence() { return evidence; }
+    public void setEvidence(List<Map<String, Object>> evidence) { this.evidence = evidence; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+}

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.sensor.mapper.VibrationAnalysisBatchMapper">
+
+    <resultMap id="VibrationAnalysisBatchResultMap" type="com.ruoyi.sensor.domain.entity.VibrationAnalysisBatchEntity">
+        <id property="batchId" column="batch_id" />
+        <result property="deviceCode" column="device_code" />
+        <result property="sampleRate" column="sample_rate" />
+        <result property="sampleCount" column="sample_count" />
+        <result property="collectTime" column="collect_time" />
+        <result property="createTime" column="create_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="BaseColumns">
+        batch_id,
+        device_code,
+        sample_rate,
+        sample_count,
+        collect_time,
+        create_time,
+        remark
+    </sql>
+
+    <select id="selectByBatchId" resultMap="VibrationAnalysisBatchResultMap">
+        SELECT <include refid="BaseColumns" />
+        FROM vibration_analysis_batch
+        WHERE batch_id = #{batchId}
+    </select>
+
+    <select id="selectBatchList" resultMap="VibrationAnalysisBatchResultMap">
+        SELECT <include refid="BaseColumns" />
+        FROM vibration_analysis_batch
+        <where>
+            <if test="batchId != null">
+                AND batch_id = #{batchId}
+            </if>
+            <if test="deviceCode != null and deviceCode != ''">
+                AND device_code = #{deviceCode}
+            </if>
+            <if test="sampleRate != null">
+                AND sample_rate = #{sampleRate}
+            </if>
+        </where>
+        ORDER BY collect_time DESC
+    </select>
+
+    <insert id="insertBatch" parameterType="com.ruoyi.sensor.domain.entity.VibrationAnalysisBatchEntity">
+        INSERT INTO vibration_analysis_batch
+        (batch_id, device_code, sample_rate, sample_count, collect_time, create_time, remark)
+        VALUES
+        (#{batchId}, #{deviceCode}, #{sampleRate}, #{sampleCount}, #{collectTime}, #{createTime}, #{remark})
+    </insert>
+
+    <update id="updateBatch" parameterType="com.ruoyi.sensor.domain.entity.VibrationAnalysisBatchEntity">
+        UPDATE vibration_analysis_batch
+        SET device_code = #{deviceCode},
+            sample_rate = #{sampleRate},
+            sample_count = #{sampleCount},
+            collect_time = #{collectTime},
+            create_time = #{createTime},
+            remark = #{remark}
+        WHERE batch_id = #{batchId}
+    </update>
+
+    <delete id="deleteByBatchIds">
+        DELETE FROM vibration_analysis_batch
+        WHERE batch_id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+</mapper>
