@@ -1,40 +1,5 @@
 import request from '@/utils/request'
-import axios from 'axios'
 import { listBearingDiagnosisHistory, getBearingDiagnosisFftData } from './bearingDiagnosis'
-
-const SIDE_CAR_BASE_URL = process.env.VUE_APP_VIBRATION_SIDECAR_URL || 'http://127.0.0.1:5001'
-
-export function fetchMatFiles() {
-  return axios({
-    url: `${SIDE_CAR_BASE_URL}/mat-files`,
-    method: 'get'
-  })
-}
-
-export function analyzeVibrationFromSidecar(fileName, modelType = 'gear') {
-  return axios({
-    url: `${SIDE_CAR_BASE_URL}/analyze`,
-    method: 'get',
-    params: { file_name: fileName, model_type: modelType }
-  })
-}
-
-/**
- * Analyze an uploaded `.mat` file directly through the Python sidecar.
- * @param {File} file
- */
-export function analyzeUploadedMatFromSidecar(file, modelType = 'gear') {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('model_type', modelType)
-  return axios({
-    url: `${SIDE_CAR_BASE_URL}/analyze/upload`,
-    method: 'post',
-    data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' }
-  })
-}
-
 
 /**
  * @deprecated Use `@/api/system/bearingDiagnosis` instead.

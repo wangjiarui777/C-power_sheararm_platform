@@ -124,12 +124,6 @@ export const constantRoutes = [
         component: () => import('@/views/monitor/diagnosis/index'),
         name: 'BearingDiagnosis',
         meta: { title: '诊断分析', icon: 'chart' }
-      },
-      {
-        path: 'python-sidecar',
-        component: () => import('@/views/system/vibration/analysis'),
-        name: 'PythonSidecarAnalysis',
-        meta: { title: 'Python Sidecar 分析', icon: 'chart' }
       }
     ]
   },
