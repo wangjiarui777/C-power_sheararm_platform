@@ -500,7 +500,7 @@ export default {
 .tree-sidebar {
   flex-shrink: 0;
   width: 220px;
-  background: #fff;
+  background: #1a1a1a;
   border-right: 1px solid #e8eaed;
   display: flex;
   flex-direction: column;
@@ -557,14 +557,14 @@ export default {
   justify-content: center;
   width: 15px;
   height: 20px;
-  background: #fff;
+  background: #1a1a1a;
   border-radius: 0 4px 4px 0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
   
   .tree-sidebar.collapsed & {
     right: 0;
-    background: #f7f8fa;
+    background: #171717;
     border-radius: 0 4px 4px 0;
   }
   
@@ -575,15 +575,15 @@ export default {
 
 .collapse-button {
   font-size: 14px;
-  color: #909399;
+  color: #ffffff;
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
   transition: all 0.2s;
   
   &:hover {
-    color: #409eff;
-    background: #ecf5ff;
+    color: #ffffff;
+    background: #1f1f1f;
   }
 }
 
@@ -594,13 +594,13 @@ export default {
   padding: 0 10px;
   height: 40px;
   border-bottom: 1px solid #e8eaed;
-  background: #f7f8fa;
+  background: #171717;
   flex-shrink: 0;
 
   .tree-title {
     font-size: 13px;
     font-weight: 600;
-    color: #303133;
+    color: #ffffff;
     white-space: nowrap;
     overflow: hidden;
     display: flex;
@@ -608,7 +608,7 @@ export default {
     gap: 5px;
 
     i {
-      color: #409eff;
+      color: #ffffff;
       font-size: 14px;
     }
   }
@@ -623,15 +623,15 @@ export default {
 
 .tree-action-icon {
   font-size: 14px;
-  color: #909399;
+  color: #ffffff;
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
   transition: all 0.2s;
 
   &:hover {
-    color: #409eff;
-    background: #ecf5ff;
+    color: #ffffff;
+    background: #1f1f1f;
   }
 }
 
@@ -668,17 +668,17 @@ export default {
     margin-bottom: 1px;
 
     &:hover {
-      background: #f0f7ff;
+      background: #1f1f1f;
     }
   }
 
   ::v-deep .el-tree-node.is-current > .el-tree-node__content {
-    background: #e6f0fd;
-    color: #409eff;
+    background: #1f1f1f;
+    color: #ffffff;
     font-weight: 600;
 
     .node-icon {
-      color: #409eff !important;
+      color: #ffffff !important;
     }
   }
 }
@@ -692,7 +692,7 @@ export default {
 
   .node-icon {
     font-size: 14px;
-    color: #f5a623;
+    color: #ffffff;
     flex-shrink: 0;
   }
 
@@ -704,6 +704,6 @@ export default {
 }
 
 ::v-deep .el-icon-document.node-icon {
-  color: #909399 !important;
+  color: #ffffff !important;
 }
 </style>

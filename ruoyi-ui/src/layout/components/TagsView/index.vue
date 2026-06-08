@@ -394,17 +394,17 @@ $tags-bar-height: 34px;
 .tags-view-container {
   height: $tags-bar-height;
   width: 100%;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%);
+  background: linear-gradient(180deg, #171717 0%, #171717 100%);
   border-bottom: 1px solid #d7dee8;
   display: flex;
   align-items: center;
   overflow: hidden;
 
   $btn-width: 28px;
-  $btn-color: #64748b;
-  $btn-hover-bg: #e8eef6;
-  $btn-hover-color: #1f2937;
-  $btn-disabled-color: #b8c3d4;
+  $btn-color: #ffffff;
+  $btn-hover-bg: #1f1f1f;
+  $btn-hover-color: #e0e0e0;
+  $btn-disabled-color: #ffffff;
   $divider: 1px solid #d7dee8;
 
   .tags-nav-btn {
@@ -446,8 +446,8 @@ $tags-bar-height: 34px;
       height: 26px;
       line-height: 26px;
       border: 1px solid #d7dee8;
-      color: #475569;
-      background: #ffffff;
+      color: #ffffff;
+      background: #1a1a1a;
       padding: 0 8px;
       font-size: 12px;
       margin-left: 5px;
@@ -459,11 +459,11 @@ $tags-bar-height: 34px;
   }
   &:not(.tags-view-container--chrome) .tags-view-wrapper .tags-view-item.active {
     background-color: #42b983;
-    color: #fff;
+    color: #ffffff;
     border-color: #42b983;
     &::before {
       content: '';
-      background: #ffffff;
+      background: #1a1a1a;
       display: inline-block;
       width: 8px;
       height: 8px;
@@ -508,7 +508,7 @@ $tags-bar-height: 34px;
 
   .contextmenu {
     margin: 0;
-    background: #ffffff;
+    background: #1a1a1a;
     z-index: 3000;
     position: fixed;
     list-style-type: none;
@@ -516,7 +516,7 @@ $tags-bar-height: 34px;
     border-radius: 4px;
     font-size: 12px;
     font-weight: 400;
-    color: #1f2937;
+    color: #ffffff;
     border: 1px solid #d7dee8;
     box-shadow: 0 8px 20px rgba(31, 41, 55, .12);
 
@@ -525,12 +525,12 @@ $tags-bar-height: 34px;
       padding: 7px 16px;
       cursor: pointer;
       &:hover {
-        background: #eef6ff;
+        background: #1f1f1f;
       }
     }
   }
   &.tags-view-container--chrome {
-    --chrome-strip-bg: #eef2f6;
+    --chrome-strip-bg: #171717;
     --chrome-strip-border: #d7dee8;
     --chrome-tab-text: #475569;
 
@@ -608,9 +608,9 @@ $tags-bar-height: 34px;
         }
 
         &:hover:not(.active) {
-          background: #e8eef6 !important;
+          background: #1f1f1f !important;
           border-radius: 6px 6px 0 0;
-          color: #1f2937 !important;
+          color: #ffffff !important;
         }
 
         &.active {
@@ -713,7 +713,7 @@ $tags-bar-height: 34px;
       }
       &:hover {
         background-color: #b4bccc;
-        color: #fff;
+        color: #ffffff;
       }
     }
   }

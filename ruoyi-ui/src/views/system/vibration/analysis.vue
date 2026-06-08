@@ -2,7 +2,7 @@
   <div class="app-container vibration-analysis-page">
     <div class="hero-card">
       <div class="hero-left">
-        <div class="hero-badge">Vibration Diagnosis</div>
+        <div class="hero-badge">振动诊断</div>
         <h2>采煤机摇臂振动智能分析</h2>
         <p>从 `get/got` 自动加载振动数据完成诊断与频谱分析。</p>
       </div>
@@ -74,7 +74,7 @@
       </el-col>
       <el-col :xs="12" :sm="6">
         <el-card shadow="hover" class="metric-card compact-card">
-          <div class="metric-label">RMS / Peak</div>
+          <div class="metric-label">有效值 / 峰值</div>
           <div class="metric-value">{{ metricsText }}</div>
         </el-card>
       </el-col>
@@ -106,12 +106,12 @@
       <el-descriptions :column="2" border>
         <el-descriptions-item label="诊断标签">{{ result.label || result.diagnosis || result.diagnosisResult || '-' }}</el-descriptions-item>
         <el-descriptions-item label="模型置信度">{{ confidenceText }}</el-descriptions-item>
-        <el-descriptions-item label="RMS">{{ formatNumber(result.rms) }}</el-descriptions-item>
+        <el-descriptions-item label="有效值（RMS）">{{ formatNumber(result.rms) }}</el-descriptions-item>
         <el-descriptions-item label="峰值">{{ formatNumber(result.peak) }}</el-descriptions-item>
         <el-descriptions-item label="闭集预测">{{ result.closedPrediction || result.closed_prediction || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="Unknown 比例">{{ formatNumber(result.unknownRatio || result.unknown_ratio) }}</el-descriptions-item>
-        <el-descriptions-item label="文件一致性">{{ formatNumber(result.segmentConsistency || result.segment_consistency) }}</el-descriptions-item>
-        <el-descriptions-item label="Mean Mahalanobis">{{ formatNumber(result.meanMahalanobis || result.mean_mahalanobis) }}</el-descriptions-item>
+        <el-descriptions-item label="未知类别占比">{{ formatNumber(result.unknownRatio || result.unknown_ratio) }}</el-descriptions-item>
+        <el-descriptions-item label="片段一致性">{{ formatNumber(result.segmentConsistency || result.segment_consistency) }}</el-descriptions-item>
+        <el-descriptions-item label="平均马氏距离">{{ formatNumber(result.meanMahalanobis || result.mean_mahalanobis) }}</el-descriptions-item>
         <el-descriptions-item label="告警等级">{{ result.alarmLevel || result.alarm_level || '-' }}</el-descriptions-item>
         <el-descriptions-item label="决策原因">{{ result.decision_reason || '-' }}</el-descriptions-item>
         <el-descriptions-item label="时域点数">{{ waveformLength }}</el-descriptions-item>
@@ -134,6 +134,7 @@
 <script>
 import * as echarts from 'echarts'
 import { analyzeUploadedMatFromSidecar, analyzeVibrationFromSidecar, fetchMatFiles } from '@/api/system/vibrationAnalysis'
+import { translateDiagnosisLabel } from '@/utils/diagnosis-translations'
 
 export default {
   name: 'VibrationAnalysis',
@@ -288,8 +289,8 @@ export default {
         animation: false,
         grid: { left: 48, right: 16, top: 12, bottom: 28 },
         tooltip: { trigger: 'axis', confine: true },
-        xAxis: { type: 'value', name: '时间(s)', nameTextStyle: { color: '#475569', fontSize: 10 }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#e5eaf1' } } },
-        yAxis: { type: 'value', name: '幅值', nameTextStyle: { color: '#475569', fontSize: 10 }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#e5eaf1' } } },
+        xAxis: { type: 'value', name: '时间（秒）', nameTextStyle: { color: '#475569', fontSize: 10 }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#333333' } } },
+        yAxis: { type: 'value', name: '幅值', nameTextStyle: { color: '#475569', fontSize: 10 }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#333333' } } },
         series: [{ type: 'line', smooth: false, showSymbol: false, data: timeAxis.map((t, i) => [t, this.signal[i]]), lineStyle: { width: 1.2, color: '#2563eb' }, areaStyle: { opacity: 0.10, color: '#2563eb' } }]
       }
       if (this.timeChart) this.timeChart.setOption(option)
@@ -299,8 +300,8 @@ export default {
         animation: false,
         grid: { left: 48, right: 16, top: 12, bottom: 28 },
         tooltip: { trigger: 'axis', confine: true },
-        xAxis: { type: 'value', name: 'Hz', nameTextStyle: { color: '#475569', fontSize: 10 }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#e5eaf1' } } },
-        yAxis: { type: 'value', name: '幅值', nameTextStyle: { color: '#475569', fontSize: 10 }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#e5eaf1' } } },
+        xAxis: { type: 'value', name: '频率（赫兹）', nameTextStyle: { color: '#475569', fontSize: 10 }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#333333' } } },
+        yAxis: { type: 'value', name: '幅值', nameTextStyle: { color: '#475569', fontSize: 10 }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#333333' } } },
         series: [{ type: 'line', smooth: false, showSymbol: false, data: freqAxis.map((f, i) => [f, spectrum[i] == null ? 0 : spectrum[i]]), lineStyle: { width: 1.2, color: '#d97706' }, areaStyle: { opacity: 0.08, color: '#d97706' } }]
       }
       if (this.freqChart) this.freqChart.setOption(option)
@@ -413,7 +414,8 @@ export default {
     },
     applyAnalysisResult(data) {
       this.result = data
-      this.diagnosis = data.label || data.diagnosis || data.diagnosisResult || '未知类别'
+      const rawLabel = data.label || data.diagnosis || data.diagnosisResult
+      this.diagnosis = rawLabel ? translateDiagnosisLabel(rawLabel) : '未知类别'
       this.confidence = data.confidence != null ? Number(data.confidence) : this.confidence
       this.statusClass = this.getStatusClass(this.diagnosis)
       this.signal = data.time_data || data.waveform || []
@@ -469,7 +471,27 @@ export default {
   padding: 8px 12px;
   height: calc(100vh - 84px);
   background: linear-gradient(180deg, #07131f 0%, #0a1c2d 100%);
-  overflow-y: auto;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) minmax(92px, 0.45fr) minmax(72px, 0.32fr);
+  gap: 6px;
+}
+.vibration-analysis-page > * {
+  min-height: 0;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+.vibration-analysis-page ::v-deep .el-button,
+.vibration-analysis-page ::v-deep .el-button--small,
+.vibration-analysis-page ::v-deep .el-button--mini {
+  min-height: 26px !important;
+  padding: 5px 9px !important;
+}
+.vibration-analysis-page ::v-deep .el-card__header {
+  min-height: 28px !important;
+}
+.vibration-analysis-page ::v-deep .el-card__body {
+  min-height: 0;
 }
 
 /* =====================================================================
@@ -479,33 +501,33 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  margin-bottom: 10px;
+  padding: 8px 14px;
+  margin-bottom: 0;
   border-radius: 10px;
   background: linear-gradient(135deg, #0d2137 0%, #1a3a5c 100%);
   border: 1px solid rgba(87, 209, 255, 0.15);
-  color: #fff;
+  color: #ffffff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 .hero-left h2 {
-  margin: 6px 0 4px;
-  font-size: 20px;
-  color: #f4fbff;
+  margin: 2px 0;
+  font-size: 17px;
+  color: #ffffff;
 }
 .hero-left p {
   margin: 0;
   opacity: 0.75;
-  font-size: 12px;
-  color: #b0c8da;
+  font-size: 11px;
+  color: #ffffff;
 }
 .hero-badge {
   display: inline-block;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: rgba(255,255,255,0.12);
   font-size: 11px;
   letter-spacing: 0.5px;
-  color: #8adfff;
+  color: #ffffff;
 }
 .hero-right {
   display: flex;
@@ -525,13 +547,15 @@ export default {
   border: 1px solid rgba(87, 209, 255, 0.12);
   background: rgba(7, 19, 31, 0.92);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  min-height: 0;
+  overflow: hidden;
 }
 .control-card ::v-deep .el-card__header,
 .result-card ::v-deep .el-card__header,
 .debug-card ::v-deep .el-card__header,
 .chart-card ::v-deep .el-card__header,
 .metric-card ::v-deep .el-card__header {
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 .control-card ::v-deep .el-card__body,
@@ -539,12 +563,12 @@ export default {
 .debug-card ::v-deep .el-card__body,
 .chart-card ::v-deep .el-card__body,
 .metric-card ::v-deep .el-card__body {
-  padding: 8px 12px;
+  padding: 5px 10px;
 }
 .section-title {
   font-weight: 700;
   font-size: 13px;
-  color: #f4fbff;
+  color: #ffffff;
 }
 
 /* =====================================================================
@@ -554,21 +578,24 @@ export default {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 2px 8px;
+}
+.toolbar-form ::v-deep .el-form-item {
+  margin-bottom: 4px;
 }
 /* 表单标签深色 */
 .toolbar-form ::v-deep .el-form-item__label {
-  color: #b0c8da;
+  color: #ffffff;
   font-weight: 600;
 }
 /* 输入框深色 */
 .control-card ::v-deep .el-input__inner {
   background: rgba(7, 19, 31, 0.7);
   border-color: rgba(87, 209, 255, 0.18);
-  color: #d9e8f3;
+  color: #ffffff;
 }
 .control-card ::v-deep .el-input__inner::placeholder {
-  color: #5a778b;
+  color: #ffffff;
 }
 .control-card ::v-deep .el-input__inner:focus,
 .control-card ::v-deep .el-input__inner:hover {
@@ -576,40 +603,40 @@ export default {
 }
 .control-card ::v-deep .el-input__prefix,
 .control-card ::v-deep .el-input__suffix {
-  color: #6b8599;
+  color: #ffffff;
 }
 
 /* =====================================================================
    指标卡片行
    ===================================================================== */
 .metrics-row {
-  margin: 10px 0 8px;
+  margin: 0;
 }
 .compact-grid .el-col {
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 .metric-card {
-  min-height: 82px;
+  min-height: 58px;
 }
 .compact-card {
-  min-height: 82px;
+  min-height: 58px;
   padding: 0;
 }
 .metric-card ::v-deep .el-card__body {
-  padding: 10px 14px;
+  padding: 7px 10px;
 }
 .metric-label {
   font-size: 11px;
-  color: #6b8599;
-  margin-bottom: 6px;
+  color: #ffffff;
+  margin-bottom: 3px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 600;
 }
 .metric-value {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  color: #d9e8f3;
+  color: #ffffff;
   word-break: break-all;
   line-height: 1.3;
 }
@@ -622,34 +649,49 @@ export default {
    图表卡片
    ===================================================================== */
 .compact-chart-card {
-  min-height: 310px;
+  height: 100%;
+  min-height: 0;
 }
 .compact-chart-card ::v-deep .el-card__body {
   padding: 4px 8px;
 }
 .compact-chart {
   width: 100%;
-  height: 240px;
+  height: 100%;
+  min-height: 0;
 }
 .chart-box {
   width: 100%;
-  height: 360px;
+  height: 100%;
+  min-height: 0;
+}
+.charts-row {
+  min-height: 0;
+}
+.charts-row ::v-deep .el-col,
+.charts-row .chart-card,
+.charts-row .el-card,
+.charts-row ::v-deep .el-card__body {
+  height: 100%;
+  min-height: 0;
 }
 
 /* =====================================================================
    分析详情卡片 - el-descriptions 深色覆盖
    ===================================================================== */
 .compact-result-card {
-  margin-top: 8px;
+  margin-top: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .result-card ::v-deep .el-descriptions {
   background: transparent;
 }
 .result-card ::v-deep .el-descriptions__header {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .result-card ::v-deep .el-descriptions__title {
-  color: #f4fbff;
+  color: #ffffff;
   font-size: 13px;
   font-weight: 700;
 }
@@ -662,20 +704,32 @@ export default {
 .result-card ::v-deep .el-descriptions__body .el-descriptions__table .el-descriptions-item__cell {
   background: rgba(255, 255, 255, 0.02);
   border-color: rgba(87, 209, 255, 0.08);
+  padding: 4px 8px;
+  line-height: 1.25;
+}
+.result-card ::v-deep .el-descriptions-item__content,
+.result-card ::v-deep .el-descriptions-item__label {
+  font-size: 12px;
+}
+.result-card ::v-deep .el-descriptions__body {
+  max-height: 100%;
+  overflow: hidden;
 }
 .result-card ::v-deep .el-descriptions-item__label {
-  color: #6b8599;
+  color: #ffffff;
   font-weight: 600;
 }
 .result-card ::v-deep .el-descriptions-item__content {
-  color: #d9e8f3;
+  color: #ffffff;
 }
 
 /* =====================================================================
    调试卡片 - 原始响应
    ===================================================================== */
 .debug-card {
-  margin-top: 8px;
+  margin-top: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .debug-head {
   display: flex;
@@ -684,22 +738,22 @@ export default {
   gap: 12px;
 }
 .debug-meta {
-  padding: 0 12px 8px;
+  padding: 0 10px 4px;
   font-size: 12px;
-  color: #6b8599;
+  color: #ffffff;
   word-break: break-all;
 }
 .debug-pre {
   margin: 0;
-  padding: 12px;
+  padding: 8px 10px;
   border-radius: 8px;
   background: #0a1622;
   border: 1px solid rgba(87, 209, 255, 0.1);
-  color: #b0d8c0;
+  color: #ffffff;
   font-size: 12px;
-  line-height: 1.6;
-  overflow: auto;
-  max-height: 320px;
+  line-height: 1.35;
+  overflow: hidden;
+  max-height: 46px;
   white-space: pre-wrap;
   word-break: break-all;
 }
@@ -707,44 +761,44 @@ export default {
 /* =====================================================================
    颜色辅助类
    ===================================================================== */
-.normal { color: #67c23a; }
-.warning { color: #e6a23c; }
-.danger { color: #f56c6c; }
+.normal { color: #ffffff; }
+.warning { color: #ffffff; }
+.danger { color: #ffffff; }
 .mb16 { margin-bottom: 16px; }
 
 /* 浅色工业生产主题覆盖 */
 .vibration-analysis-page {
-  background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%);
-  color: #1f2937;
+  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
+  color: #ffffff;
 }
 .hero-card {
-  background: linear-gradient(135deg, #ffffff 0%, #eef4fb 100%);
+  background: linear-gradient(135deg, #1a1a1a 0%, #171717 100%);
   border-color: #d7dee8;
-  color: #1f2937;
+  color: #ffffff;
   box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
 }
 .hero-left h2,
 .section-title,
 .metric-value,
 .result-card ::v-deep .el-descriptions__title {
-  color: #1f2937;
+  color: #ffffff;
 }
 .hero-left p,
 .metric-label,
 .debug-meta,
 .result-card ::v-deep .el-descriptions-item__label {
-  color: #64748b;
+  color: #ffffff;
 }
 .hero-badge {
-  background: #e8f1fb;
-  color: #2563eb;
+  background: #1f1f1f;
+  color: #ffffff;
 }
 .control-card,
 .result-card,
 .debug-card,
 .chart-card,
 .metric-card {
-  background: #ffffff;
+  background: #1a1a1a;
   border-color: #d7dee8;
   box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
 }
@@ -753,18 +807,18 @@ export default {
 .debug-card ::v-deep .el-card__header,
 .chart-card ::v-deep .el-card__header,
 .metric-card ::v-deep .el-card__header {
-  border-bottom-color: #e5eaf1;
+  border-bottom-color: #b8b8b8;
 }
 .toolbar-form ::v-deep .el-form-item__label {
-  color: #475569;
+  color: #ffffff;
 }
 .control-card ::v-deep .el-input__inner {
-  background: #ffffff;
+  background: #1a1a1a;
   border-color: #cbd5e1;
-  color: #1f2937;
+  color: #ffffff;
 }
 .control-card ::v-deep .el-input__inner::placeholder {
-  color: #94a3b8;
+  color: #ffffff;
 }
 .control-card ::v-deep .el-input__inner:focus,
 .control-card ::v-deep .el-input__inner:hover {
@@ -772,19 +826,19 @@ export default {
 }
 .control-card ::v-deep .el-input__prefix,
 .control-card ::v-deep .el-input__suffix {
-  color: #64748b;
+  color: #ffffff;
 }
 .result-card ::v-deep .el-descriptions__body .el-descriptions__table .el-descriptions-item__cell {
-  background: #f8fafc;
-  border-color: #e5eaf1;
+  background: #171717;
+  border-color: #b8b8b8;
 }
 .result-card ::v-deep .el-descriptions-item__content {
-  color: #1f2937;
+  color: #ffffff;
 }
 .debug-pre {
-  background: #f8fafc;
+  background: #171717;
   border-color: #d7dee8;
-  color: #1f2937;
+  color: #ffffff;
 }
 </style>
 
@@ -796,18 +850,18 @@ export default {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 .dark-sidecar-select .el-select-dropdown__item {
-  color: #d9e8f3;
+  color: #ffffff;
 }
 .dark-sidecar-select .el-select-dropdown__item.hover,
 .dark-sidecar-select .el-select-dropdown__item:hover {
   background: rgba(87, 209, 255, 0.1);
 }
 .dark-sidecar-select .el-select-dropdown__item.selected {
-  color: #57d1ff;
+  color: #ffffff;
   font-weight: 700;
 }
 .dark-sidecar-select .el-select-dropdown__empty {
-  color: #6b8599;
+  color: #ffffff;
 }
 .dark-sidecar-select .popper__arrow::after {
   border-bottom-color: rgba(1, 12, 28, 0.96);
@@ -815,24 +869,24 @@ export default {
 
 /* 浅色工业生产主题：分析页下拉框 */
 .dark-sidecar-select.el-select-dropdown {
-  background: #ffffff;
+  background: #1a1a1a;
   border-color: #d7dee8;
   box-shadow: 0 8px 20px rgba(31, 41, 55, 0.12);
 }
 .dark-sidecar-select .el-select-dropdown__item {
-  color: #344054;
+  color: #ffffff;
 }
 .dark-sidecar-select .el-select-dropdown__item.hover,
 .dark-sidecar-select .el-select-dropdown__item:hover {
-  background: #eef6ff;
+  background: #1f1f1f;
 }
 .dark-sidecar-select .el-select-dropdown__item.selected {
-  color: #2563eb;
+  color: #ffffff;
 }
 .dark-sidecar-select .el-select-dropdown__empty {
-  color: #94a3b8;
+  color: #ffffff;
 }
 .dark-sidecar-select .popper__arrow::after {
-  border-bottom-color: #ffffff;
+  border-bottom-color: #f2f2f2;
 }
 </style>

@@ -26,8 +26,8 @@ export default {
   height: 36px;
   padding: 10px 20px;
   text-align: right;
-  background-color: #f8f8f8;
-  color: #666;
+  background-color: #171717;
+  color: #ffffff;
   font-size: 14px;
   border-top: 1px solid #e7e7e7;
   z-index: 999;

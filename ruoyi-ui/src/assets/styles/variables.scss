@@ -9,7 +9,7 @@ $yellow: #d97706;
 $panGreen: #1f9d55;
 
 // 浅色工业生产模式全局配色
-$base-page-background: #f3f6f8;
+$base-page-background: #121212;
 $base-page-background-overlay: rgba(255, 255, 255, 0.88);
 $base-primary-color: #2563eb;
 $base-card-border: #d7dee8;
@@ -19,30 +19,44 @@ $base-grid-line: rgba(87, 99, 116, 0.08);
 // 默认菜单主题风格
 $base-menu-color: #3f4b5f;
 $base-menu-color-active: #0f172a;
-$base-menu-background: #eef2f6;
+$base-menu-background: #171717;
 $base-logo-title-color: #0f172a;
 
 $base-menu-light-color: #3f4b5f;
-$base-menu-light-background: #eef2f6;
+$base-menu-light-background: #171717;
 $base-logo-light-title-color: #0f172a;
 
-$base-sub-menu-background: #f8fafc;
-$base-sub-menu-hover: #e8eef6;
+$base-sub-menu-background: #171717;
+$base-sub-menu-hover: #1f1f1f;
 
 $base-sidebar-width: 200px;
 
 :root {
-  --tech-page-bg: #f3f6f8;
+  --tech-page-bg: #121212;
   --tech-page-overlay: rgba(255, 255, 255, 0.88);
   --tech-primary: #2563eb;
   --tech-card-border: #d7dee8;
   --tech-card-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
   --tech-grid-line: rgba(87, 99, 116, 0.08);
-  --industrial-surface: #ffffff;
-  --industrial-surface-muted: #f8fafc;
+  --industrial-surface: #1a1a1a;
+  --industrial-surface-muted: #171717;
   --industrial-text: #1f2937;
   --industrial-text-muted: #64748b;
   --industrial-border: #d7dee8;
+
+  /* === 语义化文本颜色系统（暗色背景专用） === */
+  --text-heading:  #ffffff;  /* 标题：纯白，最高对比度 */
+  --text-body:     #e2e8f0;  /* 正文：暖白，长时间阅读舒适 */
+  --text-label:    #94a3b8;  /* 标签/字段名：冷灰蓝，不抢眼 */
+  --text-value:    #fbbf24;  /* 数据值/KPI：琥珀金，突出醒目 */
+  --text-link:     #38bdf8;  /* 链接/可点击：亮天蓝，可辨识 */
+  --text-success:  #4ade80;  /* 成功/正常：亮绿 */
+  --text-warning:  #fbbf24;  /* 警告：亮琥珀黄 */
+  --text-danger:   #f87171;  /* 危险/错误：亮红 */
+  --text-info:     #60a5fa;  /* 信息提示：亮蓝 */
+  --text-muted:    #64748b;  /* 辅助/时间戳：冷灰 */
+  --text-code:     #5eead4;  /* 代码/monospace：青绿 */
+  --text-accent:   #fbbf24;  /* 强调/活跃：琥珀金 */
 }
 
 // 全局浅色工业生产模式
@@ -52,10 +66,10 @@ html, body, #app {
   background-image:
     linear-gradient(to right, $base-grid-line 1px, transparent 1px),
     linear-gradient(to bottom, $base-grid-line 1px, transparent 1px),
-    linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%);
+    linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
   background-size: 50px 50px, 50px 50px, 100% 100%;
   background-attachment: fixed;
-  color: #1f2937;
+  color: #ffffff;
 }
 
 body {
@@ -63,7 +77,7 @@ body {
   background-image:
     linear-gradient(to right, $base-grid-line 1px, transparent 1px),
     linear-gradient(to bottom, $base-grid-line 1px, transparent 1px),
-    linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%);
+    linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
   background-size: 50px 50px, 50px 50px, 100% 100%;
   background-attachment: fixed;
 }
@@ -72,7 +86,7 @@ body {
 .el-card {
   position: relative;
   overflow: hidden;
-  background: #ffffff;
+  background: #1a1a1a;
   border: 1px solid $base-card-border;
   border-radius: 4px !important;
   box-shadow: $base-card-shadow;
@@ -106,17 +120,17 @@ body {
 
 .el-button {
   border-radius: 4px !important;
-  background: #ffffff;
+  background: #1a1a1a;
   border: 1px solid #cbd5e1;
-  color: #1f2937;
+  color: #ffffff;
   box-shadow: none;
   transition: all 0.25s ease;
 
   &:hover,
   &:focus {
-    color: #1d4ed8;
+    color: #ffffff;
     border-color: #2563eb;
-    background: #eff6ff;
+    background: #1f1f1f;
     box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
     transform: translateY(-1px);
   }
@@ -135,8 +149,8 @@ body {
 }
 
 .el-table {
-  background: #ffffff;
-  color: #1f2937;
+  background: #1a1a1a;
+  color: #ffffff;
   border: 1px solid #d7dee8;
   box-shadow: none;
 
@@ -146,57 +160,57 @@ body {
 
   th,
   td {
-    border-bottom: 1px solid #e5eaf1 !important;
+    border-bottom: 1px solid #333333 !important;
   }
 
   th {
-    background: #eef3f8 !important;
-    color: #1f2937 !important;
+    background: #171717 !important;
+    color: #ffffff !important;
     font-weight: 600;
   }
 
   tr {
-    background: #ffffff !important;
+    background: #1a1a1a !important;
   }
 
   .el-table__body tr:hover > td {
-    background-color: #f1f5f9 !important;
+    background-color: #171717 !important;
   }
 }
 
 .el-dialog {
-  background: #ffffff;
+  background: #1a1a1a;
   border: 1px solid #d7dee8;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
   border-radius: 4px !important;
   overflow: hidden;
 
   .el-dialog__header {
-    background: #f8fafc;
-    border-bottom: 1px solid #e5eaf1;
+    background: #171717;
+    border-bottom: 1px solid #333333;
   }
 
   .el-dialog__title,
   .el-dialog__body,
   .el-dialog__footer {
-    color: #1f2937;
+    color: #ffffff;
   }
 
   .el-dialog__headerbtn .el-dialog__close {
-    color: #64748b;
+    color: #ffffff;
   }
 }
 
 .el-input__inner,
 .el-textarea__inner {
-  background: #ffffff;
+  background: #1a1a1a;
   border: 1px solid #cbd5e1;
-  color: #1f2937;
+  color: #ffffff;
   border-radius: 4px !important;
   box-shadow: none;
 
   &::placeholder {
-    color: #94a3b8;
+    color: #ffffff;
   }
 
   &:focus {
@@ -207,9 +221,9 @@ body {
 
 .el-tag {
   border-radius: 4px !important;
-  background: #eef6ff;
+  background: #1f1f1f;
   border: 1px solid #bfd7f2;
-  color: #1d4ed8;
+  color: #ffffff;
   box-shadow: none;
 }
 
@@ -218,9 +232,9 @@ body {
 .el-tag--danger,
 .el-tag--info,
 .el-tag--primary {
-  background: #eef6ff;
+  background: #1f1f1f;
   border-color: #bfd7f2;
-  color: #1d4ed8;
+  color: #ffffff;
 }
 
 .el-tag,

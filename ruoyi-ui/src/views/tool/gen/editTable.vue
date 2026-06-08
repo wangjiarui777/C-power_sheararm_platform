@@ -101,7 +101,7 @@
                   :label="dict.dictName"
                   :value="dict.dictType">
                   <span style="float: left">{{ dict.dictName }}</span>
-                  <span style="float: right; color: #8492a6; font-size: 13px">{{ dict.dictType }}</span>
+                  <span style="float: right; color: #ffffff; font-size: 13px">{{ dict.dictType }}</span>
               </el-option>
               </el-select>
             </template>

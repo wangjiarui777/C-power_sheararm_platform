@@ -171,7 +171,7 @@ export default {
   right: 0;
   top: 0;
   bottom: 0;
-  color: #eee;
+  color: #ffffff;
   background: rgba(0, 0, 0, 0.5);
   font-size: 24px;
   font-style: normal;

@@ -7,7 +7,7 @@
           <div class="page-subtitle">8 通道实时追踪 · 推理服务数据流 · 异常快速定位</div>
         </div>
         <div class="toolbar-actions">
-          <el-tag size="mini" type="success">Inference 5001</el-tag>
+          <el-tag size="mini" type="success">推理服务 5001</el-tag>
           <el-button size="mini" icon="el-icon-refresh" @click="fetchLatestInference">刷新</el-button>
           <el-button size="mini" type="primary" icon="el-icon-data-analysis" @click="$router.push('/monitoring-center/vibration')">历史分析</el-button>
         </div>
@@ -23,7 +23,7 @@
         <section class="zone control-zone">
           <div class="zone-header">
             <span>通道选择</span>
-            <el-tag size="mini">8 CH</el-tag>
+            <el-tag size="mini">8 通道</el-tag>
           </div>
 
           <div class="channel-grid">
@@ -45,7 +45,7 @@
 
         <section class="zone visualization-zone">
           <div class="zone-header">
-            <span>实时趋势 · CH{{ activeChannelId }}</span>
+            <span>实时趋势 · 通道{{ activeChannelId }}</span>
             <div class="zone-actions">
               <el-tag size="mini" :type="statusTagType(activeChannel.status)">{{ statusText(activeChannel.status) }}</el-tag>
               <el-button size="mini" type="text" @click="openChannelDetail(activeChannelId)">详情</el-button>
@@ -54,14 +54,14 @@
 
           <div class="kpi-row">
             <div class="kpi-item">
-              <span>RMS</span>
+              <span>有效值</span>
               <strong>{{ formatNumber(activeChannel.metrics.rms) }}</strong>
               <small>mm/s</small>
             </div>
             <div class="kpi-item">
               <span>峰值</span>
               <strong>{{ formatNumber(activeChannel.metrics.peak) }}</strong>
-              <small>Peak</small>
+              <small>峰值</small>
             </div>
             <div class="kpi-item">
               <span>位移</span>
@@ -86,7 +86,7 @@
 
           <el-table :data="activeLogs" height="100%" size="mini" stripe>
             <el-table-column prop="time" label="时间" min-width="130" />
-            <el-table-column prop="value" label="RMS" width="80" />
+            <el-table-column prop="value" label="有效值" width="80" />
             <el-table-column prop="alarmLevel" label="级别" width="74">
               <template slot-scope="scope">
                 <el-tag :type="alarmTagType(scope.row.alarmLevel)" size="mini">{{ scope.row.alarmLevel }}</el-tag>
@@ -109,7 +109,7 @@
         <div class="drawer-shell">
           <div class="drawer-topbar">
             <div>
-              <div class="drawer-title">CH{{ activeChannelId }} 通道详情</div>
+              <div class="drawer-title">通道{{ activeChannelId }} 通道详情</div>
               <div class="drawer-subtitle">实时曲线 · 关键指标 · 最近 20 条日志</div>
             </div>
             <div class="drawer-actions">
@@ -181,14 +181,14 @@ export default {
       overviewChart: null,
       waveChart: null,
       channelDataMap: {
-        1: this.createChannel('CH1', 'mm/s'),
-        2: this.createChannel('CH2', 'mm/s'),
-        3: this.createChannel('CH3', 'mm/s'),
-        4: this.createChannel('CH4', 'mm/s'),
-        5: this.createChannel('CH5', 'mm/s'),
-        6: this.createChannel('CH6', 'mm/s'),
-        7: this.createChannel('CH7', 'mm/s'),
-        8: this.createChannel('CH8', 'mm/s')
+        1: this.createChannel('通道1', 'mm/s'),
+        2: this.createChannel('通道2', 'mm/s'),
+        3: this.createChannel('通道3', 'mm/s'),
+        4: this.createChannel('通道4', 'mm/s'),
+        5: this.createChannel('通道5', 'mm/s'),
+        6: this.createChannel('通道6', 'mm/s'),
+        7: this.createChannel('通道7', 'mm/s'),
+        8: this.createChannel('通道8', 'mm/s')
       }
     }
   },
@@ -308,7 +308,7 @@ export default {
 
       var channelId = Number(payload.channelId || payload.channel || payload.channelNo || 1)
       if (!this.channelDataMap[channelId]) {
-        this.$set(this.channelDataMap, channelId, this.createChannel(`CH${channelId}`, 'mm/s'))
+        this.$set(this.channelDataMap, channelId, this.createChannel(`通道${channelId}`, 'mm/s'))
       }
 
       var channel = this.channelDataMap[channelId]
@@ -529,7 +529,7 @@ export default {
   cursor: pointer;
   background: rgba(1, 12, 28, 0.78);
   border: 1px solid rgba(0, 255, 255, 0.22);
-  color: #eef2f7;
+  color: #ffffff;
   box-shadow: 0 0 12px rgba(0, 255, 255, 0.08), inset 0 0 18px rgba(0, 255, 255, 0.03);
 }
 .channel-card.active { border-color: #00ffff; box-shadow: 0 0 18px rgba(0,255,255,0.18), 0 0 0 1px rgba(0,255,255,0.15) inset; }
@@ -541,15 +541,15 @@ export default {
 .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .metric-block { padding: 10px; background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.12); border-radius: 6px; }
 .metric-label { font-size: 12px; color: rgba(0,255,255,0.72); }
-.metric-value { margin-top: 4px; font-size: 26px; font-weight: 800; line-height: 1.1; color: #f2ffff; font-family: 'Courier New', monospace; }
+.metric-value { margin-top: 4px; font-size: 26px; font-weight: 800; line-height: 1.1; color: #ffffff; font-family: 'Courier New', monospace; }
 .metric-value.big { font-size: 38px; }
 .metric-unit { margin-top: 2px; font-size: 12px; color: rgba(235,255,255,0.68); }
-.channel-footer { margin-top: 12px; font-size: 12px; color: #aeb7c2; }
-.foot-time { color: #e5edf5; }
-.drawer-shell { height: 100vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #111827 0%, #1f2937 100%); color: #eef2f7; }
+.channel-footer { margin-top: 12px; font-size: 12px; color: #ffffff; }
+.foot-time { color: #ffffff; }
+.drawer-shell { height: 100vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #111827 0%, #1f2937 100%); color: #ffffff; }
 .drawer-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid rgba(0,255,255,0.10); }
 .drawer-title { font-size: 20px; font-weight: 800; }
-.drawer-subtitle { margin-top: 4px; font-size: 12px; color: #aeb7c2; }
+.drawer-subtitle { margin-top: 4px; font-size: 12px; color: #ffffff; }
 .drawer-actions { display: flex; align-items: center; gap: 10px; }
 .drawer-content { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 20px 20px; min-height: 0; }
 .detail-row { flex: 0 0 auto; }
@@ -561,30 +561,30 @@ export default {
 .sub-item strong { font-family: 'Courier New', monospace; }
 .health-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; background: rgba(0,255,255,0.03); border: 1px solid rgba(0,255,255,0.14); }
 .health-label { font-size: 12px; color: rgba(0,255,255,0.72); }
-.health-desc { margin-top: 4px; font-size: 18px; font-weight: 700; color: #eaffff; font-family: 'Courier New', monospace; }
+.health-desc { margin-top: 4px; font-size: 18px; font-weight: 700; color: #ffffff; font-family: 'Courier New', monospace; }
 .wave-chart { width: 100%; height: 320px; background: rgba(1, 12, 28, 0.78); border-radius: 10px; border: 1px solid rgba(0,255,255,0.12); box-shadow: 0 0 12px rgba(0,255,255,0.08), inset 0 0 18px rgba(0,255,255,0.03); }
 .log-card { margin-top: 12px; }
 .card-header { display: flex; align-items: center; justify-content: space-between; }
 :deep(.monitoring-drawer) { background: transparent; }
 :deep(.monitoring-drawer .el-drawer__body) { height: 100%; }
-:deep(.el-table) { background: transparent; color: #eaf0f6; }
+:deep(.el-table) { background: transparent; color: #ffffff; }
 :deep(.el-table th), :deep(.el-table tr), :deep(.el-table td) { background: transparent !important; }
 :deep(.el-table::before) { background-color: rgba(0,255,255,0.08); }
-:deep(.el-radio-button__inner) { background: #2b3340; color: #eaf0f6; border-color: rgba(255,255,255,0.12); }
+:deep(.el-radio-button__inner) { background: #2b3340; color: #ffffff; border-color: rgba(255,255,255,0.12); }
 :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) { background: #409eff; border-color: #409eff; }
 
 /* 浅色工业生产主题覆盖 */
 .monitoring-center-page {
-  background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%);
-  color: #1f2937;
+  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
+  color: #ffffff;
 }
 .channel-card,
 .main-metric,
 .log-card,
 .wave-chart {
-  background: #ffffff;
+  background: #1a1a1a;
   border-color: #d7dee8;
-  color: #1f2937;
+  color: #ffffff;
   box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
 }
 .channel-card.active {
@@ -595,41 +595,41 @@ export default {
 .metric-block,
 .sub-item,
 .health-box {
-  background: #f8fafc;
-  border-color: #e5eaf1;
+  background: #171717;
+  border-color: #b8b8b8;
 }
 .metric-label,
 .health-label {
-  color: #475569;
+  color: #ffffff;
 }
 .metric-value,
 .health-desc,
 .foot-time,
 .drawer-title,
 .sub-item strong {
-  color: #1f2937;
+  color: #ffffff;
 }
 .metric-unit,
 .channel-footer,
 .drawer-subtitle {
-  color: #64748b;
+  color: #ffffff;
 }
 .drawer-shell {
-  background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%);
-  color: #1f2937;
+  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
+  color: #ffffff;
 }
 .drawer-topbar {
   border-bottom-color: #d7dee8;
 }
-:deep(.monitoring-drawer) { background: #f3f6f8; }
-:deep(.el-table) { background: #ffffff; color: #1f2937; }
-:deep(.el-table th) { background: #eef3f8 !important; color: #1f2937 !important; }
+:deep(.monitoring-drawer) { background: #121212; }
+:deep(.el-table) { background: #1a1a1a; color: #ffffff; }
+:deep(.el-table th) { background: #171717 !important; color: #ffffff !important; }
 :deep(.el-table tr),
-:deep(.el-table td) { background: #ffffff !important; color: #344054 !important; }
+:deep(.el-table td) { background: #1a1a1a !important; color: #ffffff !important; }
 :deep(.el-table::before) { background-color: #d7dee8; }
 :deep(.el-radio-button__inner) {
-  background: #ffffff;
-  color: #344054;
+  background: #1a1a1a;
+  color: #ffffff;
   border-color: #cbd5e1;
 }
 :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
@@ -646,7 +646,7 @@ export default {
 .page-toolbar,
 .workflow-strip,
 .zone {
-  background: #ffffff;
+  background: #1a1a1a;
   border: 1px solid #d7dee8;
   border-radius: 8px;
 }
@@ -660,12 +660,12 @@ export default {
 .page-title {
   font-size: 20px;
   font-weight: 800;
-  color: #1f2937;
+  color: #ffffff;
 }
 .page-subtitle {
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: #ffffff;
 }
 .toolbar-actions,
 .zone-actions {
@@ -682,7 +682,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: #ffffff;
 }
 .workflow-step span {
   display: grid;
@@ -690,8 +690,8 @@ export default {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #e5eaf1;
-  color: #475569;
+  background: #333333;
+  color: #ffffff;
   font-size: 12px;
 }
 .workflow-step.active span {
@@ -715,7 +715,7 @@ export default {
   gap: 10px;
   margin-bottom: 10px;
   font-weight: 700;
-  color: #1f2937;
+  color: #ffffff;
 }
 .channel-grid {
   display: grid;
@@ -730,8 +730,8 @@ export default {
   padding: 10px;
   border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: #f8fafc;
-  color: #1f2937;
+  background: #171717;
+  color: #ffffff;
   text-align: left;
   cursor: pointer;
 }
@@ -747,7 +747,7 @@ export default {
   line-height: 1.1;
 }
 .channel-tile small {
-  color: #64748b;
+  color: #ffffff;
 }
 .kpi-row {
   display: grid;
@@ -757,14 +757,14 @@ export default {
 }
 .kpi-item {
   padding: 12px;
-  border: 1px solid #e5eaf1;
+  border: 1px solid #333333;
   border-radius: 8px;
-  background: #f8fafc;
+  background: #171717;
 }
 .kpi-item span,
 .kpi-item small {
   display: block;
-  color: #64748b;
+  color: #ffffff;
   font-size: 12px;
 }
 .kpi-item strong {
@@ -772,14 +772,14 @@ export default {
   margin: 6px 0 2px;
   font-size: 26px;
   line-height: 1.1;
-  color: #1f2937;
+  color: #ffffff;
 }
 .primary-chart {
   width: 100%;
   height: 420px;
-  border: 1px solid #e5eaf1;
+  border: 1px solid #333333;
   border-radius: 8px;
-  background: #ffffff;
+  background: #1a1a1a;
 }
 .log-zone,
 .drawer-log-zone {

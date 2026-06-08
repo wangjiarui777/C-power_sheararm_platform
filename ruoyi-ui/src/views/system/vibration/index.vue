@@ -546,7 +546,7 @@ export default {
           max: 100,
           radius: '100%',
           progress: { show: true, width: 10, itemStyle: { color: health >= 85 ? '#67c23a' : health >= 60 ? '#e6a23c' : '#f56c6c' } },
-          axisLine: { lineStyle: { width: 10, color: [[1, '#e5eaf1']] } },
+          axisLine: { lineStyle: { width: 10, color: [[1, '#333333']] } },
           axisTick: { show: false },
           splitLine: { show: false },
           axisLabel: { show: false },
@@ -572,7 +572,7 @@ export default {
         grid: { left: 52, right: 52, top: 42, bottom: 36 },
         xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#64748b' } },
         yAxis: [
-          { type: 'value', name: 'mm/s', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#e5eaf1' } }, axisLabel: { color: '#64748b' } },
+          { type: 'value', name: 'mm/s', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#333333' } }, axisLabel: { color: '#64748b' } },
           { type: 'value', name: '℃', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { show: false }, axisLabel: { color: '#64748b' } }
         ],
         series: [
@@ -614,7 +614,7 @@ export default {
         tooltip: { trigger: 'axis' },
         grid: { left: 52, right: 24, top: 42, bottom: 36 },
         xAxis: { type: 'category', name: 'Hz', data: points.map(item => item.freq), axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#64748b' } },
-        yAxis: { type: 'value', name: '幅值', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#e5eaf1' } }, axisLabel: { color: '#64748b' } },
+        yAxis: { type: 'value', name: '幅值', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#333333' } }, axisLabel: { color: '#64748b' } },
         series: [{
           name: 'FFT',
           type: 'bar',
@@ -707,7 +707,7 @@ export default {
 .vibration-page { min-height: calc(100vh - 84px); padding: 10px; background: linear-gradient(180deg, #1f2937 0%, #111827 100%); }
 .alarm-banner { margin-bottom: 10px; animation: blink 1s linear infinite; }
 .mb10 { margin-bottom: 10px; }
-.channel-card { cursor: pointer; background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0, 255, 255, 0.22); color: #eef2f7; box-shadow: 0 0 12px rgba(0, 255, 255, 0.08), inset 0 0 18px rgba(0, 255, 255, 0.03); }
+.channel-card { cursor: pointer; background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0, 255, 255, 0.22); color: #ffffff; box-shadow: 0 0 12px rgba(0, 255, 255, 0.08), inset 0 0 18px rgba(0, 255, 255, 0.03); }
 .channel-card.abnormal { border-color: rgba(245, 108, 108, 0.65); }
 .channel-card.warning { border-color: rgba(230, 162, 60, 0.55); }
 .channel-head, .channel-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -717,24 +717,24 @@ export default {
 .metric-main, .main-metric { padding: 10px; background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.12); border-radius: 6px; }
 .main-metric--temp { background: rgba(125, 211, 252, 0.06); }
 .metric-label { font-size: 12px; color: rgba(0,255,255,0.72); }
-.metric-value { margin-top: 4px; font-size: 26px; font-weight: 800; line-height: 1.1; color: #f2ffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
+.metric-value { margin-top: 4px; font-size: 26px; font-weight: 800; line-height: 1.1; color: #ffffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
 .metric-value.big { font-size: 38px; }
 .metric-unit { margin-top: 2px; font-size: 12px; color: rgba(235,255,255,0.68); }
 .detail-zone { display: grid; grid-template-columns: 1fr 92px; gap: 8px; align-items: center; }
 .detail-table { display: grid; gap: 6px; }
 .detail-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; background: rgba(1, 12, 28, 0.58); border: 1px solid rgba(0,255,255,0.1); color: rgba(235,255,255,0.9); font-size: 12px; }
-.detail-row strong { color: #eaffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
+.detail-row strong { color: #ffffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
 .health-gauge { width: 100%; height: 92px; }
-.channel-footer { margin-top: 12px; font-size: 12px; color: #aeb7c2; }
-.foot-time { color: #e5edf5; }
-.trend-panel, .alarm-panel { margin-top: 12px; background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0,255,255,0.12); box-shadow: 0 0 12px rgba(0,255,255,0.08), inset 0 0 18px rgba(0,255,255,0.03); border-radius: 8px; padding: 12px; color: #eef2f7; }
+.channel-footer { margin-top: 12px; font-size: 12px; color: #ffffff; }
+.foot-time { color: #ffffff; }
+.trend-panel, .alarm-panel { margin-top: 12px; background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0,255,255,0.12); box-shadow: 0 0 12px rgba(0,255,255,0.08), inset 0 0 18px rgba(0,255,255,0.03); border-radius: 8px; padding: 12px; color: #ffffff; }
 .trend-header, .alarm-panel__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
 .trend-title, .alarm-panel__head { font-size: 16px; font-weight: 700; }
-.trend-subtitle { margin-top: 4px; font-size: 12px; color: #aeb7c2; }
-.drawer-shell { height: 100vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #111827 0%, #1f2937 100%); color: #eef2f7; }
+.trend-subtitle { margin-top: 4px; font-size: 12px; color: #ffffff; }
+.drawer-shell { height: 100vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #111827 0%, #1f2937 100%); color: #ffffff; }
 .drawer-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid rgba(0,255,255,0.10); }
 .drawer-title { font-size: 20px; font-weight: 800; }
-.drawer-subtitle { margin-top: 4px; font-size: 12px; color: #aeb7c2; }
+.drawer-subtitle { margin-top: 4px; font-size: 12px; color: #ffffff; }
 .drawer-actions { display: flex; align-items: center; gap: 10px; }
 .drawer-content { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 20px 20px; min-height: 0; }
 .metric-panel { display: grid; gap: 8px; }
@@ -743,30 +743,30 @@ export default {
 .sub-item strong { font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
 .health-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; background: rgba(0,255,255,0.03); border: 1px solid rgba(0,255,255,0.14); }
 .health-label { font-size: 12px; color: rgba(0,255,255,0.72); }
-.health-desc { margin-top: 4px; font-size: 18px; font-weight: 700; color: #eaffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
+.health-desc { margin-top: 4px; font-size: 18px; font-weight: 700; color: #ffffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
 .drawer-chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.drawer-chart-tip { font-size: 12px; color: #aeb7c2; }
+.drawer-chart-tip { font-size: 12px; color: #ffffff; }
 .wave-chart { width: 100%; height: 320px; background: rgba(1, 12, 28, 0.78); border-radius: 10px; border: 1px solid rgba(0,255,255,0.12); box-shadow: 0 0 12px rgba(0,255,255,0.08), inset 0 0 18px rgba(0,255,255,0.03); }
 .log-card { margin-top: 12px; background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0,255,255,0.12); }
 .card-header { display: flex; align-items: center; justify-content: space-between; }
 :deep(.vibration-drawer) { background: transparent; }
 :deep(.vibration-drawer .el-drawer__body) { height: 100%; }
-:deep(.el-table) { background: transparent; color: #eaf0f6; }
+:deep(.el-table) { background: transparent; color: #ffffff; }
 :deep(.el-table th), :deep(.el-table tr), :deep(.el-table td) { background: transparent !important; }
 :deep(.el-table::before) { background-color: rgba(0,255,255,0.08); }
-:deep(.el-radio-button__inner) { background: #2b3340; color: #eaf0f6; border-color: rgba(255,255,255,0.12); }
+:deep(.el-radio-button__inner) { background: #2b3340; color: #ffffff; border-color: rgba(255,255,255,0.12); }
 :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) { background: #409eff; border-color: #409eff; }
 
 /* 浅色工业生产主题覆盖 */
-.vibration-page { background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%); color: #1f2937; }
+.vibration-page { background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%); color: #ffffff; }
 .channel-card,
 .trend-panel,
 .alarm-panel,
 .log-card,
 .wave-chart {
-  background: #ffffff;
+  background: #1a1a1a;
   border-color: #d7dee8;
-  color: #1f2937;
+  color: #ffffff;
   box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
 }
 .channel-card:hover {
@@ -780,13 +780,13 @@ export default {
 .detail-row,
 .sub-item,
 .health-box {
-  background: #f8fafc;
-  border-color: #e5eaf1;
-  color: #344054;
+  background: #171717;
+  border-color: #b8b8b8;
+  color: #ffffff;
 }
-.main-metric--temp { background: #eff6ff; }
+.main-metric--temp { background: #1f1f1f; }
 .metric-label,
-.health-label { color: #475569; }
+.health-label { color: #ffffff; }
 .metric-value,
 .metric-value.big,
 .detail-row strong,
@@ -795,36 +795,36 @@ export default {
 .foot-time,
 .drawer-title,
 .trend-title,
-.alarm-panel__head { color: #1f2937; }
+.alarm-panel__head { color: #ffffff; }
 .metric-unit,
 .channel-footer,
 .trend-subtitle,
 .drawer-subtitle,
-.drawer-chart-tip { color: #64748b; }
+.drawer-chart-tip { color: #ffffff; }
 .drawer-shell {
-  background: linear-gradient(180deg, #ffffff 0%, #f3f6f8 100%);
-  color: #1f2937;
+  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
+  color: #ffffff;
 }
 .drawer-topbar { border-bottom-color: #d7dee8; }
-:deep(.vibration-drawer) { background: #f3f6f8; }
+:deep(.vibration-drawer) { background: #121212; }
 :deep(.el-table) {
-  background: #ffffff;
-  color: #1f2937;
+  background: #1a1a1a;
+  color: #ffffff;
 }
 :deep(.el-table th) {
-  background: #eef3f8 !important;
-  color: #1f2937 !important;
+  background: #171717 !important;
+  color: #ffffff !important;
 }
 :deep(.el-table tr),
 :deep(.el-table td) {
-  background: #ffffff !important;
-  color: #344054 !important;
+  background: #1a1a1a !important;
+  color: #ffffff !important;
 }
-:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) { background: #f8fafc !important; }
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) { background: #171717 !important; }
 :deep(.el-table::before) { background-color: #d7dee8; }
 :deep(.el-radio-button__inner) {
-  background: #ffffff;
-  color: #344054;
+  background: #1a1a1a;
+  color: #ffffff;
   border-color: #cbd5e1;
 }
 :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
@@ -840,7 +840,7 @@ export default {
 }
 .page-toolbar,
 .zone {
-  background: #ffffff;
+  background: #1a1a1a;
   border: 1px solid #d7dee8;
   border-radius: 8px;
 }
@@ -854,12 +854,12 @@ export default {
 .page-title {
   font-size: 20px;
   font-weight: 800;
-  color: #1f2937;
+  color: #ffffff;
 }
 .page-subtitle {
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: #ffffff;
 }
 .toolbar-actions {
   display: flex;
@@ -887,7 +887,7 @@ export default {
   gap: 10px;
   margin-bottom: 10px;
   font-weight: 700;
-  color: #1f2937;
+  color: #ffffff;
 }
 .selector-zone { grid-area: selector; }
 .config-zone { grid-area: config; }
@@ -911,8 +911,8 @@ export default {
   padding: 10px;
   border: 1px solid #d7dee8;
   border-radius: 8px;
-  background: #f8fafc;
-  color: #1f2937;
+  background: #171717;
+  color: #ffffff;
   text-align: left;
   cursor: pointer;
 }
@@ -928,7 +928,7 @@ export default {
 }
 .channel-row small {
   grid-column: 1 / -1;
-  color: #64748b;
+  color: #ffffff;
 }
 .config-grid {
   display: grid;
@@ -939,13 +939,13 @@ export default {
   display: grid;
   gap: 8px;
   padding: 10px;
-  border: 1px solid #e5eaf1;
+  border: 1px solid #333333;
   border-radius: 8px;
-  background: #f8fafc;
+  background: #171717;
 }
 .config-item span {
   font-size: 12px;
-  color: #64748b;
+  color: #ffffff;
 }
 .kpi-row {
   display: grid;
@@ -954,14 +954,14 @@ export default {
 }
 .kpi-item {
   padding: 12px;
-  border: 1px solid #e5eaf1;
+  border: 1px solid #333333;
   border-radius: 8px;
-  background: #f8fafc;
+  background: #171717;
 }
 .kpi-item span,
 .kpi-item small {
   display: block;
-  color: #64748b;
+  color: #ffffff;
   font-size: 12px;
 }
 .kpi-item strong {
@@ -969,14 +969,14 @@ export default {
   margin: 6px 0 2px;
   font-size: 24px;
   line-height: 1.1;
-  color: #1f2937;
+  color: #ffffff;
 }
 .primary-chart {
   width: 100%;
   height: 420px;
-  border: 1px solid #e5eaf1;
+  border: 1px solid #333333;
   border-radius: 8px;
-  background: #ffffff;
+  background: #1a1a1a;
 }
 .drawer-grid {
   display: grid;

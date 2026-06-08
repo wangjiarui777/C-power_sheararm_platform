@@ -109,7 +109,7 @@ export default {
     top: 7px;
     right: -3px;
     background: #f56c6c;
-    color: #fff;
+    color: #ffffff;
     border-radius: 10px;
     font-size: 10px;
     height: 16px;
@@ -129,24 +129,24 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: #f7f9fb;
+  background: #171717;
   border-bottom: 1px solid #eee;
   font-size: 13px;
   font-weight: 600;
-  color: #333;
+  color: #ffffff;
 }
 .notice-popover .notice-mark-all {
   font-size: 12px;
-  color: #409EFF;
+  color: #ffffff;
   font-weight: normal;
   cursor: pointer;
 }
-.notice-popover .notice-mark-all:hover { color: #2b7cc1; }
+.notice-popover .notice-mark-all:hover { color: #ffffff; }
 .notice-popover .notice-loading,
 .notice-popover .notice-empty {
   padding: 24px;
   text-align: center;
-  color: #bbb;
+  color: #ffffff;
   font-size: 12px;
   line-height: 1.8;
 }
@@ -160,15 +160,15 @@ export default {
   transition: background 0.15s;
 }
 .notice-popover .notice-item:last-child { border-bottom: none; }
-.notice-popover .notice-item:hover { background: #f7f9fb; }
+.notice-popover .notice-item:hover { background: #171717; }
 .notice-popover .notice-item.is-read .notice-tag,
 .notice-popover .notice-item.is-read .notice-item-title,
-.notice-popover .notice-item.is-read .notice-item-date { opacity: 0.45; filter: grayscale(1); color: #999; }
+.notice-popover .notice-item.is-read .notice-item-date { opacity: 0.45; filter: grayscale(1); color: #ffffff; }
 .notice-popover .notice-tag { flex-shrink: 0; }
 .notice-popover .notice-item-title {
   flex: 1;
   font-size: 12px;
-  color: #333;
+  color: #ffffff;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -176,6 +176,6 @@ export default {
 .notice-popover .notice-item-date {
   flex-shrink: 0;
   font-size: 11px;
-  color: #bbb;
+  color: #ffffff;
 }
 </style>

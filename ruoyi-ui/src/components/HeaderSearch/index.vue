@@ -214,7 +214,7 @@ export default {
       if (index !== this.activeIndex) return {}
       return {
         'background-color': this.theme,
-        'color': '#fff'
+        'color': '#ffffff'
       }
     },
     navigateResult(direction) {
@@ -271,7 +271,7 @@ export default {
 .result-count {
   padding: 6px 16px 0;
   font-size: 12px;
-  color: #aaa;
+  color: #ffffff;
 
   strong {
     color: red;
@@ -321,7 +321,7 @@ export default {
       }
 
       .menu-path {
-        color: #ccc;
+        color: #ffffff;
         font-size: 10px;
       }
     }
@@ -340,23 +340,23 @@ export default {
 
     .empty-icon {
       font-size: 42px;
-      color: #e0e0e0;
+      color: #ffffff;
       margin-bottom: 14px;
     }
 
     .empty-text {
       font-size: 14px;
-      color: #999;
+      color: #ffffff;
       margin: 0 0 6px;
 
       strong {
-        color: #666;
+        color: #ffffff;
       }
     }
 
     .empty-tip {
       font-size: 12px;
-      color: #bbb;
+      color: #ffffff;
       margin: 0;
     }
   }
@@ -368,7 +368,7 @@ export default {
   gap: 28px;
   padding: 10px 20px;
   border-top: 1px solid #f0f0f0;
-  color: #999;
+  color: #ffffff;
   font-size: 12px;
 
   .shortcut-item {
@@ -386,8 +386,8 @@ export default {
     padding: 0 5px;
     border: 1px solid #ddd;
     border-radius: 4px;
-    background: #f7f7f7;
-    color: #555;
+    background: #171717;
+    color: #ffffff;
     font-size: 11px;
     font-family: inherit;
     line-height: 1;

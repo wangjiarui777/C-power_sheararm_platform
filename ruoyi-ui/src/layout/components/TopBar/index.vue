@@ -66,7 +66,7 @@ export default {
 }
 
 .el-menu--horizontal .el-menu--popup .el-menu-item:hover {
-  background-color: #f5f7fa !important;
+  background-color: #171717 !important;
 }
 
 /* submenu item */
@@ -74,7 +74,7 @@ export default {
   float: left;
   height: 47px !important;
   line-height: 50px !important;
-  color: #303133;
+  color: #ffffff;
   margin: 0 15px !important;
 }
 
@@ -92,7 +92,7 @@ export default {
 }
 
 .el-menu--horizontal .el-menu .el-menu-item, .el-menu--horizontal .el-menu .el-submenu__title{
-  color: #303133;
+  color: #ffffff;
 }
 </style>
 

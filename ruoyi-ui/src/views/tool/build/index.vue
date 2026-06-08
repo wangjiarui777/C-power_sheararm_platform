@@ -390,7 +390,7 @@ export default {
   .el-tabs__item{
     height: 32px;
     line-height: 32px;
-    color: #888a8e;
+    color: #ffffff;
     border-left: 1px solid #121315 !important;
     background: #363636;
     margin-right: 5px;
@@ -399,13 +399,13 @@ export default {
   .el-tabs__item.is-active{
     background: #1e1e1e;
     border-bottom-color: #1e1e1e!important;
-    color: #fff;
+    color: #ffffff;
   }
   .el-icon-edit{
-    color: #f1fa8c;
+    color: #ffffff;
   }
   .el-icon-document{
-    color: #a95812;
+    color: #ffffff;
   }
 }
 
@@ -434,7 +434,7 @@ export default {
 }
 .reg-item{
   padding: 12px 6px;
-  background: #f8f8f8;
+  background: #171717;
   position: relative;
   border-radius: 4px;
   .close-btn{
@@ -447,7 +447,7 @@ export default {
     line-height: 16px;
     background: rgba(0, 0, 0, 0.2);
     border-radius: 50%;
-    color: #fff;
+    color: #ffffff;
     text-align: center;
     z-index: 1;
     cursor: pointer;
@@ -482,10 +482,10 @@ export default {
     margin-left: 6px;
   }
   .el-icon-plus{
-    color: #409EFF;
+    color: #ffffff;
   }
   .el-icon-delete{
-    color: #157a0c;
+    color: #ffffff;
   }
 }
 
@@ -526,10 +526,10 @@ $lighterBlue: #409EFF;
 }
 .components-title{
   font-size: 14px;
-  color: #222;
+  color: #ffffff;
   margin: 6px 2px;
   .svg-icon{
-    color: #666;
+    color: #ffffff;
     font-size: 18px;
   }
 }
@@ -542,14 +542,14 @@ $lighterBlue: #409EFF;
   border: 1px dashed $selectedColor;
   border-radius: 3px;
   .svg-icon{
-    color: #777;
+    color: #ffffff;
     font-size: 15px;
   }
   &:hover {
     border: 1px dashed #787be8;
-    color: #787be8;
+    color: #ffffff;
     .svg-icon {
-      color: #787be8;
+      color: #ffffff;
     }
   }
 }
@@ -585,7 +585,7 @@ $lighterBlue: #409EFF;
   right: 0;
   text-align: center;
   font-size: 18px;
-  color: #ccb1ea;
+  color: #ffffff;
   letter-spacing: 4px;
 }
 .action-bar{
@@ -598,7 +598,7 @@ $lighterBlue: #409EFF;
   border-top: none;
   border-left: none;
   .delete-btn{
-    color: #F56C6C;
+    color: #ffffff;
   }
 }
 .logo-wrapper{
@@ -613,7 +613,7 @@ $lighterBlue: #409EFF;
   left: 12px;
   top: 6px;
   line-height: 30px;
-  color: #00afff;
+  color: #ffffff;
   font-weight: 600;
   font-size: 17px;
   white-space: nowrap;
@@ -722,7 +722,7 @@ $lighterBlue: #409EFF;
     top: 0;
     left: 0;
     font-size: 12px;
-    color: #bbb;
+    color: #ffffff;
     display: inline-block;
     padding: 0 6px;
   }
@@ -758,17 +758,17 @@ $lighterBlue: #409EFF;
     background: #fff;
     &:hover{
       background: $lighterBlue;
-      color: #fff;
+      color: #ffffff;
     }
   }
   & > .drawing-item-delete{
     right: 24px;
     border-color: #F56C6C;
-    color: #F56C6C;
+    color: #ffffff;
     background: #fff;
     &:hover{
       background: #F56C6C;
-      color: #fff;
+      color: #ffffff;
     }
   }
 }

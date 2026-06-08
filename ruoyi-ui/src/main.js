@@ -7,6 +7,7 @@ import './assets/styles/element-variables.scss'
 
 import '@/assets/styles/index.scss' // global css
 import '@/assets/styles/chuangli.scss' // global layout css
+import '@/assets/styles/industrial-dark.scss' // dark industrial theme
 import App from './App'
 import store from './store'
 import router from './router'

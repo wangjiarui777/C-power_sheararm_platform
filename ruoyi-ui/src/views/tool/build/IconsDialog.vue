@@ -88,11 +88,11 @@ export default {
     cursor: pointer;
     overflow: hidden;
     &:hover {
-      background: #f2f2f2;
+      background: #1f1f1f;
     }
     &.active-item{
       background: #e1f3fb;
-      color: #7a6df0
+      color: #ffffff
     }
     > i {
       font-size: 30px;

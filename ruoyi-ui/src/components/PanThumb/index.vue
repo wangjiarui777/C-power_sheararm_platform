@@ -84,7 +84,7 @@ export default {
 }
 
 .pan-info h3 {
-  color: #fff;
+  color: #ffffff;
   text-transform: uppercase;
   position: relative;
   letter-spacing: 2px;
@@ -97,7 +97,7 @@ export default {
 }
 
 .pan-info p {
-  color: #fff;
+  color: #ffffff;
   padding: 10px 5px;
   font-style: italic;
   margin: 0 30px;
@@ -107,12 +107,12 @@ export default {
 
 .pan-info p a {
   display: block;
-  color: #333;
+  color: #ffffff;
   width: 80px;
   height: 80px;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  color: #fff;
+  color: #ffffff;
   font-style: normal;
   font-weight: 700;
   text-transform: uppercase;

@@ -333,7 +333,7 @@ export default {
         height: 100%;
         padding-top: 15px;
         padding-left: 24px;
-        color: #1890ff;
+        color: #ffffff;
         font-weight: 700;
         font-size: 14px;
       }
@@ -384,7 +384,7 @@ export default {
     width: 56px;
     height: 48px;
     border-radius: 4px;
-    background: #f0f2f5;
+    background: #171717;
     border: 2px solid transparent;
   }
 
@@ -392,7 +392,7 @@ export default {
     b:first-child {
       display: block;
       height: 30%;
-      background: #fff;
+      background: #1a1a1a;
     }
     b:last-child {
       width: 30%;

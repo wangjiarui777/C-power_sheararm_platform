@@ -77,7 +77,7 @@ export default {
             height: 100%;
             padding: 0 5px;
             &:hover {
-              background: #ececec;
+              background: #1f1f1f;
               border-radius: 5px;
             }
             .icon {
@@ -94,7 +94,7 @@ export default {
             }
           }
           .icon-item.active {
-            background: #ececec;
+            background: #1f1f1f;
             border-radius: 5px;
           }
         }

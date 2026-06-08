@@ -198,7 +198,7 @@ export default {
   z-index: 1;
   font-size: 72px;
   font-weight: 200;
-  color: #fff;
+  color: #ffffff;
   letter-spacing: 4px;
   text-shadow: 0 0 40px rgba(255,255,255,0.3);
   margin-bottom: 8px;
@@ -260,7 +260,7 @@ export default {
 }
 
 .lock-username {
-  color: #fff;
+  color: #ffffff;
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 6px;
@@ -306,7 +306,7 @@ export default {
   background: transparent;
   border: none;
   outline: none;
-  color: #fff;
+  color: #ffffff;
   font-size: 15px;
   padding: 10px 0;
 }
@@ -321,7 +321,7 @@ export default {
   border-radius: 50%;
   background: linear-gradient(135deg, #667eea, #764ba2);
   border: none;
-  color: #fff;
+  color: #ffffff;
   font-size: 18px;
   cursor: pointer;
   transition: transform 0.2s, opacity 0.2s;
@@ -347,7 +347,7 @@ export default {
 
 .error-msg {
   margin-top: 14px;
-  color: #ff7675;
+  color: #ffffff;
   font-size: 13px;
   text-align: center;
   animation: fadeIn 0.3s ease;

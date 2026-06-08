@@ -147,21 +147,21 @@ export default {
 }
 
 .type-notify {
-  background: #fff8e6;
-  color: #b7791f;
+  background: #2a2314;
+  color: #ffffff;
   border-left: 3px solid #d97706;
 }
 
 .type-announce {
-  background: #e8f5e9;
-  color: #276749;
+  background: #222018;
+  color: #ffffff;
   border-left: 3px solid #38a169;
 }
 
 .notice-title {
   font-size: 22px;
   font-weight: 700;
-  color: #1a202c;
+  color: #ffffff;
   line-height: 1.45;
   margin: 0 0 16px;
   letter-spacing: -0.2px;
@@ -183,12 +183,12 @@ export default {
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  color: #718096;
+  color: #ffffff;
 }
 
 .meta-item i {
   font-size: 12px;
-  color: #a0aec0;
+  color: #ffffff;
 }
 
 .status-dot {
@@ -230,7 +230,7 @@ export default {
 }
 
 .notice-body {
-  background: #fff;
+  background: #1a1a1a;
   border-radius: 6px;
   padding: 28px 32px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
@@ -240,7 +240,7 @@ export default {
 .notice-content {
   font-size: 14px;
   line-height: 1.85;
-  color: #2d3748;
+  color: #ffffff;
   word-break: break-word;
 }
 
@@ -252,7 +252,7 @@ export default {
 .notice-content ::v-deep h2,
 .notice-content ::v-deep h3 {
   font-weight: 700;
-  color: #1a202c;
+  color: #ffffff;
   margin: 1.4em 0 0.6em;
 }
 
@@ -269,12 +269,12 @@ export default {
 }
 
 .notice-content ::v-deep a {
-  color: #3182ce;
+  color: #ffffff;
   text-decoration: underline;
 }
 
 .notice-content ::v-deep a:hover {
-  color: #2b6cb0;
+  color: #ffffff;
 }
 
 .notice-content ::v-deep img {
@@ -297,8 +297,8 @@ export default {
   border-left: 3px solid #cbd5e0;
   margin: 1em 0;
   padding: 6px 16px;
-  color: #718096;
-  background: #f7fafc;
+  color: #ffffff;
+  background: #171717;
 }
 
 .notice-content ::v-deep table {
@@ -315,14 +315,14 @@ export default {
 }
 
 .notice-content ::v-deep table th {
-  background: #f7fafc;
+  background: #171717;
   font-weight: 600;
 }
 
 .notice-empty {
   text-align: center;
   padding: 40px 0;
-  color: #a0aec0;
+  color: #ffffff;
   font-size: 13px;
 }
 
@@ -344,13 +344,13 @@ export default {
   .el-drawer__header {
     margin-bottom: 0;
     padding: 16px 20px;
-    border-bottom: 1px solid #ebeef5;
+    border-bottom: 1px solid #1f1f1f;
     font-size: 16px;
     font-weight: 600;
-    color: #303133;
+    color: #ffffff;
   }
   .el-drawer__body {
-    background: #f5f6f8;
+    background: #171717;
   }
 }
 

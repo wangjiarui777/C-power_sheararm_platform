@@ -84,14 +84,14 @@ export default {
     font-size: 12px;
     position: relative;
     overflow: hidden;
-    color: #666;
-    background: #fff;
+    color: #ffffff;
+    background: #1a1a1a;
     box-shadow: 4px 4px 40px rgba(0, 0, 0, .05);
     border-color: rgba(0, 0, 0, .05);
 
     &:hover {
       .card-panel-icon-wrapper {
-        color: #fff;
+        color: #ffffff;
       }
 
       .icon-people {
@@ -112,19 +112,19 @@ export default {
     }
 
     .icon-people {
-      color: #40c9c6;
+      color: #ffffff;
     }
 
     .icon-message {
-      color: #36a3f7;
+      color: #ffffff;
     }
 
     .icon-money {
-      color: #f4516c;
+      color: #ffffff;
     }
 
     .icon-shopping {
-      color: #34bfa3
+      color: #ffffff
     }
 
     .card-panel-icon-wrapper {
@@ -148,7 +148,7 @@ export default {
 
       .card-panel-text {
         line-height: 18px;
-        color: rgba(0, 0, 0, 0.45);
+        color: #94a3b8;
         font-size: 16px;
         margin-bottom: 12px;
       }

@@ -170,12 +170,12 @@ export default {
 .title {
   margin: 0px auto 30px auto;
   text-align: center;
-  color: #707070;
+  color: #ffffff;
 }
 
 .login-form {
   border-radius: 6px;
-  background: #ffffff;
+  background: #1a1a1a;
   width: 400px;
   padding: 25px 25px 5px 25px;
   z-index: 1;
@@ -194,7 +194,7 @@ export default {
 .login-tip {
   font-size: 13px;
   text-align: center;
-  color: #bfbfbf;
+  color: #ffffff;
 }
 .login-code {
   width: 33%;
@@ -212,7 +212,7 @@ export default {
   bottom: 0;
   width: 100%;
   text-align: center;
-  color: #fff;
+  color: #ffffff;
   font-family: Arial;
   font-size: 12px;
   letter-spacing: 1px;

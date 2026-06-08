@@ -54,7 +54,7 @@ export default {
     margin: 100px auto;
     .pan-back-btn {
       background: #008489;
-      color: #fff;
+      color: #ffffff;
       border: none!important;
     }
     .pan-gif {
@@ -69,7 +69,7 @@ export default {
     .text-jumbo {
       font-size: 60px;
       font-weight: 700;
-      color: #484848;
+      color: #ffffff;
     }
     .list-unstyled {
       font-size: 14px;
@@ -77,7 +77,7 @@ export default {
         padding-bottom: 5px;
       }
       a {
-        color: #008489;
+        color: #ffffff;
         text-decoration: none;
         &:hover {
           text-decoration: underline;

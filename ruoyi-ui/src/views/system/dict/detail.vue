@@ -120,14 +120,14 @@ export default {
   align-items: center;
   justify-content: center;
   height: 120px;
-  color: #aaa;
+  color: #ffffff;
   font-size: 13px;
   gap: 8px;
 }
 
 .drawer-empty {
   text-align: center;
-  color: #bbb;
+  color: #ffffff;
   padding: 60px 0;
   font-size: 13px;
 }
@@ -143,7 +143,7 @@ export default {
 }
 
 .stat-card {
-  background: #f7f9fb;
+  background: #171717;
   border: 1px solid #e8ecf0;
   border-radius: 6px;
   padding: 10px 14px;
@@ -153,15 +153,15 @@ export default {
 .stat-num {
   font-size: 22px;
   font-weight: 700;
-  color: #2c3e50;
+  color: #ffffff;
 }
 
-.stat-num.success { color: #27ae60; }
-.stat-num.danger  { color: #e74c3c; }
+.stat-num.success { color: #ffffff; }
+.stat-num.danger  { color: #ffffff; }
 
 .stat-label {
   font-size: 11px;
-  color: #95a5a6;
+  color: #ffffff;
   margin-top: 4px;
 }
 
@@ -187,15 +187,15 @@ export default {
 .dict-cell-key {
   padding: 9px 14px;
   font-size: 12px;
-  color: #888;
-  background: #f7f9fb;
+  color: #ffffff;
+  background: #171717;
   border-right: 1px solid #f0f4f8;
 }
 
 .dict-cell-val {
   padding: 9px 14px;
   font-size: 13px;
-  color: #2c3e50;
+  color: #ffffff;
   word-break: break-all;
   display: flex;
   align-items: center;

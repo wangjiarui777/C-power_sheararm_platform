@@ -892,7 +892,7 @@ export default {
   box-sizing: border-box;
   & .close-btn {
     cursor: pointer;
-    color: #f56c6c;
+    color: #ffffff;
   }
   & .el-input + .el-input {
     margin-left: 4px;
@@ -908,7 +908,7 @@ export default {
   line-height: 32px;
   font-size: 22px;
   padding: 0 4px;
-  color: #777;
+  color: #ffffff;
 }
 .option-drag {
   cursor: move;
@@ -934,13 +934,13 @@ export default {
   border-radius: 0 0 6px 0;
   text-align: center;
   line-height: 26px;
-  color: #fff;
+  color: #ffffff;
   font-size: 18px;
 }
 .node-label{
   font-size: 14px;
 }
 .node-icon{
-  color: #bebfc3;
+  color: #ffffff;
 }
 </style>

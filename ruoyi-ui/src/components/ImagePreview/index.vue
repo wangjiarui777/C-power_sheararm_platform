@@ -68,7 +68,7 @@ export default {
 <style lang="scss" scoped>
 .el-image {
   border-radius: 5px;
-  background-color: #ebeef5;
+  background-color: #1f1f1f;
   box-shadow: 0 0 5px 1px #ccc;
   ::v-deep .el-image__inner {
     transition: all 0.3s;
@@ -83,7 +83,7 @@ export default {
     align-items: center;
     width: 100%;
     height: 100%;
-    color: #909399;
+    color: #ffffff;
     font-size: 30px;
   }
 }

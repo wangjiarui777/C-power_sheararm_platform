@@ -32,24 +32,21 @@
       </div>
     </div>
 
-    <!-- ===== 主体区域：左图表(35%) + 右诊断面板(65%) ===== -->
+    <!-- ===== 三栏主体：左图表 | 中诊断核心 | 右辅助信息 ===== -->
     <div class="main-area">
-      <!-- 左栏：时域图 + 频域图（上下各占50%） -->
-      <div class="charts-column">
-        <!-- 时域波形图卡片 -->
+      <!-- 左栏：时域图 + 频域图 -->
+      <div class="left-column">
         <el-card shadow="hover" class="panel-card chart-card">
           <div slot="header" class="card-header">
-            <span class="card-title">时域图</span>
+            <span class="card-title">时域波形</span>
             <span class="card-unit">位移 / mm</span>
           </div>
-          <!-- ECharts 挂载容器 -->
           <div ref="timeChartRef" class="chart-box"></div>
           <div v-if="!hasTimeData" class="empty-overlay">暂无数据</div>
         </el-card>
-        <!-- 频域频谱图卡片 -->
         <el-card shadow="hover" class="panel-card chart-card">
           <div slot="header" class="card-header">
-            <span class="card-title">频域图</span>
+            <span class="card-title">频域频谱</span>
             <span class="card-unit">归一化幅值</span>
           </div>
           <div ref="freqChartRef" class="chart-box"></div>
@@ -57,124 +54,117 @@
         </el-card>
       </div>
 
-      <!-- 右栏：诊断信息面板（垂直排列，可滚动） -->
-      <div class="info-column">
-        <!-- 诊断结果卡片（视觉上最突出，左侧有彩色装饰条） -->
-        <el-card shadow="hover" class="panel-card result-card">
-          <div class="result-hero">
-            <!-- 环形置信度仪表盘（SVG 手绘，避免引入额外图表库） -->
-            <div class="conf-ring">
+      <!-- 中栏：诊断核心信息 -->
+      <div class="center-column">
+        <!-- 健康指数 + 诊断结果 同一行 -->
+        <div class="center-hero">
+          <!-- 左：健康指数环形仪表 -->
+          <div class="health-gauge">
+            <div class="gauge-ring" :class="healthBarClass">
               <svg viewBox="0 0 100 100">
-                <!-- 底色轨道 -->
-                <circle class="ring-track" cx="50" cy="50" r="42" />
-                <!-- 填充弧线：dasharray 动态控制进度的 SVG 环形图 -->
-                <circle class="ring-bar" cx="50" cy="50" r="42"
-                  :stroke-dasharray="confidenceDashArray"
-                  :class="confidenceRingClass" />
+                <circle class="g-track" cx="50" cy="50" r="40" />
+                <circle class="g-fill" cx="50" cy="50" r="40"
+                  :stroke-dasharray="healthDashArray" :class="healthBarClass" />
               </svg>
-              <div class="ring-inner">
-                <span class="ring-num">{{ confidenceText }}</span>
+              <div class="g-inner">
+                <span class="g-num">{{ healthIndex > 0 ? healthIndex : '--' }}</span>
               </div>
             </div>
-            <!-- 诊断标签 + 风险/告警标签 -->
-            <div class="hero-info">
-              <div class="hero-label" :class="resultToneClass">{{ diagnosisName || '--' }}</div>
-              <div class="hero-tags">
-                <span class="hero-tag" :class="'tag-' + riskBadgeClass">风险: {{ riskLevel || '--' }}</span>
-                <span class="hero-tag tag-alarm">告警: {{ alarmLevelText }}</span>
-              </div>
-            </div>
+            <span class="gauge-label">健康指数</span>
           </div>
-          <!-- 健康指数进度条 -->
-          <div class="health-section">
-            <div class="health-header">
-              <span>健康指数</span>
-              <strong>{{ healthIndex > 0 ? healthIndex : '--' }}</strong>
+
+          <!-- 右：诊断结果 + 标签同行 + 元信息 -->
+          <div class="hero-right">
+            <div class="diag-row">
+              <span class="diag-label" :class="resultToneClass">{{ diagnosisName || '--' }}</span>
+              <span class="diag-tag" :class="'dt-' + riskBadgeClass">
+                <span class="dt-dot"></span>风险 {{ riskLevel || '--' }}
+              </span>
+              <span class="diag-tag dt-alarm">
+                <span class="dt-dot"></span>告警 {{ alarmLevelText }}
+              </span>
+              <span class="diag-tag dt-model">
+                <span class="dt-dot"></span>{{ selectedModelLabel }}
+              </span>
+            </div>
+            <div class="hero-meta">
+              <span>模型版本 {{ modelVersion || '--' }}</span>
+              <span>推理状态 {{ resultStateText || '待机' }}</span>
             </div>
             <div class="health-bar-wrap">
-              <!-- 进度条颜色：>=80 绿色，>=60 黄色，<60 红色 -->
               <div class="health-bar" :style="{ width: healthBarPercent + '%' }" :class="healthBarClass"></div>
             </div>
           </div>
-        </el-card>
+        </div>
 
-        <!-- 关键指标卡片（2列网格） -->
-        <el-card shadow="hover" class="panel-card metrics-card">
-          <div slot="header" class="card-header">
-            <span class="card-title">关键指标</span>
+        <!-- 置信度条带 -->
+        <div class="confidence-strip">
+          <div class="conf-label">
+            <span>置信度</span>
+            <strong>{{ confidenceText }}</strong>
           </div>
-          <div class="metrics-grid">
-            <div class="metric-cell">
-              <span class="metric-name">RMS</span>
-              <span class="metric-val">{{ displayMetric(latestRms, 4) }}</span>
-            </div>
-            <div class="metric-cell">
-              <span class="metric-name">Peak</span>
-              <span class="metric-val">{{ displayMetric(latestPeak, 4) }}</span>
-            </div>
-            <!-- Unknown 比例：>0.5 红色，>0.3 黄色，否则默认色 -->
-            <div class="metric-cell">
-              <span class="metric-name">Unknown 比例</span>
-              <span class="metric-val" :class="unknownRatio > 0.5 ? 'tone-failed' : unknownRatio > 0.3 ? 'tone-running' : ''">{{ displayMetric(unknownRatio, 4) }}</span>
-            </div>
-            <!-- 片段一致性：>0.8 绿色，>0.5 黄色 -->
-            <div class="metric-cell">
-              <span class="metric-name">片段一致性</span>
-              <span class="metric-val" :class="segmentConsistency > 0.8 ? 'tone-done' : segmentConsistency > 0.5 ? 'tone-running' : ''">{{ displayMetric(segmentConsistency, 4) }}</span>
-            </div>
-            <div class="metric-cell">
-              <span class="metric-name">Mean Mahalanobis</span>
-              <span class="metric-val">{{ displayMetric(meanMahalanobis, 2) }}</span>
-            </div>
-            <div class="metric-cell">
-              <span class="metric-name">Average Entropy</span>
-              <span class="metric-val">{{ displayMetric(meanEntropy, 4) }}</span>
-            </div>
-            <div class="metric-cell">
-              <span class="metric-name">闭集预测</span>
-              <span class="metric-val">{{ closedPredictionText }}</span>
-            </div>
-            <div class="metric-cell">
-              <span class="metric-name">采样率</span>
-              <span class="metric-val">{{ sampleRate > 0 ? sampleRate + ' Hz' : '--' }}</span>
-            </div>
+          <div class="conf-bar-wrap">
+            <div class="conf-bar" :style="{ width: Math.max(Number(confidence) || 0, 1) + '%' }" :class="confidenceRingClass"></div>
           </div>
-        </el-card>
+        </div>
 
-        <!-- 决策原因卡片：显示模型做出当前诊断的判断依据 -->
-        <el-card v-if="decisionReason" shadow="hover" class="panel-card reason-card">
-          <div slot="header" class="card-header">
-            <span class="card-title">决策原因</span>
+        <!-- 关键指标网格 -->
+        <div class="center-metrics">
+          <div class="cm-cell">
+            <span class="cm-label">有效值 (RMS)</span>
+            <span class="cm-val">{{ displayMetric(latestRms, 4) }}</span>
+            <span class="cm-unit">mm/s</span>
           </div>
-          <div class="reason-text">{{ decisionReason }}</div>
-        </el-card>
+          <div class="cm-cell">
+            <span class="cm-label">峰值 (Peak)</span>
+            <span class="cm-val">{{ displayMetric(latestPeak, 4) }}</span>
+            <span class="cm-unit">mm/s</span>
+          </div>
+          <div class="cm-cell">
+            <span class="cm-label">未知类别占比</span>
+            <span class="cm-val" :class="unknownRatio > 0.5 ? 'val-danger' : unknownRatio > 0.3 ? 'val-warn' : ''">{{ displayMetric(unknownRatio, 4) }}</span>
+          </div>
+          <div class="cm-cell">
+            <span class="cm-label">片段一致性</span>
+            <span class="cm-val" :class="segmentConsistency > 0.8 ? 'val-ok' : segmentConsistency > 0.5 ? 'val-warn' : ''">{{ displayMetric(segmentConsistency, 4) }}</span>
+          </div>
+          <div class="cm-cell">
+            <span class="cm-label">平均马氏距离</span>
+            <span class="cm-val">{{ displayMetric(meanMahalanobis, 2) }}</span>
+          </div>
+          <div class="cm-cell">
+            <span class="cm-label">平均熵值</span>
+            <span class="cm-val">{{ displayMetric(meanEntropy, 4) }}</span>
+          </div>
+          <div class="cm-cell">
+            <span class="cm-label">闭集预测</span>
+            <span class="cm-val cm-val-sm">{{ closedPredictionText }}</span>
+          </div>
+          <div class="cm-cell">
+            <span class="cm-label">采样率</span>
+            <span class="cm-val cm-val-sm">{{ sampleRate > 0 ? sampleRate + ' Hz' : '--' }}</span>
+          </div>
+        </div>
 
-        <!-- 证据链卡片：列出所有诊断证据项（类型图标 + 标题 + 描述） -->
-        <el-card v-if="evidence.length" shadow="hover" class="panel-card evidence-card">
-          <div slot="header" class="card-header">
-            <span class="card-title">证据链</span>
-            <span class="card-badge">{{ evidence.length }}</span>
+        <!-- 健康趋势图 -->
+        <div class="health-trend-card">
+          <div class="trend-header">
+            <span class="trend-title">健康趋势</span>
+            <span class="trend-sub">近 7 天日均健康指数</span>
           </div>
-          <!-- 可滚动区域，容纳多条证据 -->
-          <div class="evidence-scroll">
-            <div v-for="(item, i) in evidence" :key="i" class="evidence-row">
-              <!-- 证据类型圆点：success 绿 / warning 黄 / info 蓝 / danger 红 -->
-              <span class="ev-dot" :class="'dot-' + (item.type || 'info')"></span>
-              <span class="ev-title">{{ item.title }}</span>
-              <span class="ev-desc">{{ item.desc }}</span>
-            </div>
-          </div>
-        </el-card>
+          <div ref="healthTrendRef" class="trend-chart"></div>
+        </div>
+      </div>
 
-        <!-- 各类别概率卡片：水平条形图展示 Top-N 故障类别的预测概率 -->
+      <!-- 右栏：辅助面板 -->
+      <div class="right-column">
         <el-card v-if="topProbabilities.length" shadow="hover" class="panel-card prob-card">
           <div slot="header" class="card-header">
             <span class="card-title">各类别概率</span>
           </div>
           <div class="prob-list">
-            <div v-for="(item, i) in topProbabilities" :key="i" class="prob-row">
+            <div v-for="(item, i) in topProbabilities" :key="i" class="prob-row" v-show="i < 6">
               <span class="prob-class">{{ item.class }}</span>
-              <!-- 概率进度条 -->
               <div class="prob-track">
                 <div class="prob-fill" :class="getProbBarClass(item.probability)" :style="{ width: Math.max(item.probability, 1) + '%' }"></div>
               </div>
@@ -182,24 +172,51 @@
             </div>
           </div>
         </el-card>
+
+        <el-card v-if="evidence.length" shadow="hover" class="panel-card evidence-card">
+          <div slot="header" class="card-header">
+            <span class="card-title">证据链</span>
+            <span class="card-badge">{{ evidence.length }}</span>
+          </div>
+          <div class="evidence-scroll">
+            <div v-for="(item, i) in evidence" :key="i" class="evidence-row" v-show="i < 5">
+              <span class="ev-dot" :class="'dot-' + (item.type || 'info')"></span>
+              <div class="ev-body">
+                <span class="ev-title">{{ item.title }}</span>
+                <span class="ev-desc">{{ item.desc }}</span>
+              </div>
+            </div>
+          </div>
+        </el-card>
+
+        <el-card v-if="decisionReason" shadow="hover" class="panel-card reason-card">
+          <div slot="header" class="card-header">
+            <span class="card-title">决策原因</span>
+          </div>
+          <div class="reason-text">{{ decisionReason }}</div>
+        </el-card>
+
+        <div v-if="!decisionReason && !evidence.length && !topProbabilities.length" class="empty-info-placeholder">
+          <i class="el-icon-upload2"></i>
+          <span>上传数据文件开始分析</span>
+        </div>
       </div>
     </div>
 
-    <!-- ===== 底部：历史诊断记录表格 ===== -->
+    <!-- ===== 底部：历史记录（紧凑） ===== -->
     <el-card v-if="historyList.length" shadow="hover" class="panel-card history-card">
       <div slot="header" class="card-header">
         <span class="card-title">历史记录</span>
         <span class="card-badge">{{ historyList.length }}</span>
       </div>
-      <!-- 紧凑表格：时间、结果、置信度、健康指数、风险等级 -->
-      <el-table :data="historyList" size="mini" class="compact-table" max-height="160">
+      <el-table :data="historyList.slice(0, 3)" size="mini" class="compact-table">
         <el-table-column label="时间" width="160">
           <template slot-scope="scope">{{ parseTime(scope.row.sampleTime) }}</template>
         </el-table-column>
-        <el-table-column prop="diagnosisResult" label="结果" min-width="120" />
-        <el-table-column prop="confidence" label="置信度" width="80" />
-        <el-table-column prop="healthIndex" label="健康指数" width="90" />
-        <el-table-column prop="riskLevel" label="风险" width="70">
+        <el-table-column prop="diagnosisResult" label="诊断结果" min-width="140" />
+        <el-table-column prop="confidence" label="置信度" width="70" />
+        <el-table-column prop="healthIndex" label="健康" width="60" />
+        <el-table-column prop="riskLevel" label="风险" width="60">
           <template slot-scope="scope">
             <el-tag size="mini" :type="riskTagType(scope.row.riskLevel)">{{ scope.row.riskLevel }}</el-tag>
           </template>
@@ -252,7 +269,7 @@
         <!-- 本地路径输入行：手动输入文件路径后点击提交 -->
         <div class="path-upload-row">
           <el-input v-model="localFilePath" placeholder="或直接输入本地文件路径" clearable />
-          <el-button type="primary" :loading="uploading" @click="uploadByPath(localFilePath)">提交 infer</el-button>
+          <el-button type="primary" :loading="uploading" @click="uploadByPath(localFilePath)">提交分析</el-button>
         </div>
         <!-- 后端文件下拉选择：列出 DATA_DIR 中的 .mat/.npy 文件 -->
         <div class="mat-file-row">
@@ -272,6 +289,7 @@
 import * as echarts from 'echarts'
 import { getInferenceHealth, inferWithFilePath, listMatFiles, uploadDiagnosisToInferenceService, analyzeLatestFile, fetchHistory } from '@/api/system/bearingDiagnosis'
 import inferenceWebSocket from '@/utils/inference-websocket'
+import { translateDiagnosisLabel, translateAlarmLevel, translateRiskLevel, translateAll } from '@/utils/diagnosis-translations'
 
 export default {
   name: 'InferenceResultPage',
@@ -305,6 +323,8 @@ export default {
       closedPrediction: '',   // 闭集预测结果
       confidence: 0,          // 置信度（0-100）
       healthIndex: 0,         // 健康指数（0-100）
+      healthTrendData: [],    // 健康趋势历史数据 [{time, value}]
+      healthTrendChart: null, // 健康趋势 ECharts 实例
       riskLevel: '',          // 风险等级（低/中/高）
       alarmLevel: '',         // 告警等级（normal/attention/warning/alarm）
 
@@ -402,9 +422,10 @@ export default {
     closedPredictionText() {
       return this.closedPrediction || '--'
     },
-    /** 告警等级文本（优先 alarmLevel，回退 riskLevel） */
+    /** 告警等级文本（优先 alarmLevel，回退 riskLevel，已翻译为中文） */
     alarmLevelText() {
-      return this.alarmLevel || this.riskLevel || '--'
+      const raw = this.alarmLevel || this.riskLevel
+      return raw ? translateAll(raw) : '--'
     },
     /** 健康指数百分比（限制在 0-100 区间） */
     healthBarPercent() {
@@ -442,7 +463,13 @@ export default {
      */
     confidenceDashArray() {
       const pct = Math.max(0, Math.min(100, Number(this.confidence) || 0))
-      const c = 2 * Math.PI * 42
+      const c = 2 * Math.PI * 40
+      const filled = (pct / 100) * c
+      return `${filled} ${c}`
+    },
+    healthDashArray() {
+      const pct = Math.max(0, Math.min(100, Number(this.healthIndex) || 0))
+      const c = 2 * Math.PI * 40
       const filled = (pct / 100) * c
       return `${filled} ${c}`
     }
@@ -474,6 +501,7 @@ export default {
     this.closeInferenceWs()
     if (this.timeChart) this.timeChart.dispose()
     if (this.freqChart) this.freqChart.dispose()
+    if (this.healthTrendChart) this.healthTrendChart.dispose()
     if (this.resizeTimer) clearTimeout(this.resizeTimer)
   },
 
@@ -562,16 +590,16 @@ export default {
           type: 'category',
           boundaryGap: false,
           data: xData,
-          name: this.timeAxis.length ? '时间/s' : '采样点',
+          name: this.timeAxis.length ? '时间（秒）' : '采样点',
           nameTextStyle: { color: '#475569', fontSize: 10 },
           axisLabel: { color: '#64748b', fontSize: 10, interval: 'auto', showMaxLabel: true, showMinLabel: true }
         },
         yAxis: {
           type: 'value',
-          name: '位移/mm',
+          name: '位移（毫米）',
           nameTextStyle: { color: '#475569', fontSize: 10 },
           axisLabel: { color: '#64748b', fontSize: 10 },
-          splitLine: { lineStyle: { color: '#e5eaf1' } }
+          splitLine: { lineStyle: { color: '#333333' } }
         },
         series: [{
           type: 'line',
@@ -596,7 +624,7 @@ export default {
         xAxis: {
           type: 'category',
           data: this.freqAxis,
-          name: '频率/Hz',
+          name: '频率（赫兹）',
           nameTextStyle: { color: '#475569', fontSize: 10 },
           axisLabel: { color: '#64748b', fontSize: 10, interval: 'auto', showMaxLabel: true, showMinLabel: true }
         },
@@ -605,7 +633,7 @@ export default {
           name: '归一化幅值',
           nameTextStyle: { color: '#475569', fontSize: 10 },
           axisLabel: { color: '#64748b', fontSize: 10 },
-          splitLine: { lineStyle: { color: '#e5eaf1' } }
+          splitLine: { lineStyle: { color: '#333333' } }
         },
         series: [{
           type: 'bar',
@@ -657,7 +685,80 @@ export default {
       this.resizeTimer = setTimeout(() => {
         if (this.timeChart) this.timeChart.resize()
         if (this.freqChart) this.freqChart.resize()
+        if (this.healthTrendChart) this.healthTrendChart.resize()
       }, 100)
+    },
+
+    /**
+     * 渲染健康趋势 — 近 7 天每日平均健康指数
+     */
+    renderHealthTrend() {
+      const el = this.$refs.healthTrendRef
+      if (!el) return
+      if (!this.healthTrendChart) {
+        this.healthTrendChart = echarts.init(el)
+      }
+      // 按天分组计算平均值
+      const dayMap = {}
+      const now = new Date()
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now)
+        d.setDate(d.getDate() - i)
+        const key = `${d.getMonth() + 1}/${d.getDate()}`
+        dayMap[key] = { total: 0, count: 0 }
+      }
+      this.healthTrendData.forEach(item => {
+        const d = new Date(item.time)
+        const key = `${d.getMonth() + 1}/${d.getDate()}`
+        if (dayMap[key]) {
+          dayMap[key].total += Number(item.value)
+          dayMap[key].count++
+        }
+      })
+      const days = Object.keys(dayMap)
+      const values = days.map(k => dayMap[k].count > 0
+        ? Math.round(dayMap[k].total / dayMap[k].count)
+        : null)
+
+      this.healthTrendChart.setOption({
+        backgroundColor: 'transparent',
+        grid: { left: 36, right: 12, top: 8, bottom: 22 },
+        xAxis: {
+          type: 'category',
+          data: days,
+          axisLine: { lineStyle: { color: '#333' } },
+          axisLabel: { color: '#94a3b8', fontSize: 10 },
+          axisTick: { show: false }
+        },
+        yAxis: {
+          type: 'value',
+          min: 0,
+          max: 100,
+          interval: 20,
+          splitLine: { lineStyle: { color: '#333' } },
+          axisLabel: { color: '#94a3b8', fontSize: 10 }
+        },
+        series: [{
+          type: 'line',
+          data: values,
+          smooth: true,
+          connectNulls: true,
+          showSymbol: true,
+          symbol: 'circle',
+          symbolSize: 6,
+          lineStyle: { width: 2, color: '#4ade80' },
+          itemStyle: { color: '#4ade80' },
+          areaStyle: {
+            color: {
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(74,222,128,0.2)' },
+                { offset: 1, color: 'rgba(74,222,128,0)' }
+              ]
+            }
+          }
+        }]
+      }, true)
     },
 
     // -----------------------------------------------------------------------
@@ -694,19 +795,36 @@ export default {
 
       // ---- 诊断核心结果（兼容 Python snake_case 和 JS camelCase） ----
       if (data.diagnosisResult || data.diagnosisName || data.label) {
-        this.diagnosisName = data.diagnosisResult || data.diagnosisName || data.label
+        const rawDiagnosis = data.diagnosisResult || data.diagnosisName || data.label
+        this.diagnosisName = translateDiagnosisLabel(rawDiagnosis)
       }
       if (data.diagnosisDetail || data.diagnosis_detail) {
         this.diagnosisDetail = data.diagnosisDetail || data.diagnosis_detail
       }
       if (data.decision_reason) this.decisionReason = data.decision_reason
       if (data.closedPrediction || data.closed_prediction) {
-        this.closedPrediction = data.closedPrediction || data.closed_prediction
+        const rawPrediction = data.closedPrediction || data.closed_prediction
+        this.closedPrediction = translateDiagnosisLabel(rawPrediction)
       }
       if (data.confidence != null) this.confidence = Math.max(0, Math.min(100, Number(data.confidence)))
-      if (data.healthIndex != null) this.healthIndex = Number(data.healthIndex)
-      if (data.riskLevel) this.riskLevel = data.riskLevel
-      if (data.alarmLevel || data.alarm_level) this.alarmLevel = data.alarmLevel || data.alarm_level
+      if (data.healthIndex != null) {
+        this.healthIndex = Number(data.healthIndex)
+        // 记录健康趋势（带完整时间戳）
+        const now = new Date()
+        this.healthTrendData.push({
+          time: now.toISOString(),
+          value: this.healthIndex
+        })
+        // 保留最近 30 天数据
+        const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+        this.healthTrendData = this.healthTrendData.filter(d => new Date(d.time).getTime() > cutoff)
+        this.$nextTick(() => this.renderHealthTrend())
+      }
+      if (data.riskLevel) this.riskLevel = translateRiskLevel(data.riskLevel)
+      if (data.alarmLevel || data.alarm_level) {
+        const rawAlarm = data.alarmLevel || data.alarm_level
+        this.alarmLevel = translateAlarmLevel(rawAlarm)
+      }
 
       // ---- 数值指标（多字段名兼容） ----
       if (data.latestRms != null) this.latestRms = Number(data.latestRms)
@@ -1194,7 +1312,7 @@ export default {
           '诊断结果', '闭集预测', '置信度(%)', '健康指数',
           '风险等级', '告警等级', '诊断详情', '决策原因',
           '未知比例', '片段一致性', '平均马氏距离', '平均熵值',
-          'RMS', 'Peak',
+          '有效值(RMS)', '峰值(Peak)',
           '采样时间', '创建时间'
         ]
         const keys = [
@@ -1256,10 +1374,11 @@ export default {
 .diagnosis-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 84px);  /* 减去顶栏高度 */
-  padding: 8px 12px;
-  background: linear-gradient(180deg, #07131f 0%, #0a1c2d 100%);  /* 深蓝黑渐变背景 */
-  overflow: hidden;
+  height: calc(100vh - 84px);
+  padding: 8px 14px;
+  background: linear-gradient(180deg, #07131f 0%, #0a1c2d 100%);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* =====================================================================
@@ -1270,8 +1389,8 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 6px 16px;
-  margin-bottom: 8px;
+  padding: 8px 16px;
+  margin-bottom: 10px;
   border-radius: 10px;
   border: 1px solid rgba(87, 209, 255, 0.12);  /* 半透明青色边框 */
   background: rgba(7, 19, 31, 0.92);
@@ -1295,9 +1414,9 @@ export default {
   font-size: 14px;
 }
 .top-status {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 2px 10px;
+  padding: 3px 12px;
   border-radius: 999px;  /* 胶囊形状 */
 }
 /* 状态颜色 */
@@ -1339,72 +1458,333 @@ export default {
 }
 
 /* =====================================================================
-   主体区域 - flex 横向布局
+   三栏主体：左图表 | 中诊断核心 | 右辅助信息
    ===================================================================== */
 .main-area {
   flex: 1;
-  min-height: 0;  /* 允许 flex 子元素收缩，配合 overflow 实现滚动 */
-  display: flex;
-  gap: 12px;
-  margin-bottom: 8px;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(250px, 1.6fr) minmax(360px, 2.4fr) minmax(250px, 1.6fr);
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
-/* =====================================================================
-   图表栏（左侧 35%）
-   ===================================================================== */
-.charts-column {
-  flex: 3.5;
+/* ---- 左栏：图表 ---- */
+.left-column {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
 }
-.chart-card {
+.left-column .chart-card {
   flex: 1;
   min-height: 0;
 }
 
-/* =====================================================================
-   信息栏（右侧 65%）
-   ===================================================================== */
-.info-column {
-  flex: 6.5;
-  min-width: 300px;
-  max-width: 520px;
+/* ---- 中栏：诊断核心 ---- */
+.center-column {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;     /* 内容过多时纵向滚动 */
-  overflow-x: hidden;
-  min-height: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #444444;
+  background: linear-gradient(160deg, rgba(255,87,34,0.04) 0%, rgba(7,19,31,0.9) 100%);
 }
-.info-column > .panel-card {
-  flex-shrink: 0;  /* 卡片不收缩，保持完整内容可见 */
+/* 健康指数 + 诊断结果 同一行 */
+.center-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid #333333;
+}
+.hero-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.diag-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.diag-label {
+  font-size: 32px;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+  white-space: nowrap;
+}
+.diag-label.tone-running { color: #fbbf24; }
+.diag-label.tone-failed  { color: #f87171; }
+.diag-label.tone-done    { color: #4ade80; }
+
+.hero-right .health-bar-wrap {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+.hero-right .health-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s;
+}
+.health-bar.bar-high { background: #4ade80; }
+.health-bar.bar-mid  { background: #fbbf24; }
+.health-bar.bar-low  { background: #f87171; }
+
+.hero-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.diag-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.dt-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.diag-tag.dt-danger  { background: rgba(248,113,113,0.15); color: #f87171; }
+.diag-tag.dt-danger .dt-dot  { background: #f87171; }
+.diag-tag.dt-warning { background: rgba(251,191,36,0.12); color: #fbbf24; }
+.diag-tag.dt-warning .dt-dot { background: #fbbf24; }
+.diag-tag.dt-success { background: rgba(74,222,128,0.12); color: #4ade80; }
+.diag-tag.dt-success .dt-dot { background: #4ade80; }
+.diag-tag.dt-alarm   { background: rgba(248,113,113,0.10); color: #f87171; }
+.diag-tag.dt-alarm .dt-dot   { background: #f87171; }
+.diag-tag.dt-model   { background: rgba(96,165,250,0.10); color: #60a5fa; }
+.diag-tag.dt-model .dt-dot   { background: #60a5fa; }
+
+.health-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+/* SVG 健康指数环形仪表 — 突出显示 */
+.gauge-ring {
+  width: 100px;
+  height: 100px;
+  position: relative;
+  flex-shrink: 0;
+}
+.gauge-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.g-track {
+  fill: none;
+  stroke: rgba(255,255,255,0.08);
+  stroke-width: 7;
+}
+.g-fill {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.5s ease;
+}
+.g-fill.bar-high { stroke: #4ade80; }
+.g-fill.bar-mid  { stroke: #fbbf24; }
+.g-fill.bar-low  { stroke: #f87171; }
+.g-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.g-num {
+  font-size: 28px;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+}
+.gauge-label {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* 置信度条带 — 简洁线形 */
+.confidence-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid #333333;
+}
+.conf-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.conf-label span {
+  font-size: 14px;
+  color: #94a3b8;
+}
+.conf-label strong {
+  font-size: 26px;
+  font-weight: 900;
+  color: #fff;
+}
+.conf-bar-wrap {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+.conf-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+  min-width: 2px;
+}
+.conf-bar.fill-high { background: #4ade80; }
+.conf-bar.fill-mid  { background: #fbbf24; }
+.conf-bar.fill-low  { background: #f87171; }
+
+/* 健康趋势卡片 */
+.health-trend-card {
+  border: 1px solid #333333;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.01);
+  overflow: hidden;
+}
+.trend-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #333333;
+}
+.trend-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+.trend-sub {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.trend-chart {
+  width: 100%;
+  height: 130px;
+  min-height: 100px;
+}
+
+.center-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.cm-cell {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.cm-label {
+  font-size: 12px;
+  color: #94a3b8;
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+.cm-val {
+  font-size: 17px;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.cm-val-sm { font-size: 14px; }
+.cm-unit {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-left: 4px;
+}
+.cm-val.val-danger { color: #f87171; }
+.cm-val.val-warn   { color: #fbbf24; }
+.cm-val.val-ok     { color: #4ade80; }
+
+/* ---- 右栏：辅助面板 ---- */
+.right-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 无数据占位 */
+.empty-info-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  color: #64748b;
+  font-size: 12px;
+  border: 1px dashed rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.01);
+  flex: 1;
+}
+.empty-info-placeholder i {
+  font-size: 20px;
+  opacity: 0.5;
 }
 
 /* =====================================================================
    通用面板卡片 - 统一的深色半透明风格
    ===================================================================== */
 .panel-card {
-  border-radius: 10px;
-  border: 1px solid rgba(87, 209, 255, 0.12);
+  border-radius: 8px;
+  border: 1px solid #444444;
   background: rgba(7, 19, 31, 0.92);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 .panel-card ::v-deep .el-card__header {
   padding: 6px 12px;
-  border-bottom-color: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid #333333;
   flex-shrink: 0;
 }
 .panel-card ::v-deep .el-card__body {
   padding: 8px 12px;
   flex: 1;
-  min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .card-header {
   display: flex;
@@ -1414,11 +1794,11 @@ export default {
 .card-title {
   color: #f4fbff;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 16px;
 }
 .card-unit {
-  color: #6b8599;
-  font-size: 11px;
+  color: #94a3b8;
+  font-size: 13px;
 }
 .card-badge {
   color: #8adfff;
@@ -1435,11 +1815,11 @@ export default {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 4px 8px;
+  padding: 6px 10px;
 }
 .chart-box {
   flex: 1;
-  min-height: 120px;
+  min-height: 140px;
   width: 100%;
 }
 .empty-overlay {
@@ -1476,9 +1856,10 @@ export default {
 .result-card ::v-deep .el-card__body {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 20px 22px 18px 22px;
+  gap: 8px;
+  padding: 10px 12px 8px 12px;
   overflow: visible;
+  flex: 1;
 }
 
 /* ---- 英雄区域：环形置信度 + 诊断标签 ---- */
@@ -1490,11 +1871,10 @@ export default {
 
 /* ---- SVG 环形置信度仪表盘 ---- */
 .conf-ring {
-  width: 100px;
-  height: 100px;
+  width: 64px;
+  height: 64px;
   flex-shrink: 0;
   position: relative;
-  filter: drop-shadow(0 0 8px rgba(87, 209, 255, 0.25));  /* 发光效果 */
 }
 .conf-ring svg {
   width: 100%;
@@ -1505,20 +1885,18 @@ export default {
 .ring-track {
   fill: none;
   stroke: rgba(255,255,255,0.06);
-  stroke-width: 8;
+  stroke-width: 7;
 }
-/* 填充弧线：颜色由 confidenceRingClass 计算属性决定 */
 .ring-bar {
   fill: none;
-  stroke-width: 8;
+  stroke-width: 7;
   stroke-linecap: round;
   transition: stroke-dasharray 0.5s ease, stroke 0.4s ease;
-  filter: drop-shadow(0 0 4px currentColor);
 }
 /* 置信度 >= 80% 绿色，>= 50% 黄色，< 50% 红色 */
-.ring-bar.fill-high { stroke: #67c23a; }
-.ring-bar.fill-mid  { stroke: #e6a23c; }
-.ring-bar.fill-low  { stroke: #f56c6c; }
+.ring-bar.fill-high { stroke: #4ade80; }
+.ring-bar.fill-mid  { stroke: #fbbf24; }
+.ring-bar.fill-low  { stroke: #f87171; }
 /* 环内文字：居中显示置信度百分比 */
 .ring-inner {
   position: absolute;
@@ -1528,8 +1906,8 @@ export default {
   justify-content: center;
 }
 .ring-num {
-  color: #f4fbff;
-  font-size: 22px;
+  color: #fff;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -1616,28 +1994,30 @@ export default {
    关键指标卡片 - 2列网格布局
    ===================================================================== */
 .metrics-card ::v-deep .el-card__body {
-  padding: 6px 12px;
+  padding: 4px 6px;
 }
 .metrics-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;  /* 两列等宽 */
+  grid-template-columns: 1fr 1fr;
   gap: 2px;
 }
 .metric-cell {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 5px 8px;
-  border-radius: 4px;
+  padding: 3px 6px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(87, 209, 255, 0.06);
 }
 .metric-name {
-  color: #6b8599;
-  font-size: 11px;
+  color: #94a3b8;
+  font-size: 10px;
+  flex-shrink: 0;
+  margin-right: 4px;
 }
 .metric-val {
-  color: #d9e8f3;
+  color: #e2e8f0;
   font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;  /* 等宽数字，避免数值变化时布局抖动 */
@@ -1647,41 +2027,37 @@ export default {
    决策原因卡片
    ===================================================================== */
 .reason-card ::v-deep .el-card__body {
-  padding: 8px 12px;
+  padding: 8px 14px;
 }
 .reason-text {
-  color: #b0c8da;
-  font-size: 12px;
+  color: #e2e8f0;
+  font-size: 14px;
   line-height: 1.6;
   word-break: break-word;
 }
 
 /* =====================================================================
-   证据链卡片 - 可滚动列表
+   证据链卡片 — 自动扩展显示全部
    ===================================================================== */
-.evidence-card {
-  max-height: 220px;
-}
 .evidence-card ::v-deep .el-card__body {
-  padding: 4px 12px;
+  padding: 6px 12px;
   display: flex;
   flex-direction: column;
 }
 .evidence-scroll {
-  flex: 1;
-  overflow-y: auto;  /* 证据条数过多时可滚动 */
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .evidence-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding: 4px 6px;
+  padding: 7px 10px;
   border-radius: 4px;
+  border: 1px solid #333333;
   background: rgba(255, 255, 255, 0.02);
-  font-size: 12px;
+  font-size: 13px;
 }
 /* 证据类型圆点指示器 */
 .ev-dot {
@@ -1690,20 +2066,28 @@ export default {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.ev-dot.dot-success { background: #67c23a; }
-.ev-dot.dot-warning { background: #e6a23c; }
-.ev-dot.dot-info    { background: #57d1ff; }
-.ev-dot.dot-danger  { background: #f56c6c; }
+.ev-dot.dot-success { background: #4ade80; }
+.ev-dot.dot-warning { background: #fbbf24; }
+.ev-dot.dot-info    { background: #60a5fa; }
+.ev-dot.dot-danger  { background: #f87171; }
+.ev-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
 .ev-title {
-  color: #c0d4e3;
+  color: #e2e8f0;
   font-weight: 600;
+  font-size: 13px;
   white-space: nowrap;
-  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ev-desc {
-  color: #7a94a8;
-  margin-left: auto;  /* 推至右侧 */
-  text-align: right;
+  color: #94a3b8;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1713,7 +2097,7 @@ export default {
    各类别概率卡片
    ===================================================================== */
 .prob-card ::v-deep .el-card__body {
-  padding: 6px 12px;
+  padding: 8px 14px;
 }
 .prob-list {
   display: flex;
@@ -1724,12 +2108,13 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 3px 0;
 }
 /* 类别名称 - 固定宽度，溢出省略 */
 .prob-class {
-  color: #c0d4e3;
-  font-size: 11px;
-  width: 80px;
+  color: #e2e8f0;
+  font-size: 13px;
+  width: 100px;
   flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1738,7 +2123,7 @@ export default {
 /* 概率条轨道 */
 .prob-track {
   flex: 1;
-  height: 14px;
+  height: 16px;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
@@ -1775,7 +2160,6 @@ export default {
    ===================================================================== */
 .history-card {
   flex-shrink: 0;
-  max-height: 200px;
 }
 .history-card ::v-deep .el-card__body {
   padding: 0;
@@ -1908,71 +2292,72 @@ export default {
   .info-column { max-width: none; }
 }
 
-/* 浅色工业生产主题覆盖 */
+/* 深色主题统一覆盖 — 确保所有元素在暗色背景下可视 */
 .diagnosis-page {
-  background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%);
-  color: #1f2937;
+  background: #121212;
+  color: #e2e8f0;
 }
 .top-bar,
 .panel-card {
-  background: #ffffff;
-  border-color: #d7dee8;
-  box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
+  background: #1a1a1a;
+  border: 1px solid #444444;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.3);
 }
 .top-eyebrow,
 .card-badge,
 .upload-dropzone .el-upload__text em {
-  color: #2563eb;
+  color: #ffb300;
 }
 .top-divider {
-  color: #cbd5e1;
+  color: #555555;
 }
 .top-time,
 .card-unit,
+.empty-overlay,
+.prob-class {
+  color: #94a3b8;
+}
+.top-file,
+.card-title,
+.ring-num,
+.prob-pct {
+  color: #ffffff;
+}
 .metric-name,
 .ev-desc,
 .download-dialog-body ::v-deep .el-alert__title,
 .upload-dialog-body ::v-deep .el-alert__title,
 .upload-dropzone .el-upload__tip {
-  color: #64748b;
+  color: #94a3b8;
 }
-.top-file,
-.card-title,
 .metric-val,
-.ring-num,
 .hero-label,
-.health-header strong,
-.prob-pct,
-.compact-table ::v-deep .el-table,
-.compact-table ::v-deep .el-table th,
-.compact-table ::v-deep .el-table tr,
-.compact-table ::v-deep .el-table td {
-  color: #1f2937;
+.health-header strong {
+  color: #ffffff;
+}
+.health-header span {
+  color: #94a3b8;
 }
 .panel-card ::v-deep .el-card__header,
 .health-section {
-  border-bottom-color: #e5eaf1;
-  border-top-color: #e5eaf1;
+  border-bottom-color: #333333;
+  border-top-color: #333333;
 }
 .card-badge,
 .hero-tag.tag-alarm {
-  background: #eef6ff;
-}
-.empty-overlay,
-.health-header span,
-.prob-class {
-  color: #64748b;
+  background: #262626;
+  color: #ffffff;
 }
 .result-card {
-  background: linear-gradient(160deg, #ffffff 0%, #f4f8fc 100%) !important;
-  border-color: #b8c3d4 !important;
-  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.10) !important;
+  background: #1a1a1a !important;
+  border-color: #333333 !important;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.4) !important;
 }
 .conf-ring {
   filter: none;
 }
 .ring-track {
-  stroke: #e5eaf1;
+  stroke: #333333;
 }
 .hero-label {
   text-shadow: none;
@@ -1984,47 +2369,52 @@ export default {
 }
 .health-bar-wrap,
 .prob-track {
-  background: #e5eaf1;
+  background: #2a2a2a;
 }
 .metric-cell,
 .evidence-row {
-  background: #f8fafc;
-  border-color: #e5eaf1;
+  background: #1e1e1e !important;
+  border-color: #333333 !important;
 }
 .reason-text,
 .ev-title {
-  color: #344054;
+  color: #e2e8f0;
+}
+.compact-table ::v-deep .el-table {
+  background: #1a1a1a !important;
 }
 .compact-table ::v-deep .el-table th {
-  color: #475569;
-  background: #eef3f8 !important;
+  color: #94a3b8;
+  background: #171717 !important;
 }
+.compact-table ::v-deep .el-table tr,
 .compact-table ::v-deep .el-table td {
-  background: #ffffff !important;
+  color: #e2e8f0;
+  background: #1a1a1a !important;
 }
 .compact-table ::v-deep .el-table::before {
-  background-color: #d7dee8;
+  background-color: #333333;
 }
 .upload-dialog-body ::v-deep .el-alert--info,
 .download-dialog-body ::v-deep .el-alert--info {
-  background-color: #eef6ff;
-  border-color: #bfd7f2;
+  background-color: #1a2a3a;
+  border-color: #2a3a4a;
 }
 .upload-dialog-body ::v-deep .el-alert__icon,
 .download-dialog-body ::v-deep .el-alert__icon,
 .upload-dropzone .el-icon-upload {
-  color: #2563eb;
+  color: #60a5fa;
 }
 .upload-dropzone {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+  background: #1a1a1a;
+  border-color: #444444;
 }
 .upload-dropzone:hover {
-  background: #eef6ff;
-  border-color: #2563eb;
+  background: #1f1f1f;
+  border-color: #ffb300;
 }
 .upload-dropzone .el-upload__text {
-  color: #344054;
+  color: #e2e8f0;
 }
 </style>
 
@@ -2207,100 +2597,5 @@ export default {
   color: #6b8599;
 }
 
-/* 浅色工业生产主题：诊断页弹窗与浮层 */
-.dark-dialog {
-  background: #ffffff;
-  border-color: #d7dee8;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
-}
-.dark-dialog .el-dialog__header,
-.dark-dialog .el-dialog__footer {
-  border-color: #e5eaf1;
-}
-.dark-dialog .el-dialog__title,
-.dark-dialog .el-dialog__body,
-.dark-dialog .el-date-editor .el-range-input {
-  color: #1f2937;
-}
-.dark-dialog .el-dialog__headerbtn .el-dialog__close,
-.dark-dialog .el-range-separator,
-.dark-dialog .el-date-editor .el-range__icon,
-.dark-dialog .el-date-editor .el-range__close-icon,
-.dark-dialog .el-input__prefix,
-.dark-dialog .el-input__suffix {
-  color: #64748b;
-}
-.dark-dialog .el-dialog__headerbtn .el-dialog__close:hover {
-  color: #2563eb;
-}
-.dark-dialog .el-input__inner {
-  background: #ffffff;
-  border-color: #cbd5e1;
-  color: #1f2937;
-}
-.dark-dialog .el-input__inner::placeholder {
-  color: #94a3b8;
-}
-.dark-dialog .el-input__inner:focus,
-.dark-dialog .el-input__inner:hover {
-  border-color: #2563eb;
-}
-.dark-date-picker,
-.dark-date-picker .el-picker-panel__body-wrapper,
-.dark-date-picker .el-picker-panel__content,
-.dark-date-picker .el-picker-panel__footer,
-.dark-date-picker .el-time-panel,
-.dark-select-dropdown.el-select-dropdown {
-  background: #ffffff;
-  color: #1f2937;
-  border-color: #d7dee8;
-  box-shadow: 0 8px 20px rgba(31, 41, 55, 0.12);
-}
-.dark-date-picker .el-date-range-picker__header,
-.dark-date-picker .el-date-range-picker__header button,
-.dark-date-picker .el-time-spinner__item,
-.dark-select-dropdown .el-select-dropdown__item {
-  color: #344054;
-}
-.dark-date-picker .el-date-table th,
-.dark-date-picker .el-date-table td.next-month,
-.dark-date-picker .el-date-table td.prev-month,
-.dark-date-picker .el-date-table td.disabled div,
-.dark-select-dropdown .el-select-dropdown__empty {
-  color: #94a3b8;
-}
-.dark-date-picker .el-date-table th,
-.dark-date-picker .el-picker-panel__footer,
-.dark-date-picker .el-time-panel {
-  border-color: #e5eaf1;
-}
-.dark-date-picker .el-date-table td {
-  color: #1f2937;
-}
-.dark-date-picker .el-date-table td.available:hover,
-.dark-date-picker .el-date-table td.today span,
-.dark-date-picker .el-date-range-picker__header button:hover,
-.dark-select-dropdown .el-select-dropdown__item.selected {
-  color: #2563eb;
-}
-.dark-date-picker .el-date-table td.current:not(.disabled) span,
-.dark-date-picker .el-date-table td.start-date span,
-.dark-date-picker .el-date-table td.end-date span {
-  background: #2563eb;
-  color: #ffffff;
-}
-.dark-date-picker .el-date-table td.in-range div,
-.dark-select-dropdown .el-select-dropdown__item.hover,
-.dark-select-dropdown .el-select-dropdown__item:hover {
-  background: #eef6ff;
-}
-.dark-date-picker .el-picker-panel__footer .el-button--default {
-  color: #344054;
-  background: #ffffff;
-  border-color: #cbd5e1;
-}
-.dark-date-picker .el-picker-panel__footer .el-button--default:hover {
-  color: #2563eb;
-  border-color: #2563eb;
-}
+/* 深色主题：诊断页弹窗与浮层（append-to-body 元素，需全局样式覆盖） */
 </style>
