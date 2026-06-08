@@ -244,6 +244,7 @@
 <script>
 import { getMonitoringOverview } from '@/api/system/monitoring'
 import SingleTrendChart from './components/SingleTrendChart'
+import sensorWebSocket from '@/utils/sensor-websocket'
 
 export default {
   name: 'MonitoringData',
@@ -251,7 +252,7 @@ export default {
   data() {
     return {
       loading: false,
-      timer: null,
+      unsubscribeWs: null,
       overview: {},
       deviceKeyword: '',
       vibrationChartData: { xData: [], yData: [] },
@@ -308,53 +309,144 @@ export default {
     }
   },
   created() {
+    // Initial load via HTTP, then switch to WebSocket push for real-time updates
     this.loadOverview()
-    this.timer = setInterval(() => {
-      this.loadOverview()
-    }, 5000)
+    this.connectWebSocket()
   },
   beforeDestroy() {
-    if (this.timer) {
-      clearInterval(this.timer)
-      this.timer = null
+    if (this.unsubscribeWs) {
+      this.unsubscribeWs()
+      this.unsubscribeWs = null
     }
+    sensorWebSocket.close()
   },
   methods: {
+    // ---- WebSocket (primary data path) ----
+
+    connectWebSocket() {
+      this.unsubscribeWs = sensorWebSocket.subscribe((event, payload) => {
+        if (event === 'open') {
+          // Subscribe to overview push channel; server sends full snapshot immediately
+          sensorWebSocket.send({ type: 'subscribe', channel: 'overview' })
+          return
+        }
+        if (event === 'error') {
+          console.warn('Sensor WebSocket 连接异常，将回退至HTTP轮询')
+          return
+        }
+        if (event !== 'message' || !payload) return
+        this.handleWsMessage(payload)
+      })
+      sensorWebSocket.connect('/ws/sensor')
+    },
+
+    handleWsMessage(msg) {
+      if (msg.type !== 'overview') return
+
+      if (msg.event === 'full') {
+        // Full snapshot pushed by server (on subscribe)
+        const overviewData = typeof msg.message === 'string'
+          ? JSON.parse(msg.message)
+          : msg.message
+        this.applyOverview(overviewData)
+      } else if (msg.event === 'new_vibration') {
+        this.appendVibrationPoint(msg.deviceCode, msg.rms, msg.sampleTime)
+      } else if (msg.event === 'new_temperature') {
+        this.appendTemperaturePoint(msg.deviceCode, parseFloat(msg.message), msg.sampleTime)
+      }
+    },
+
+    appendVibrationPoint(deviceCode, value, sampleTime) {
+      if (value == null) return
+      const vt = this.overview.vibrationTrend || { xData: [], yData: [] }
+      vt.xData = vt.xData || []
+      vt.yData = vt.yData || []
+      vt.xData.unshift(String(sampleTime || ''))
+      vt.yData.unshift(value)
+      if (vt.xData.length > 100) { vt.xData.pop(); vt.yData.pop() }
+      this.overview.vibrationTrend = { ...vt }
+      this.vibrationChartData = { ...vt }
+      this.overview.latestVibration = value
+      this.overview.updateTime = sampleTime
+      this.updateDevicePoint(deviceCode, 'vibrationValue', value)
+      this.checkAlerts()
+    },
+
+    appendTemperaturePoint(deviceCode, value, sampleTime) {
+      if (value == null) return
+      const tt = this.overview.temperatureTrend || { xData: [], yData: [] }
+      tt.xData = tt.xData || []
+      tt.yData = tt.yData || []
+      tt.xData.unshift(String(sampleTime || ''))
+      tt.yData.unshift(value)
+      if (tt.xData.length > 20) { tt.xData.pop(); tt.yData.pop() }
+      this.overview.temperatureTrend = { ...tt }
+      this.temperatureChartData = { ...tt }
+      this.overview.latestTemperature = value
+      this.overview.updateTime = sampleTime
+      this.updateDevicePoint(deviceCode, 'temperatureValue', value)
+      this.checkAlerts()
+    },
+
+    updateDevicePoint(deviceCode, field, value) {
+      const points = this.overview.devicePoints || []
+      const existing = points.find(p => p.deviceCode === deviceCode)
+      if (existing) {
+        existing[field] = value
+      } else {
+        const entry = { deviceCode: deviceCode }
+        entry[field] = value
+        points.push(entry)
+      }
+      this.overview.devicePoints = [...points]
+    },
+
+    // ---- HTTP fallback (kept for manual refresh / WS offline) ----
+
     loadOverview() {
       this.loading = true
       getMonitoringOverview().then(response => {
-        this.overview = response.data || {}
-        const vibrationTrend = this.overview.vibrationTrend || { xData: [], yData: [] }
-        const temperatureTrend = this.overview.temperatureTrend || { xData: [], yData: [] }
-        const healthTrend = this.overview.healthTrend || { xData: [], yData: [] }
-        this.vibrationChartData = vibrationTrend
-        this.temperatureChartData = temperatureTrend
-        this.healthTrendChartData = healthTrend
-        const points = this.overview.devicePoints || []
-        this.vibrationTable = (vibrationTrend.xData || []).map((item, index) => ({
-          deviceCode: this.selectedDeviceCode || (points[index] ? points[index].deviceCode : 'N/A'),
-          vibrationValue: vibrationTrend.yData[index],
-          sampleTime: item
-        }))
-        this.temperatureTable = (temperatureTrend.xData || []).map((item, index) => ({
-          deviceCode: this.selectedDeviceCode || (points[index] ? points[index].deviceCode : 'N/A'),
-          temperatureValue: temperatureTrend.yData[index],
-          collectionTime: item
-        }))
-        this.diagnosisEvidence = this.overview.diagnosisEvidence || [
+        this.applyOverview(response.data || {})
+      }).finally(() => {
+        this.loading = false
+      })
+    },
+
+    applyOverview(data) {
+      if (!data) return
+      this.overview = data
+      const vibrationTrend = data.vibrationTrend || { xData: [], yData: [] }
+      const temperatureTrend = data.temperatureTrend || { xData: [], yData: [] }
+      const healthTrend = data.healthTrend || { xData: [], yData: [] }
+      this.vibrationChartData = vibrationTrend
+      this.temperatureChartData = temperatureTrend
+      this.healthTrendChartData = healthTrend
+      const points = data.devicePoints || []
+      this.vibrationTable = (vibrationTrend.xData || []).map((item, index) => ({
+        deviceCode: this.selectedDeviceCode || (points[index] ? points[index].deviceCode : 'N/A'),
+        vibrationValue: vibrationTrend.yData[index],
+        sampleTime: item
+      }))
+      this.temperatureTable = (temperatureTrend.xData || []).map((item, index) => ({
+        deviceCode: this.selectedDeviceCode || (points[index] ? points[index].deviceCode : 'N/A'),
+        temperatureValue: temperatureTrend.yData[index],
+        collectionTime: item
+      }))
+      this.diagnosisEvidence = (data.diagnosisEvidence && data.diagnosisEvidence.length)
+        ? data.diagnosisEvidence
+        : [
           { title: '1X/2X 倍频异常', desc: '存在明显倍频成分，提示转子不平衡或轴系偏心。', type: 'danger', level: '高' },
           { title: '频域升高', desc: '中高频能量增强，可能与轴承外圈接触损伤相关。', type: 'warning', level: '中' },
           { title: '温升趋势', desc: '监测周期内温度稳步抬升，需关注润滑状态。', type: 'warning', level: '中' }
         ]
-        this.historyTable = this.overview.analysisRecords || [
+      this.historyTable = (data.analysisRecords && data.analysisRecords.length)
+        ? data.analysisRecords
+        : [
           { sampleTime: '2025-05-20 10:24:36', modelVersion: 'V3.2.1', diagnosisResult: '轴承外圈故障', confidence: 92, healthIndex: 58, riskLevel: '高', operator: '运维工程师', status: '完成' },
           { sampleTime: '2025-05-20 09:24:12', modelVersion: 'V3.2.1', diagnosisResult: '轴承外圈故障', confidence: 90, healthIndex: 61, riskLevel: '高', operator: '运维工程师', status: '完成' },
           { sampleTime: '2025-05-20 08:24:05', modelVersion: 'V3.2.0', diagnosisResult: '不平衡', confidence: 45, healthIndex: 65, riskLevel: '中', operator: '运维工程师', status: '完成' }
         ]
-        this.checkAlerts()
-      }).finally(() => {
-        this.loading = false
-      })
+      this.checkAlerts()
     },
     handleDeviceClick(row) {
       this.selectedDeviceCode = row.deviceCode

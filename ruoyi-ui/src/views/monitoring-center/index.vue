@@ -1,130 +1,174 @@
 <template>
   <div class="app-container monitoring-center-page">
-    <el-row :gutter="10">
-      <el-col v-for="item in channelList" :key="item.channelId" :span="6" class="mb10">
-        <el-card
-          shadow="hover"
-          class="channel-card"
-          :class="[statusClass(item.status), { active: activeChannelId === item.channelId }]"
-          @click.native="openChannelDetail(item.channelId)"
-        >
-          <div class="channel-head">
-            <div class="channel-title">{{ item.name }}</div>
-            <el-tag size="mini" :type="statusTagType(item.status)">{{ statusText(item.status) }}</el-tag>
-          </div>
-          <div class="metric-row">
-            <div class="metric-block">
-              <div class="metric-label">监测值</div>
-              <div class="metric-value">{{ formatNumber(item.value) }}</div>
-              <div class="metric-unit">{{ item.unit }}</div>
-            </div>
-            <div class="metric-block">
-              <div class="metric-label">健康度</div>
-              <div class="metric-value">{{ item.latest && item.latest.rms != null ? formatNumber(item.latest.rms) : '--' }}</div>
-              <div class="metric-unit">RMS</div>
-            </div>
-          </div>
-          <div class="channel-footer">
-            <span class="foot-text">最新状态</span>
-            <span class="foot-time">{{ item.status === 'danger' ? '异常' : item.status === 'warning' ? '预警' : '正常' }}</span>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-drawer
-      :visible.sync="detailVisible"
-      direction="btt"
-      size="100%"
-      custom-class="monitoring-drawer"
-      :with-header="false"
-      append-to-body
-      @opened="handleDrawerOpened"
-      @closed="handleDrawerClosed"
-    >
-      <div class="drawer-shell">
-        <div class="drawer-topbar">
-          <div>
-            <div class="drawer-title">选中通道详情 - CH{{ activeChannelId }}</div>
-            <div class="drawer-subtitle">WebSocket 实时监测 · 深灰工业风 · 最近 20 条历史记录</div>
-          </div>
-          <div class="drawer-actions">
-            <el-tag :type="statusTagType(activeChannel.status)" size="mini">{{ statusText(activeChannel.status) }}</el-tag>
-            <el-button size="mini" icon="el-icon-close" @click="detailVisible = false">关闭</el-button>
-          </div>
+    <section class="page-shell">
+      <header class="page-toolbar">
+        <div>
+          <div class="page-title">实时监测中心</div>
+          <div class="page-subtitle">8 通道实时追踪 · 推理服务数据流 · 异常快速定位</div>
         </div>
+        <div class="toolbar-actions">
+          <el-tag size="mini" type="success">Inference 5001</el-tag>
+          <el-button size="mini" icon="el-icon-refresh" @click="fetchLatestInference">刷新</el-button>
+          <el-button size="mini" type="primary" icon="el-icon-data-analysis" @click="$router.push('/monitoring-center/vibration')">历史分析</el-button>
+        </div>
+      </header>
 
-        <div class="drawer-content">
-          <el-row :gutter="12" class="detail-row">
-            <el-col :xs="24" :md="8">
-              <div class="metric-panel">
-                <div class="main-metric">
-                  <div class="metric-label">振动速度有效值 RMS</div>
-                  <div class="metric-value big">{{ formatNumber(activeChannel.metrics.rms) }}</div>
-                  <div class="metric-unit">mm/s</div>
-                </div>
+      <section class="workflow-strip">
+        <div class="workflow-step active"><span>1</span><strong>选择通道</strong></div>
+        <div class="workflow-step active"><span>2</span><strong>实时监测</strong></div>
+        <div class="workflow-step"><span>3</span><strong>异常复核</strong></div>
+      </section>
 
-                <div class="sub-metrics">
-                  <div class="sub-item">
-                    <span>峰值</span>
-                    <strong>{{ formatNumber(activeChannel.metrics.peak) }}</strong>
-                  </div>
-                  <div class="sub-item">
-                    <span>位移</span>
-                    <strong>{{ formatNumber(activeChannel.metrics.displacement) }}</strong>
-                  </div>
-                  <div class="sub-item">
-                    <span>实时温度</span>
-                    <strong>{{ formatNumber(activeChannel.metrics.temp) }}</strong>
-                  </div>
-                </div>
+      <main class="monitor-layout">
+        <section class="zone control-zone">
+          <div class="zone-header">
+            <span>通道选择</span>
+            <el-tag size="mini">8 CH</el-tag>
+          </div>
 
-                <div class="health-box">
-                  <div>
-                    <div class="health-label">健康度</div>
-                    <div class="health-desc">{{ activeChannel.health }}%</div>
-                  </div>
-                  <el-progress
-                    type="circle"
-                    :percentage="activeChannel.health"
-                    :width="92"
-                    :color="healthColor(activeChannel.health)"
-                  />
-                </div>
+          <div class="channel-grid">
+            <button
+              v-for="item in channelList"
+              :key="item.channelId"
+              class="channel-tile"
+              :class="[statusClass(item.status), { active: activeChannelId === item.channelId }]"
+              @click="activeChannelId = item.channelId"
+              @dblclick="openChannelDetail(item.channelId)"
+            >
+              <span class="tile-title">{{ item.name }}</span>
+              <el-tag size="mini" :type="statusTagType(item.status)">{{ statusText(item.status) }}</el-tag>
+              <strong>{{ formatNumber(item.value) }}</strong>
+              <small>{{ item.unit }}</small>
+            </button>
+          </div>
+        </section>
+
+        <section class="zone visualization-zone">
+          <div class="zone-header">
+            <span>实时趋势 · CH{{ activeChannelId }}</span>
+            <div class="zone-actions">
+              <el-tag size="mini" :type="statusTagType(activeChannel.status)">{{ statusText(activeChannel.status) }}</el-tag>
+              <el-button size="mini" type="text" @click="openChannelDetail(activeChannelId)">详情</el-button>
+            </div>
+          </div>
+
+          <div class="kpi-row">
+            <div class="kpi-item">
+              <span>RMS</span>
+              <strong>{{ formatNumber(activeChannel.metrics.rms) }}</strong>
+              <small>mm/s</small>
+            </div>
+            <div class="kpi-item">
+              <span>峰值</span>
+              <strong>{{ formatNumber(activeChannel.metrics.peak) }}</strong>
+              <small>Peak</small>
+            </div>
+            <div class="kpi-item">
+              <span>位移</span>
+              <strong>{{ formatNumber(activeChannel.metrics.displacement) }}</strong>
+              <small>mm</small>
+            </div>
+            <div class="kpi-item">
+              <span>温度</span>
+              <strong>{{ formatNumber(activeChannel.metrics.temp) }}</strong>
+              <small>℃</small>
+            </div>
+          </div>
+
+          <div ref="overviewChartRef" class="primary-chart"></div>
+        </section>
+
+        <aside class="zone log-zone">
+          <div class="zone-header">
+            <span>运行日志</span>
+            <el-button size="mini" type="text" @click="goHistory">更多</el-button>
+          </div>
+
+          <el-table :data="activeLogs" height="100%" size="mini" stripe>
+            <el-table-column prop="time" label="时间" min-width="130" />
+            <el-table-column prop="value" label="RMS" width="80" />
+            <el-table-column prop="alarmLevel" label="级别" width="74">
+              <template slot-scope="scope">
+                <el-tag :type="alarmTagType(scope.row.alarmLevel)" size="mini">{{ scope.row.alarmLevel }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </aside>
+      </main>
+
+      <el-drawer
+        :visible.sync="detailVisible"
+        direction="btt"
+        size="100%"
+        custom-class="monitoring-drawer"
+        :with-header="false"
+        append-to-body
+        @opened="handleDrawerOpened"
+        @closed="handleDrawerClosed"
+      >
+        <div class="drawer-shell">
+          <div class="drawer-topbar">
+            <div>
+              <div class="drawer-title">CH{{ activeChannelId }} 通道详情</div>
+              <div class="drawer-subtitle">实时曲线 · 关键指标 · 最近 20 条日志</div>
+            </div>
+            <div class="drawer-actions">
+              <el-tag :type="statusTagType(activeChannel.status)" size="mini">{{ statusText(activeChannel.status) }}</el-tag>
+              <el-button size="mini" icon="el-icon-close" @click="detailVisible = false">关闭</el-button>
+            </div>
+          </div>
+
+          <div class="drawer-grid">
+            <section class="zone metric-zone">
+              <div class="main-metric">
+                <div class="metric-label">振动速度有效值 RMS</div>
+                <div class="metric-value big">{{ formatNumber(activeChannel.metrics.rms) }}</div>
+                <div class="metric-unit">mm/s</div>
               </div>
-            </el-col>
+              <div class="sub-metrics">
+                <div class="sub-item"><span>峰值</span><strong>{{ formatNumber(activeChannel.metrics.peak) }}</strong></div>
+                <div class="sub-item"><span>位移</span><strong>{{ formatNumber(activeChannel.metrics.displacement) }}</strong></div>
+                <div class="sub-item"><span>实时温度</span><strong>{{ formatNumber(activeChannel.metrics.temp) }}</strong></div>
+              </div>
+              <div class="health-box">
+                <div>
+                  <div class="health-label">健康度</div>
+                  <div class="health-desc">{{ activeChannel.health }}%</div>
+                </div>
+                <el-progress type="circle" :percentage="activeChannel.health" :width="92" :color="healthColor(activeChannel.health)" />
+              </div>
+            </section>
 
-            <el-col :xs="24" :md="16">
-              <div ref="waveChartRef" class="wave-chart"></div>
-            </el-col>
-          </el-row>
+            <section class="zone drawer-chart-zone">
+              <div class="zone-header"><span>实时曲线</span></div>
+              <div ref="waveChartRef" class="primary-chart"></div>
+            </section>
 
-          <el-card class="log-card" shadow="never">
-            <div slot="header" class="card-header">
-              <span>最近 20 条历史记录</span>
-              <el-button size="mini" type="primary" plain @click="goHistory">查看更多</el-button>
-            </div>
-
-            <el-table :data="activeLogs" height="320" stripe>
-              <el-table-column prop="time" label="采集时间" min-width="180" />
-              <el-table-column prop="value" label="测量值" min-width="120" />
-              <el-table-column prop="alarmLevel" label="告警级别" min-width="100">
-                <template slot-scope="scope">
-                  <el-tag :type="alarmTagType(scope.row.alarmLevel)" size="mini">{{ scope.row.alarmLevel }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="statusDesc" label="状态描述" min-width="160" />
-            </el-table>
-          </el-card>
+            <section class="zone drawer-log-zone">
+              <div class="zone-header">
+                <span>最近 20 条历史记录</span>
+                <el-button size="mini" type="primary" plain @click="goHistory">查看更多</el-button>
+              </div>
+              <el-table :data="activeLogs" height="100%" size="mini" stripe>
+                <el-table-column prop="time" label="采集时间" min-width="150" />
+                <el-table-column prop="value" label="测量值" width="90" />
+                <el-table-column prop="alarmLevel" label="级别" width="80">
+                  <template slot-scope="scope">
+                    <el-tag :type="alarmTagType(scope.row.alarmLevel)" size="mini">{{ scope.row.alarmLevel }}</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </section>
+          </div>
         </div>
-      </div>
-    </el-drawer>
+      </el-drawer>
+    </section>
   </div>
 </template>
 
 <script>
 import * as echarts from 'echarts'
-import sensorWebSocket from '@/utils/sensor-websocket'
+import inferenceWebSocket from '@/utils/inference-websocket'
 
 export default {
   name: 'MonitoringCenter',
@@ -133,6 +177,8 @@ export default {
       activeChannelId: 1,
       detailVisible: false,
       unsubscribeWs: null,
+      inferencePollTimer: null,
+      overviewChart: null,
       waveChart: null,
       channelDataMap: {
         1: this.createChannel('CH1', 'mm/s'),
@@ -192,7 +238,12 @@ export default {
       this.unsubscribeWs()
       this.unsubscribeWs = null
     }
-    sensorWebSocket.close()
+    this.stopInferencePolling()
+    inferenceWebSocket.close()
+    if (this.overviewChart) {
+      this.overviewChart.dispose()
+      this.overviewChart = null
+    }
     if (this.waveChart) {
       this.waveChart.dispose()
       this.waveChart = null
@@ -217,18 +268,44 @@ export default {
       this.detailVisible = true
     },
     connectWebSocket() {
-      this.unsubscribeWs = sensorWebSocket.subscribe((event, payload) => {
-        if (event === 'open') return
+      this.fetchLatestInference()
+      this.startInferencePolling()
+      this.unsubscribeWs = inferenceWebSocket.subscribe((event, payload) => {
+        if (event === 'open') {
+          this.fetchLatestInference()
+          return
+        }
         if (event === 'error') {
-          this.$modal.msgWarning('WebSocket 连接异常，请检查服务端是否启动')
           return
         }
         if (event !== 'message' || !payload) return
         this.applyRealtimeData(payload)
       })
-      sensorWebSocket.connect('/ws/sensor')
+      inferenceWebSocket.connect()
+    },
+    startInferencePolling() {
+      if (this.inferencePollTimer) return
+      this.inferencePollTimer = window.setInterval(() => {
+        this.fetchLatestInference()
+      }, 3000)
+    },
+    stopInferencePolling() {
+      if (this.inferencePollTimer) {
+        window.clearInterval(this.inferencePollTimer)
+        this.inferencePollTimer = null
+      }
+    },
+    fetchLatestInference() {
+      var base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5001'
+      fetch(base.replace(/\/$/, '') + '/analyze', { cache: 'no-store' })
+        .then(res => res.json())
+        .then(payload => this.applyRealtimeData(payload))
+        .catch(() => {})
     },
     applyRealtimeData(payload) {
+      payload = this.normalizeInferencePayload(payload)
+      if (!payload) return
+
       var channelId = Number(payload.channelId || payload.channel || payload.channelNo || 1)
       if (!this.channelDataMap[channelId]) {
         this.$set(this.channelDataMap, channelId, this.createChannel(`CH${channelId}`, 'mm/s'))
@@ -240,7 +317,7 @@ export default {
       var displacement = this.toNumber(payload.displacement || payload.peakToPeak || payload.pp, channel.metrics.displacement)
       var temp = this.toNumber(payload.temperatureValue || payload.temp, channel.metrics.temp)
       var vibrationValue = this.toNumber(payload.vibrationValue, rms)
-      var health = this.calcHealth(rms, temp)
+      var health = payload.health == null ? this.calcHealth(rms, temp) : this.toNumber(payload.health, this.calcHealth(rms, temp))
       var status = payload.alarm ? 'danger' : payload.warning ? 'warning' : health >= 80 ? 'success' : health >= 60 ? 'warning' : 'danger'
       var time = payload.sampleTime ? this.formatLogTime(payload.sampleTime) : this.formatTime(new Date())
 
@@ -263,9 +340,13 @@ export default {
       channel.metrics.displacement = displacement
       channel.metrics.temp = temp
 
-      channel.wave.push({ time: time, value: rms == null ? 0 : rms })
-      if (channel.wave.length > 200) {
-        channel.wave.splice(0, channel.wave.length - 200)
+      if (Array.isArray(payload.wave) && payload.wave.length) {
+        channel.wave = payload.wave.slice(-200)
+      } else {
+        channel.wave.push({ time: time, value: rms == null ? 0 : rms })
+        if (channel.wave.length > 200) {
+          channel.wave.splice(0, channel.wave.length - 200)
+        }
       }
 
       channel.logs.unshift({
@@ -282,14 +363,51 @@ export default {
         })
       }
     },
+    normalizeInferencePayload(payload) {
+      if (!payload) return null
+      if (payload.type === 'health_status' || payload.type === 'file_list' || payload.type === 'pong') return null
+      var data = payload.data || payload
+      if (payload.type === 'auto_analysis' && payload.success === false) return null
+      if (!data || (!data.rms && !data.latestRms && !data.waveform && !data.time_data)) return null
+
+      var channelId = Number(data.channelId || data.channel || data.channelNo || 1)
+      var timeAxis = Array.isArray(data.time_axis) ? data.time_axis : []
+      var waveform = Array.isArray(data.waveform) ? data.waveform : (Array.isArray(data.time_data) ? data.time_data : [])
+      var wave = waveform.map((value, index) => ({
+        time: timeAxis[index] == null ? String(index) : String(timeAxis[index]),
+        value: this.toNumber(value, 0)
+      }))
+      var health = data.healthIndex == null ? data.health : data.healthIndex
+      var risk = data.riskLevel || data.alarmLevel
+
+      return {
+        channelId: channelId || 1,
+        rms: data.rms == null ? data.latestRms : data.rms,
+        peak: data.peak == null ? data.latestPeak : data.peak,
+        displacement: data.displacement || data.peakToPeak || data.pp,
+        temperatureValue: data.temperatureValue || data.temp,
+        vibrationValue: data.vibrationValue || data.latestRms || data.rms,
+        health: health,
+        alarm: data.alarm || risk === '高' || risk === 'alarm',
+        warning: data.warning || risk === '中' || risk === 'warning' || risk === 'attention',
+        alarmMessage: data.alarmMessage || data.diagnosisResult || data.diagnosisName || '',
+        sampleTime: data.sampleTime || data.createTime || new Date().toISOString(),
+        wave: wave
+      }
+    },
     renderWaveChart() {
-      var el = this.$refs.waveChartRef
+      this.renderChartByRef('overviewChartRef', 'overviewChart')
+      this.renderChartByRef('waveChartRef', 'waveChart')
+    },
+    renderChartByRef(refName, chartName) {
+      var el = this.$refs[refName]
+      if (Array.isArray(el)) el = el[0]
       if (!el) return
-      if (!this.waveChart) {
-        this.waveChart = echarts.init(el)
+      if (!this[chartName]) {
+        this[chartName] = echarts.init(el)
       }
       var series = this.activeChannel.wave || []
-      this.waveChart.setOption({
+      this[chartName].setOption({
         backgroundColor: 'transparent',
         animation: true,
         animationDuration: 300,
@@ -299,22 +417,22 @@ export default {
           type: 'category',
           boundaryGap: false,
           data: series.map(item => item.time),
-          axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } },
-          axisLabel: { color: 'rgba(235,255,255,0.75)' }
+          axisLine: { lineStyle: { color: '#cbd5e1' } },
+          axisLabel: { color: '#64748b' }
         },
         yAxis: {
           type: 'value',
           scale: true,
           splitLine: { show: false },
-          axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } },
-          axisLabel: { color: 'rgba(235,255,255,0.75)' }
+          axisLine: { lineStyle: { color: '#cbd5e1' } },
+          axisLabel: { color: '#64748b' }
         },
         series: [{
           type: 'line',
           smooth: true,
           showSymbol: false,
           data: series.map(item => item.value),
-          lineStyle: { width: 2, color: '#00FFFF' },
+          lineStyle: { width: 2, color: '#2563eb' },
           areaStyle: {
             color: {
               type: 'linear',
@@ -323,8 +441,8 @@ export default {
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: 'rgba(0,255,255,0.38)' },
-                { offset: 1, color: 'rgba(0,255,255,0)' }
+                { offset: 0, color: 'rgba(37,99,235,0.20)' },
+                { offset: 1, color: 'rgba(37,99,235,0)' }
               ]
             }
           }
@@ -389,6 +507,9 @@ export default {
       }
     },
     handleResize() {
+      if (this.overviewChart) {
+        this.overviewChart.resize()
+      }
       if (this.waveChart) {
         this.waveChart.resize()
       }
@@ -451,9 +572,260 @@ export default {
 :deep(.el-table::before) { background-color: rgba(0,255,255,0.08); }
 :deep(.el-radio-button__inner) { background: #2b3340; color: #eaf0f6; border-color: rgba(255,255,255,0.12); }
 :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) { background: #409eff; border-color: #409eff; }
+
+/* 浅色工业生产主题覆盖 */
+.monitoring-center-page {
+  background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%);
+  color: #1f2937;
+}
+.channel-card,
+.main-metric,
+.log-card,
+.wave-chart {
+  background: #ffffff;
+  border-color: #d7dee8;
+  color: #1f2937;
+  box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
+}
+.channel-card.active {
+  border-color: #2563eb;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.12);
+}
+.channel-card.success { border-color: #bfd7f2; }
+.metric-block,
+.sub-item,
+.health-box {
+  background: #f8fafc;
+  border-color: #e5eaf1;
+}
+.metric-label,
+.health-label {
+  color: #475569;
+}
+.metric-value,
+.health-desc,
+.foot-time,
+.drawer-title,
+.sub-item strong {
+  color: #1f2937;
+}
+.metric-unit,
+.channel-footer,
+.drawer-subtitle {
+  color: #64748b;
+}
+.drawer-shell {
+  background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%);
+  color: #1f2937;
+}
+.drawer-topbar {
+  border-bottom-color: #d7dee8;
+}
+:deep(.monitoring-drawer) { background: #f3f6f8; }
+:deep(.el-table) { background: #ffffff; color: #1f2937; }
+:deep(.el-table th) { background: #eef3f8 !important; color: #1f2937 !important; }
+:deep(.el-table tr),
+:deep(.el-table td) { background: #ffffff !important; color: #344054 !important; }
+:deep(.el-table::before) { background-color: #d7dee8; }
+:deep(.el-radio-button__inner) {
+  background: #ffffff;
+  color: #344054;
+  border-color: #cbd5e1;
+}
+:deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: calc(100vh - 104px);
+}
+.page-toolbar,
+.workflow-strip,
+.zone {
+  background: #ffffff;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+}
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+.page-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1f2937;
+}
+.page-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+.toolbar-actions,
+.zone-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.workflow-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 10px;
+}
+.workflow-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+}
+.workflow-step span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e5eaf1;
+  color: #475569;
+  font-size: 12px;
+}
+.workflow-step.active span {
+  background: #2563eb;
+  color: #ffffff;
+}
+.monitor-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(280px, 360px);
+  gap: 12px;
+  min-height: 620px;
+}
+.zone {
+  min-width: 0;
+  padding: 12px;
+}
+.zone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-weight: 700;
+  color: #1f2937;
+}
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.channel-tile {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  min-height: 96px;
+  padding: 10px;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #1f2937;
+  text-align: left;
+  cursor: pointer;
+}
+.channel-tile.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+.channel-tile.warning { border-color: rgba(217, 119, 6, 0.46); }
+.channel-tile.danger { border-color: rgba(220, 38, 38, 0.46); }
+.channel-tile strong {
+  grid-column: 1 / -1;
+  font-size: 24px;
+  line-height: 1.1;
+}
+.channel-tile small {
+  color: #64748b;
+}
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.kpi-item {
+  padding: 12px;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.kpi-item span,
+.kpi-item small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+.kpi-item strong {
+  display: block;
+  margin: 6px 0 2px;
+  font-size: 26px;
+  line-height: 1.1;
+  color: #1f2937;
+}
+.primary-chart {
+  width: 100%;
+  height: 420px;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.log-zone,
+.drawer-log-zone {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.drawer-grid {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+  flex: 1;
+}
+.metric-zone {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
 @media (max-width: 1200px) {
+  .page-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .monitor-layout,
+  .drawer-grid {
+    grid-template-columns: 1fr;
+  }
+  .workflow-strip,
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .channel-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
   .metric-row { grid-template-columns: 1fr; }
   .drawer-topbar { flex-direction: column; align-items: flex-start; }
   .wave-chart { height: 260px; }
+  .primary-chart { height: 320px; }
+}
+@media (max-width: 768px) {
+  .workflow-strip,
+  .channel-grid,
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

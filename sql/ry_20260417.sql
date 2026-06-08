@@ -162,7 +162,8 @@ create table sys_menu (
 insert into sys_menu values('1', '系统管理', '0', '1', 'system',           null, '', '', 1, 0, 'M', '0', '0', '', 'system',   'admin', sysdate(), '', null, '系统管理目录');
 insert into sys_menu values('2', '系统监控', '0', '2', 'monitor',          null, '', '', 1, 0, 'M', '0', '0', '', 'monitor',  'admin', sysdate(), '', null, '系统监控目录');
 insert into sys_menu values('3', '系统工具', '0', '3', 'tool',             null, '', '', 1, 0, 'M', '0', '0', '', 'tool',     'admin', sysdate(), '', null, '系统工具目录');
-insert into sys_menu values('4', '若依官网', '0', '4', 'http://ruoyi.vip', null, '', '', 0, 0, 'M', '0', '0', '', 'guide',    'admin', sysdate(), '', null, '若依官网地址');
+-- “若依官网”菜单已移除，避免工业监测平台侧边栏出现无关入口
+-- insert into sys_menu values('4', '若依官网', '0', '4', 'http://ruoyi.vip', null, '', '', 0, 0, 'M', '0', '0', '', 'guide',    'admin', sysdate(), '', null, '若依官网地址');
 -- 二级菜单
 insert into sys_menu values('100',  '用户管理', '1',   '1', 'user',       'system/user/index',        '', '', 1, 0, 'C', '0', '0', 'system:user:list',        'user',          'admin', sysdate(), '', null, '用户管理菜单');
 insert into sys_menu values('101',  '角色管理', '1',   '2', 'role',       'system/role/index',        '', '', 1, 0, 'C', '0', '0', 'system:role:list',        'peoples',       'admin', sysdate(), '', null, '角色管理菜单');
@@ -173,20 +174,9 @@ insert into sys_menu values('105',  '字典管理', '1',   '6', 'dict',       's
 insert into sys_menu values('106',  '参数设置', '1',   '7', 'config',     'system/config/index',      '', '', 1, 0, 'C', '0', '0', 'system:config:list',      'edit',          'admin', sysdate(), '', null, '参数设置菜单');
 insert into sys_menu values('107',  '通知公告', '1',   '8', 'notice',     'system/notice/index',      '', '', 1, 0, 'C', '0', '0', 'system:notice:list',      'message',       'admin', sysdate(), '', null, '通知公告菜单');
 insert into sys_menu values('108',  '日志管理', '1',   '9', 'log',        '',                         '', '', 1, 0, 'M', '0', '0', '',                        'log',           'admin', sysdate(), '', null, '日志管理菜单');
-insert into sys_menu values('2000', '监测中心', '0',   '5', 'monitoring-center', null, '', '', 1, 0, 'M', '0', '0', '', 'chart', 'admin', sysdate(), '', null, '工业IoT监测中心目录');
-insert into sys_menu values('2001', '总览监测', '2000', '1', 'index', 'monitoring-center/index', '', '', 1, 0, 'C', '0', '0', '', 'chart', 'admin', sysdate(), '', null, '监测中心总览页面');
-insert into sys_menu values('2002', '振动数据', '2000', '2', 'vibration-data', 'monitoring-center/vibration', '', '', 1, 0, 'C', '0', '0', 'system:vibration:list', 'chart', 'admin', sysdate(), '', null, '振动数据页面');
-insert into sys_menu values('2003', '温度数据', '2000', '3', 'temperature-data', 'monitoring-center/temperature', '', '', 1, 0, 'C', '0', '0', 'system:temperature:list', 'chart', 'admin', sysdate(), '', null, '温度数据页面');
-insert into sys_menu values('2004', '8路实时监控', '2000', '4', 'multi-channel', 'monitoring-center/multi-channel', '', '', 0, 0, 'C', '0', '0', 'system:vibration:list', 'chart', 'admin', sysdate(), '', null, '8路实时监控页面（页面内部入口）');
-insert into sys_menu values('2005', '专业分析工具包', '0',   '6', 'analysis-toolkit', null, '', '', 1, 0, 'M', '0', '0', '', 'chart', 'admin', sysdate(), '', null, '专业分析工具包目录');
-insert into sys_menu values('2006', '振动分析', '2005', '1', 'vibration-analysis', 'analysis-toolkit/vibration-analysis', '', '', 1, 0, 'C', '0', '0', 'system:vibration:query', 'chart', 'admin', sysdate(), '', null, '振动分析页面');
-insert into sys_menu values('2007', '历史批次', '2005', '2', 'vibration-batch', 'analysis-toolkit/vibration-batch', '', '', 1, 0, 'C', '0', '0', 'system:vibration:query', 'chart', 'admin', sysdate(), '', null, '历史批次页面');
-
--- 隐藏旧的 8路实时监控菜单，避免左侧重复显示
-update sys_menu
-set visible = '0'
-where menu_name = '8路实时监控'
-   or path = 'monitoring-center/multi-channel';
+-- 菜单 2000-2007（监测中心、专业分析工具包）已移除，由前端 constantRoutes 统一管理，避免双重来源导致侧边栏重复
+-- 如果运行数据库中已有这些记录，执行以下语句清除：
+-- delete from sys_menu where menu_id between 2000 and 2007;
 
 insert into sys_menu values('109',  '在线用户', '2',   '1', 'online',     'monitor/online/index',     '', '', 1, 0, 'C', '0', '0', 'monitor:online:list',     'online',        'admin', sysdate(), '', null, '在线用户菜单');
 insert into sys_menu values('110',  '定时任务', '2',   '2', 'job',        'monitor/job/index',        '', '', 1, 0, 'C', '0', '0', 'monitor:job:list',        'job',           'admin', sysdate(), '', null, '定时任务菜单');

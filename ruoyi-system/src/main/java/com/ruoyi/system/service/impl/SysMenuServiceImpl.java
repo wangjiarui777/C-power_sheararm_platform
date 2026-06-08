@@ -571,14 +571,38 @@ public class SysMenuServiceImpl implements ISysMenuService
         {
             return menus;
         }
-        return menus.stream()
-                .collect(Collectors.collectingAndThen(
-                        Collectors.toMap(
-                                menu -> menu.getMenuId(),
-                                menu -> menu,
-                                (existing, duplicate) -> existing,
-                                java.util.LinkedHashMap::new),
-                        map -> new ArrayList<SysMenu>(map.values())));
+        java.util.LinkedHashMap<String, SysMenu> routeMap = new java.util.LinkedHashMap<String, SysMenu>();
+        for (SysMenu menu : menus)
+        {
+            String key = buildMenuDedupKey(menu);
+            if (!routeMap.containsKey(key))
+            {
+                routeMap.put(key, menu);
+            }
+            else
+            {
+                log.warn("[菜单去重] 忽略重复菜单：menuId={}, menuName={}, path={}, component={}",
+                        menu.getMenuId(), menu.getMenuName(), menu.getPath(), menu.getComponent());
+            }
+        }
+        return new ArrayList<SysMenu>(routeMap.values());
+    }
+
+    private String buildMenuDedupKey(SysMenu menu)
+    {
+        String routeName = StringUtils.isEmpty(menu.getRouteName()) ? menu.getPath() : menu.getRouteName();
+        return String.join("|", new String[] {
+                String.valueOf(menu.getParentId()),
+                nullToEmpty(menu.getPath()).toLowerCase(),
+                nullToEmpty(routeName).toLowerCase(),
+                nullToEmpty(menu.getComponent()).toLowerCase(),
+                nullToEmpty(menu.getMenuType())
+        });
+    }
+
+    private String nullToEmpty(String value)
+    {
+        return value == null ? "" : value;
     }
 
     /**

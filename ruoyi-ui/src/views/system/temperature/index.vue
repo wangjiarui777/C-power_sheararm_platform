@@ -466,10 +466,10 @@ export default {
           this.historyRows = rows.map((item, index) => ({
             ...item,
             sampleTimeText: this.formatDateTime(item.collectionTime || item.sampleTime || item.collectTime || item.createTime),
-            temperatureValue: this.pickField(item, ['temperatureValue', 'temperature', 'temp']) ?? (35 + Math.random() * 6).toFixed(2),
-            maValue: this.pickField(item, ['maValue', 'ma']) ?? (35 + Math.random() * 5).toFixed(2),
-            rocValue: this.pickField(item, ['rocValue', 'roc']) ?? (Math.random() * 2).toFixed(2),
-            motorSpeed: this.pickField(item, ['motorSpeed', 'speed']) ?? 1480 + index
+            temperatureValue: this.pickField(item, ['temperatureValue', 'temperature', 'temp']) == null ? (35 + Math.random() * 6).toFixed(2) : this.pickField(item, ['temperatureValue', 'temperature', 'temp']),
+            maValue: this.pickField(item, ['maValue', 'ma']) == null ? (35 + Math.random() * 5).toFixed(2) : this.pickField(item, ['maValue', 'ma']),
+            rocValue: this.pickField(item, ['rocValue', 'roc']) == null ? (Math.random() * 2).toFixed(2) : this.pickField(item, ['rocValue', 'roc']),
+            motorSpeed: this.pickField(item, ['motorSpeed', 'speed']) == null ? 1480 + index : this.pickField(item, ['motorSpeed', 'speed'])
           }))
         })
         .finally(() => { this.historyLoading = false })
@@ -528,14 +528,14 @@ export default {
           max: 100,
           radius: '100%',
           progress: { show: true, width: 10, itemStyle: { color: health >= 85 ? '#67c23a' : health >= 60 ? '#e6a23c' : '#f56c6c' } },
-          axisLine: { lineStyle: { width: 10, color: [[1, 'rgba(0,255,255,0.15)']] } },
+          axisLine: { lineStyle: { width: 10, color: [[1, '#e5eaf1']] } },
           axisTick: { show: false },
           splitLine: { show: false },
           axisLabel: { show: false },
           pointer: { show: false },
           anchor: { show: false },
           title: { show: false },
-          detail: { valueAnimation: true, formatter: '{value}%', color: '#eaffff', fontSize: 14, offsetCenter: [0, '45%'] },
+          detail: { valueAnimation: true, formatter: '{value}%', color: '#1f2937', fontSize: 14, offsetCenter: [0, '45%'] },
           data: [{ value: health }]
         }]
       }
@@ -548,10 +548,10 @@ export default {
       return {
         backgroundColor: 'transparent',
         tooltip: { trigger: 'axis' },
-        legend: { data: ['原始温度', 'MA 平滑'], textStyle: { color: '#d9e2e8' } },
+        legend: { data: ['原始温度', 'MA 平滑'], textStyle: { color: '#475569' } },
         grid: { left: 52, right: 24, top: 42, bottom: 36 },
-        xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, axisLabel: { color: '#d9e2e8' } },
-        yAxis: { type: 'value', name: '℃', axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } }, axisLabel: { color: '#d9e2e8' } },
+        xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#64748b' } },
+        yAxis: { type: 'value', name: '℃', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#e5eaf1' } }, axisLabel: { color: '#64748b' } },
         series: [
           {
             name: '原始温度',
@@ -559,7 +559,7 @@ export default {
             smooth: true,
             showSymbol: false,
             data: raw,
-            lineStyle: { color: 'rgba(125,211,252,0.65)', width: 1.5 }
+            lineStyle: { color: 'rgba(14,165,233,0.58)', width: 1.5 }
           },
           {
             name: 'MA 平滑',
@@ -567,16 +567,16 @@ export default {
             smooth: true,
             showSymbol: false,
             data: ma,
-            lineStyle: { color: '#00FFFF', width: 2.5 },
+            lineStyle: { color: '#0ea5e9', width: 2.5 },
             markLine: {
               symbol: 'none',
               data: [{ yAxis: 65, name: '预警线' }, { yAxis: 75, name: '报警线' }],
               lineStyle: { color: '#f5c542', type: 'dashed' },
-              label: { color: '#fff' }
+              label: { color: '#475569' }
             }
           }
         ],
-        graphic: maxIndex >= 0 ? [{ type: 'text', left: 'center', top: 8, style: { text: `峰值温度：${xData[maxIndex]} / ${raw[maxIndex].toFixed(2)}℃`, fill: '#eaffff', font: '12px sans-serif' } }] : []
+        graphic: maxIndex >= 0 ? [{ type: 'text', left: 'center', top: 8, style: { text: `峰值温度：${xData[maxIndex]} / ${raw[maxIndex].toFixed(2)}℃`, fill: '#1f2937', font: '12px sans-serif' } }] : []
       }
     },
     buildCouplingOption(channel, history, vibrationHistory) {
@@ -587,18 +587,18 @@ export default {
       return {
         backgroundColor: 'transparent',
         tooltip: { trigger: 'axis' },
-        legend: { data: ['温度', '振动速度'], textStyle: { color: '#d9e2e8' } },
+        legend: { data: ['温度', '振动速度'], textStyle: { color: '#475569' } },
         grid: { left: 52, right: 52, top: 42, bottom: 36 },
-        xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, axisLabel: { color: '#d9e2e8' } },
+        xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#64748b' } },
         yAxis: [
-          { type: 'value', name: '℃', axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } }, axisLabel: { color: '#d9e2e8' } },
-          { type: 'value', name: 'mm/s', axisLine: { lineStyle: { color: 'rgba(255,255,255,0.18)' } }, splitLine: { show: false }, axisLabel: { color: '#d9e2e8' } }
+          { type: 'value', name: '℃', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#e5eaf1' } }, axisLabel: { color: '#64748b' } },
+          { type: 'value', name: 'mm/s', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { show: false }, axisLabel: { color: '#64748b' } }
         ],
         series: [
-          { name: '温度', type: 'line', smooth: true, showSymbol: false, data: temp, lineStyle: { color: '#7dd3fc', width: 2 }, yAxisIndex: 0 },
-          { name: '振动速度', type: 'line', smooth: true, showSymbol: false, data: vib, lineStyle: { color: '#f59e0b', width: 2 }, yAxisIndex: 1 }
+          { name: '温度', type: 'line', smooth: true, showSymbol: false, data: temp, lineStyle: { color: '#0ea5e9', width: 2 }, yAxisIndex: 0 },
+          { name: '振动速度', type: 'line', smooth: true, showSymbol: false, data: vib, lineStyle: { color: '#d97706', width: 2 }, yAxisIndex: 1 }
         ],
-        graphic: [{ type: 'text', left: 'center', top: 8, style: { text: couplingLabel, fill: '#eaffff', font: '12px sans-serif' } }]
+        graphic: [{ type: 'text', left: 'center', top: 8, style: { text: couplingLabel, fill: '#1f2937', font: '12px sans-serif' } }]
       }
     },
 
@@ -680,6 +680,83 @@ export default {
 :deep(.el-table::before) { background-color: rgba(0,255,255,0.08); }
 :deep(.el-radio-button__inner) { background: #2b3340; color: #eaf0f6; border-color: rgba(255,255,255,0.12); }
 :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) { background: #409eff; border-color: #409eff; }
+
+/* 浅色工业生产主题覆盖 */
+.temperature-page { background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%); color: #1f2937; }
+.channel-card,
+.trend-panel,
+.alarm-panel,
+.log-card,
+.chart-box {
+  background: #ffffff;
+  border-color: #d7dee8;
+  color: #1f2937;
+  box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
+}
+.channel-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 10px 22px rgba(31, 41, 55, 0.12);
+}
+.channel-card.abnormal { border-color: rgba(220, 38, 38, 0.48); }
+.channel-card.warning { border-color: rgba(217, 119, 6, 0.48); }
+.metric-main,
+.main-metric,
+.detail-row,
+.sub-item,
+.health-box {
+  background: #f8fafc;
+  border-color: #e5eaf1;
+  color: #344054;
+}
+.main-metric--temp { background: #eff6ff; }
+.metric-label,
+.health-label { color: #475569; }
+.metric-value,
+.metric-value.big,
+.metric-inline,
+.detail-row strong,
+.sub-item strong,
+.health-desc,
+.foot-time,
+.drawer-title,
+.trend-title,
+.alarm-panel__head { color: #1f2937; }
+.metric-unit,
+.channel-footer,
+.trend-subtitle,
+.drawer-subtitle,
+.drawer-chart-tip { color: #64748b; }
+.drawer-shell {
+  background: linear-gradient(180deg, #ffffff 0%, #f3f6f8 100%);
+  color: #1f2937;
+}
+.drawer-topbar { border-bottom-color: #d7dee8; }
+:deep(.temperature-drawer) { background: #f3f6f8; }
+:deep(.el-table) {
+  background: #ffffff;
+  color: #1f2937;
+}
+:deep(.el-table th) {
+  background: #eef3f8 !important;
+  color: #1f2937 !important;
+}
+:deep(.el-table tr),
+:deep(.el-table td) {
+  background: #ffffff !important;
+  color: #344054 !important;
+}
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) { background: #f8fafc !important; }
+:deep(.el-table::before) { background-color: #d7dee8; }
+:deep(.el-radio-button__inner) {
+  background: #ffffff;
+  color: #344054;
+  border-color: #cbd5e1;
+}
+:deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 @media (max-width: 1200px) {
   .card-body { grid-template-columns: 1fr; }

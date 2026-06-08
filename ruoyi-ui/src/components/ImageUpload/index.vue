@@ -110,7 +110,9 @@ export default {
   mounted() {
     if (this.drag && !this.disabled) {
       this.$nextTick(() => {
-        const element = this.$refs.imageUpload?.$el?.querySelector('.el-upload-list')
+        const imageUpload = this.$refs.imageUpload
+        const element = imageUpload && imageUpload.$el ? imageUpload.$el.querySelector('.el-upload-list') : null
+        if (!element) return
         Sortable.create(element, {
           onEnd: (evt) => {
             const movedItem = this.fileList.splice(evt.oldIndex, 1)[0]

@@ -105,7 +105,9 @@ export default {
   mounted() {
     if (this.drag && !this.disabled) {
       this.$nextTick(() => {
-        const element = this.$refs.uploadFileList?.$el || this.$refs.uploadFileList
+        const uploadFileList = this.$refs.uploadFileList
+        const element = uploadFileList && uploadFileList.$el ? uploadFileList.$el : uploadFileList
+        if (!element) return
         Sortable.create(element, {
           ghostClass: 'file-upload-darg',
           onEnd: (evt) => {

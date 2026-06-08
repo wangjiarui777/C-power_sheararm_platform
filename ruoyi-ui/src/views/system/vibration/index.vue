@@ -1,187 +1,213 @@
 <template>
   <div class="app-container vibration-page">
-    <el-alert
-      v-if="alarmBanner.visible"
-      class="alarm-banner"
-      :title="alarmBanner.title"
-      :type="alarmBanner.type"
-      show-icon
-      :closable="true"
-      @close="alarmBanner.visible = false"
-    />
+    <section class="page-shell">
+      <header class="page-toolbar">
+        <div>
+          <div class="page-title">振动数据分析</div>
+          <div class="page-subtitle">通道选择 · 参数配置 · 趋势/频谱分析 · 历史事件复核</div>
+        </div>
+        <div class="toolbar-actions">
+          <el-radio-group v-model="chartMode" size="mini" @change="refreshCharts">
+            <el-radio-button label="time">时域</el-radio-button>
+            <el-radio-button label="fft">FFT</el-radio-button>
+          </el-radio-group>
+          <el-button size="mini" icon="el-icon-refresh" @click="fetchLatestInference">刷新实时数据</el-button>
+        </div>
+      </header>
 
-    <el-row :gutter="10">
-      <el-col v-for="channel in channels" :key="channel.id" :span="6" class="mb10">
-        <el-card shadow="hover" class="channel-card" :class="channel.status" @click.native="openDetail(channel)">
-          <div class="channel-head">
-            <div class="channel-title">{{ channel.title }}</div>
-            <el-tag size="mini" :type="statusTagType(channel.status)">{{ channel.statusLabel }}</el-tag>
+      <el-alert
+        v-if="alarmBanner.visible"
+        class="alarm-banner"
+        :title="alarmBanner.title"
+        :type="alarmBanner.type"
+        show-icon
+        :closable="true"
+        @close="alarmBanner.visible = false"
+      />
+
+      <main class="analysis-layout">
+        <aside class="zone selector-zone">
+          <div class="zone-header">
+            <span>1. 目标通道</span>
+            <el-tag size="mini">8 CH</el-tag>
           </div>
 
-          <div class="card-body">
-            <div class="metric-zone">
-              <div class="metric-main">
-                <div class="metric-label">RMS</div>
-                <div class="metric-value">{{ formatNumber(channel.rms) }}</div>
+          <div class="channel-list">
+            <button
+              v-for="channel in channels"
+              :key="channel.id"
+              class="channel-row"
+              :class="[channel.status, { active: activeChannelId === channel.id }]"
+              @click="activeChannelId = channel.id; refreshCharts()"
+              @dblclick="openDetail(channel)"
+            >
+              <span>{{ channel.title }}</span>
+              <strong>{{ formatNumber(channel.rms) }}</strong>
+              <small>{{ channel.statusLabel }} · 健康度 {{ channel.health }}%</small>
+            </button>
+          </div>
+        </aside>
+
+        <section class="zone config-zone">
+          <div class="zone-header"><span>2. 参数配置</span></div>
+          <div class="config-grid">
+            <label class="config-item">
+              <span>分析模式</span>
+              <el-radio-group v-model="chartMode" size="mini" @change="refreshCharts">
+                <el-radio-button label="time">时域</el-radio-button>
+                <el-radio-button label="fft">FFT</el-radio-button>
+              </el-radio-group>
+            </label>
+            <label class="config-item">
+              <span>采样窗口</span>
+              <el-select size="mini" value="latest" placeholder="最近数据">
+                <el-option label="最近数据" value="latest" />
+              </el-select>
+            </label>
+            <label class="config-item">
+              <span>阈值规则</span>
+              <el-select size="mini" value="default" placeholder="默认规则">
+                <el-option label="默认规则" value="default" />
+              </el-select>
+            </label>
+          </div>
+        </section>
+
+        <section class="zone execution-zone">
+          <div class="zone-header">
+            <span>3. 当前指标 · {{ activeChannel.title }}</span>
+            <el-tag :type="statusTagType(activeChannel.status)" size="mini">{{ activeChannel.statusLabel }}</el-tag>
+          </div>
+          <div class="kpi-row">
+            <div class="kpi-item"><span>RMS</span><strong>{{ formatNumber(activeChannel.rms) }}</strong><small>mm/s</small></div>
+            <div class="kpi-item"><span>Peak</span><strong>{{ formatNumber(activeChannel.peak) }}</strong><small>峰值</small></div>
+            <div class="kpi-item"><span>Peak-Peak</span><strong>{{ formatNumber(activeChannel.peakToPeak) }}</strong><small>位移</small></div>
+            <div class="kpi-item"><span>Freq Peak</span><strong>{{ formatNumber(activeChannel.freqPeak) }}</strong><small>Hz</small></div>
+          </div>
+        </section>
+
+        <section class="zone chart-zone">
+          <div class="zone-header">
+            <span>4. 趋势与频谱</span>
+            <el-tag size="mini">{{ chartMode === 'fft' ? 'FFT' : '时域' }}</el-tag>
+          </div>
+          <div ref="trendChartRef" class="primary-chart"></div>
+        </section>
+
+        <section class="zone event-zone">
+          <div class="zone-header">
+            <span>5. 告警事件</span>
+            <el-button size="mini" type="text" @click="alarmBanner.visible = false">清除提示</el-button>
+          </div>
+          <el-table :data="alarmEvents" height="100%" size="mini" stripe @row-click="jumpToAlarmEvent">
+            <el-table-column prop="timeText" label="时间" min-width="160" />
+            <el-table-column prop="channelTitle" label="通道" width="110" />
+            <el-table-column prop="levelText" label="级别" width="80">
+              <template slot-scope="scope">
+                <el-tag :type="alarmTagType(scope.row.level)" size="mini">{{ scope.row.levelText }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="message" label="描述" min-width="180" />
+          </el-table>
+        </section>
+      </main>
+
+      <el-drawer
+        :visible.sync="detailVisible"
+        direction="btt"
+        size="100%"
+        custom-class="vibration-drawer"
+        :with-header="false"
+        append-to-body
+        @opened="handleDrawerOpened"
+        @closed="handleDrawerClosed"
+      >
+        <div class="drawer-shell">
+          <div class="drawer-topbar">
+            <div>
+              <div class="drawer-title">{{ activeChannel.title }} 历史数据</div>
+              <div class="drawer-subtitle">指标复核 · 时频切换 · 最近 100 条历史记录</div>
+            </div>
+            <div class="drawer-actions">
+              <el-button size="mini" icon="el-icon-refresh" @click="loadHistory(activeChannel.id)">刷新</el-button>
+              <el-button size="mini" icon="el-icon-close" @click="detailVisible = false">关闭</el-button>
+            </div>
+          </div>
+
+          <div class="drawer-grid">
+            <section class="zone drawer-metric-zone">
+              <div class="main-metric">
+                <div class="metric-label">振动速度有效值 RMS</div>
+                <div class="metric-value big">{{ formatNumber(activeChannel.rms) }}</div>
                 <div class="metric-unit">mm/s</div>
               </div>
-              <div class="metric-main metric-main--temp">
-                <div class="metric-label">Temp</div>
-                <div class="metric-value">{{ formatNumber(channel.temp) }}</div>
+              <div class="main-metric main-metric--temp">
+                <div class="metric-label">轴承温度 Temp</div>
+                <div class="metric-value big">{{ formatNumber(activeChannel.temp) }}</div>
                 <div class="metric-unit">℃</div>
               </div>
-            </div>
-
-            <div class="detail-zone">
-              <div class="detail-table">
-                <div class="detail-row"><span>Peak-Peak</span><strong>{{ formatNumber(channel.peakToPeak) }}</strong></div>
-                <div class="detail-row"><span>Peak</span><strong>{{ formatNumber(channel.peak) }}</strong></div>
-                <div class="detail-row"><span>频率峰值</span><strong>{{ formatNumber(channel.freqPeak) }}</strong></div>
+              <div class="sub-metrics">
+                <div class="sub-item"><span>峰值</span><strong>{{ formatNumber(activeChannel.peak) }}</strong></div>
+                <div class="sub-item"><span>位移</span><strong>{{ formatNumber(activeChannel.peakToPeak) }}</strong></div>
+                <div class="sub-item"><span>频率峰值</span><strong>{{ formatNumber(activeChannel.freqPeak) }}</strong></div>
               </div>
-              <div :ref="el => setGaugeRef(el, channel.id)" class="health-gauge"></div>
-            </div>
-          </div>
-
-          <div class="channel-footer">
-            <span class="foot-text">{{ channel.sampleTimeText }}</span>
-            <span class="foot-time">健康度 {{ channel.health }}%</span>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <div class="trend-panel">
-      <div class="trend-header">
-        <div>
-          <div class="trend-title">实时趋势图 · {{ activeChannel.title }}</div>
-          <div class="trend-subtitle">左轴振动速度 mm/s，右轴温度 ℃，支持 WebSocket 平滑滚动与 FFT 切换</div>
-        </div>
-        <el-radio-group v-model="chartMode" size="mini" @change="refreshCharts">
-          <el-radio-button label="time">时域</el-radio-button>
-          <el-radio-button label="fft">FFT</el-radio-button>
-        </el-radio-group>
-      </div>
-      <div ref="trendChartRef" class="trend-chart"></div>
-    </div>
-
-    <div class="alarm-panel">
-      <div class="alarm-panel__head">
-        <span>近期告警事件</span>
-        <el-tag size="mini" type="danger">点击跳转历史片段</el-tag>
-      </div>
-      <el-table :data="alarmEvents" height="220" size="mini" stripe @row-click="jumpToAlarmEvent">
-        <el-table-column prop="timeText" label="时间" min-width="180" />
-        <el-table-column prop="channelTitle" label="通道" width="120" />
-        <el-table-column prop="levelText" label="级别" width="90">
-          <template slot-scope="scope">
-            <el-tag :type="alarmTagType(scope.row.level)" size="mini">{{ scope.row.levelText }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="message" label="告警描述" min-width="220" />
-      </el-table>
-    </div>
-
-    <el-drawer
-      :visible.sync="detailVisible"
-      direction="btt"
-      size="100%"
-      custom-class="vibration-drawer"
-      :with-header="false"
-      append-to-body
-      @opened="handleDrawerOpened"
-      @closed="handleDrawerClosed"
-    >
-      <div class="drawer-shell">
-        <div class="drawer-topbar">
-          <div>
-            <div class="drawer-title">{{ activeChannel.title }} 详细信息</div>
-            <div class="drawer-subtitle">通道 ID：{{ activeChannel.id }} · 最近 100 条历史记录 · 支持时频切换</div>
-          </div>
-          <div class="drawer-actions">
-            <el-tag :type="statusTagType(activeChannel.status)" size="mini">{{ activeChannel.statusLabel }}</el-tag>
-            <el-button size="mini" icon="el-icon-close" @click="detailVisible = false">关闭</el-button>
-          </div>
-        </div>
-
-        <div class="drawer-content">
-          <el-row :gutter="12" class="detail-row">
-            <el-col :xs="24" :md="8">
-              <div class="metric-panel">
-                <div class="main-metric">
-                  <div class="metric-label">振动速度有效值 RMS</div>
-                  <div class="metric-value big">{{ formatNumber(activeChannel.rms) }}</div>
-                  <div class="metric-unit">mm/s</div>
+              <div class="health-box">
+                <div>
+                  <div class="health-label">健康度</div>
+                  <div class="health-desc">{{ activeChannel.health }}%</div>
                 </div>
-                <div class="main-metric main-metric--temp">
-                  <div class="metric-label">轴承温度 Temp</div>
-                  <div class="metric-value big">{{ formatNumber(activeChannel.temp) }}</div>
-                  <div class="metric-unit">℃</div>
-                </div>
-                <div class="sub-metrics">
-                  <div class="sub-item"><span>峰值</span><strong>{{ formatNumber(activeChannel.peak) }}</strong></div>
-                  <div class="sub-item"><span>位移</span><strong>{{ formatNumber(activeChannel.peakToPeak) }}</strong></div>
-                  <div class="sub-item"><span>频率峰值</span><strong>{{ formatNumber(activeChannel.freqPeak) }}</strong></div>
-                </div>
-                <div class="health-box">
-                  <div>
-                    <div class="health-label">健康度</div>
-                    <div class="health-desc">{{ activeChannel.health }}%</div>
-                  </div>
-                  <el-progress type="circle" :percentage="activeChannel.health" :width="92" :color="healthColor(activeChannel.health)" />
-                </div>
+                <el-progress type="circle" :percentage="activeChannel.health" :width="92" :color="healthColor(activeChannel.health)" />
               </div>
-            </el-col>
+            </section>
 
-            <el-col :xs="24" :md="16">
-              <div class="drawer-chart-header">
+            <section class="zone drawer-chart-zone">
+              <div class="zone-header">
+                <span>时频分析</span>
                 <el-radio-group v-model="detailChartMode" size="mini" @change="refreshCharts">
-                  <el-radio-button label="time">时域波形</el-radio-button>
-                  <el-radio-button label="fft">频谱图（FFT）</el-radio-button>
+                  <el-radio-button label="time">时域</el-radio-button>
+                  <el-radio-button label="fft">FFT</el-radio-button>
                 </el-radio-group>
-                <div class="drawer-chart-tip">最高峰已自动标注</div>
               </div>
-              <div ref="waveChartRef" class="wave-chart"></div>
-            </el-col>
-          </el-row>
+              <div ref="waveChartRef" class="primary-chart"></div>
+            </section>
 
-          <el-card class="log-card" shadow="never">
-            <div slot="header" class="card-header">
-              <span>最近 100 条历史记录</span>
-              <el-button size="mini" type="primary" plain @click="loadHistory(activeChannel.id)">刷新</el-button>
-            </div>
-            <el-table :data="historyRows" height="300" stripe size="mini" border>
-              <el-table-column type="index" label="序号" width="60" />
-              <el-table-column prop="sampleTimeText" label="采集精确时间" min-width="180" />
-              <el-table-column prop="rmsValue" label="振动有效值" width="110" align="center">
-                <template slot-scope="scope">{{ formatNumber(scope.row.rmsValue) }}</template>
-              </el-table-column>
-              <el-table-column prop="peakValue" label="峰值" width="110" align="center">
-                <template slot-scope="scope">{{ formatNumber(scope.row.peakValue) }}</template>
-              </el-table-column>
-              <el-table-column prop="crestFactor" label="波峰因数" width="110" align="center">
-                <template slot-scope="scope">{{ formatNumber(scope.row.crestFactor) }}</template>
-              </el-table-column>
-              <el-table-column prop="motorSpeed" label="当前电机转速" width="130" align="center">
-                <template slot-scope="scope">{{ formatNumber(scope.row.motorSpeed) }}</template>
-              </el-table-column>
-            </el-table>
-          </el-card>
+            <section class="zone drawer-history-zone">
+              <div class="zone-header"><span>历史记录</span></div>
+              <el-table :data="historyRows" height="100%" stripe size="mini" border>
+                <el-table-column type="index" label="序号" width="60" />
+                <el-table-column prop="sampleTimeText" label="采集精确时间" min-width="180" />
+                <el-table-column prop="rmsValue" label="振动有效值" width="110" align="center">
+                  <template slot-scope="scope">{{ formatNumber(scope.row.rmsValue) }}</template>
+                </el-table-column>
+                <el-table-column prop="peakValue" label="峰值" width="110" align="center">
+                  <template slot-scope="scope">{{ formatNumber(scope.row.peakValue) }}</template>
+                </el-table-column>
+                <el-table-column prop="crestFactor" label="波峰因数" width="110" align="center">
+                  <template slot-scope="scope">{{ formatNumber(scope.row.crestFactor) }}</template>
+                </el-table-column>
+              </el-table>
+            </section>
+          </div>
         </div>
-      </div>
-    </el-drawer>
+      </el-drawer>
+    </section>
   </div>
 </template>
 
 <script>
 import * as echarts from 'echarts'
 import { listVibration } from '@/api/system/vibration'
+import inferenceWebSocket from '@/utils/inference-websocket'
 
 export default {
   name: 'VibrationIndex',
   data() {
     return {
       ws: null,
-      chart: null,
+      unsubscribeWs: null,
+      inferencePollTimer: null,
+      trendChart: null,
+      detailChart: null,
       gaugeCharts: {},
       detailVisible: false,
       historyLoading: false,
@@ -207,7 +233,11 @@ export default {
   },
   mounted() {
     window.addEventListener('resize', this.handleResize)
-    this.$nextTick(() => this.refreshGaugeCharts())
+    this.$nextTick(() => {
+      this.initTrendChart()
+      this.refreshGaugeCharts()
+      this.refreshTrendChart()
+    })
   },
   beforeDestroy() {
     window.removeEventListener('resize', this.handleResize)
@@ -260,43 +290,83 @@ export default {
     },
     connectWebSocket() {
       this.closeWebSocket()
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const url = `${protocol}//${window.location.host}/ws/sensor`
-      this.ws = new WebSocket(url)
-      this.ws.onmessage = this.handleWebSocketMessage
+      this.fetchLatestInference()
+      this.startInferencePolling()
+      this.unsubscribeWs = inferenceWebSocket.subscribe((event, payload) => {
+        if (event === 'open') {
+          this.fetchLatestInference()
+          return
+        }
+        if (event === 'error') {
+          return
+        }
+        if (event !== 'message' || !payload) return
+        this.handleWebSocketMessage(payload)
+      })
+      this.ws = inferenceWebSocket.connect()
+    },
+    startInferencePolling() {
+      if (this.inferencePollTimer) return
+      this.inferencePollTimer = window.setInterval(() => {
+        this.fetchLatestInference()
+      }, 3000)
+    },
+    stopInferencePolling() {
+      if (this.inferencePollTimer) {
+        window.clearInterval(this.inferencePollTimer)
+        this.inferencePollTimer = null
+      }
+    },
+    fetchLatestInference() {
+      var base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5001'
+      fetch(base.replace(/\/$/, '') + '/analyze', { cache: 'no-store' })
+        .then(res => res.json())
+        .then(payload => this.handleWebSocketMessage(payload))
+        .catch(() => {})
     },
     handleWebSocketMessage(evt) {
-      let msg
-      try {
-        msg = JSON.parse(evt.data)
-      } catch (error) {
-        return
+      let msg = evt && evt.data ? null : evt
+      if (!msg) {
+        try {
+          msg = JSON.parse(evt.data)
+        } catch (error) {
+          return
+        }
       }
+      msg = this.normalizeInferencePayload(msg)
+      if (!msg) return
       const channelId = Number(msg.channelId || msg.channel || msg.id)
       if (!channelId || !this.liveData[channelId]) return
 
       const channel = this.channels[channelId - 1]
       if (!channel) return
 
-      const rms = this.toNumber(msg.rms ?? msg.vibrationValue ?? msg.speed, channel.rms)
-      const temp = this.toNumber(msg.temperatureValue ?? msg.temp, channel.temp)
-      const peakToPeak = this.toNumber(msg.displacement ?? msg.peakToPeak ?? msg.pp, channel.peakToPeak)
-      const peak = this.toNumber(msg.peak ?? msg.peakValue, channel.peak)
-      const freqPeak = this.toNumber(msg.freqPeak ?? msg.frequencyPeak, channel.freqPeak)
-      const health = this.calcHealth(rms, temp)
+      const rmsSource = msg.rms == null ? (msg.vibrationValue == null ? msg.speed : msg.vibrationValue) : msg.rms
+      const tempSource = msg.temperatureValue == null ? msg.temp : msg.temperatureValue
+      const peakToPeakSource = msg.displacement == null ? (msg.peakToPeak == null ? msg.pp : msg.peakToPeak) : msg.displacement
+      const peakSource = msg.peak == null ? msg.peakValue : msg.peak
+      const freqPeakSource = msg.freqPeak == null ? msg.frequencyPeak : msg.freqPeak
+      const rms = this.toNumber(rmsSource, channel.rms)
+      const temp = this.toNumber(tempSource, channel.temp)
+      const peakToPeak = this.toNumber(peakToPeakSource, channel.peakToPeak)
+      const peak = this.toNumber(peakSource, channel.peak)
+      const freqPeak = this.toNumber(freqPeakSource, channel.freqPeak)
+      const health = msg.health == null ? this.calcHealth(rms, temp) : this.toNumber(msg.health, this.calcHealth(rms, temp))
       const status = msg.alarm ? 'abnormal' : health >= 80 ? 'normal' : health >= 60 ? 'warning' : 'abnormal'
       const sampleTime = msg.sampleTime || msg.collectTime || new Date().toISOString()
       const sampleTimeText = this.formatDateTime(sampleTime)
 
       this.$set(this.liveData, channelId, {
-        wave: [
-          ...this.liveData[channelId].wave,
-          {
-            time: new Date(sampleTime).getTime(),
-            vibration: rms,
-            temp
-          }
-        ].slice(-this.maxPoints),
+        wave: Array.isArray(msg.wave) && msg.wave.length
+          ? msg.wave.slice(-this.maxPoints)
+          : [
+            ...this.liveData[channelId].wave,
+            {
+              time: new Date(sampleTime).getTime(),
+              vibration: rms,
+              temp
+            }
+          ].slice(-this.maxPoints),
         fft: Array.isArray(msg.fft) && msg.fft.length ? msg.fft : this.liveData[channelId].fft
       })
 
@@ -334,17 +404,61 @@ export default {
         this.refreshCharts()
       }
     },
+    normalizeInferencePayload(payload) {
+      if (!payload) return null
+      if (payload.type === 'health_status' || payload.type === 'file_list' || payload.type === 'pong') return null
+      if (payload.type === 'auto_analysis' && payload.success === false) return null
+      const data = payload.data || payload
+      if (!data || (!data.rms && !data.latestRms && !data.waveform && !data.time_data)) return null
+
+      const timeAxis = Array.isArray(data.time_axis) ? data.time_axis : []
+      const waveform = Array.isArray(data.waveform) ? data.waveform : (Array.isArray(data.time_data) ? data.time_data : [])
+      const wave = waveform.map((value, index) => ({
+        time: timeAxis[index] == null ? index : Number(timeAxis[index]) * 1000,
+        vibration: this.toNumber(value, 0),
+        temp: this.toNumber(data.temperatureValue || data.temp, 0)
+      }))
+      const freqAxis = Array.isArray(data.freq_axis) ? data.freq_axis : (Array.isArray(data.frequencyAxis) ? data.frequencyAxis : [])
+      const spectrum = Array.isArray(data.freq_data) ? data.freq_data : (Array.isArray(data.spectrum) ? data.spectrum : [])
+      const fft = spectrum.map((value, index) => ({
+        freq: this.toNumber(freqAxis[index], index),
+        amp: this.toNumber(value, 0)
+      }))
+      const health = data.healthIndex == null ? data.health : data.healthIndex
+      const risk = data.riskLevel || data.alarmLevel
+
+      return {
+        channelId: Number(data.channelId || data.channel || data.channelNo || 1),
+        rms: data.rms == null ? data.latestRms : data.rms,
+        vibrationValue: data.vibrationValue || data.latestRms || data.rms,
+        temperatureValue: data.temperatureValue || data.temp,
+        peak: data.peak == null ? data.latestPeak : data.peak,
+        peakValue: data.latestPeak || data.peak,
+        displacement: data.displacement || data.peakToPeak || data.pp,
+        freqPeak: data.freqPeak || data.frequencyPeak,
+        health,
+        alarm: data.alarm || risk === '高' || risk === 'alarm',
+        warning: data.warning || risk === '中' || risk === 'warning' || risk === 'attention',
+        alarmMessage: data.alarmMessage || data.diagnosisResult || data.diagnosisName || '',
+        sampleTime: data.sampleTime || data.createTime || new Date().toISOString(),
+        wave,
+        fft
+      }
+    },
     openDetail(channel) {
       this.activeChannelId = channel.id
       this.detailVisible = true
       this.loadHistory(channel.id)
     },
     handleDrawerOpened() {
-      this.initChart()
-      this.refreshCharts()
+      this.initDetailChart()
+      this.refreshDetailChart()
     },
     handleDrawerClosed() {
-      this.disposeChart()
+      if (this.detailChart) {
+        this.detailChart.dispose()
+        this.detailChart = null
+      }
     },
     loadHistory(channelId) {
       this.historyLoading = true
@@ -354,21 +468,23 @@ export default {
           this.historyRows = rows.map((item, index) => ({
             ...item,
             sampleTimeText: this.formatDateTime(item.sampleTime || item.collectTime || item.createTime),
-            rmsValue: item.rmsValue ?? item.vibrationValue ?? item.rms ?? (Math.random() * 8).toFixed(2),
-            peakValue: item.peakValue ?? item.peak ?? (Math.random() * 10).toFixed(2),
-            crestFactor: item.crestFactor ?? item.wavePeakFactor ?? (Math.random() * 3 + 1).toFixed(2),
-            motorSpeed: item.motorSpeed ?? item.speed ?? 1480 + index
+            rmsValue: item.rmsValue == null ? (item.vibrationValue == null ? (item.rms == null ? (Math.random() * 8).toFixed(2) : item.rms) : item.vibrationValue) : item.rmsValue,
+            peakValue: item.peakValue == null ? (item.peak == null ? (Math.random() * 10).toFixed(2) : item.peak) : item.peakValue,
+            crestFactor: item.crestFactor == null ? (item.wavePeakFactor == null ? (Math.random() * 3 + 1).toFixed(2) : item.wavePeakFactor) : item.crestFactor,
+            motorSpeed: item.motorSpeed == null ? (item.speed == null ? 1480 + index : item.speed) : item.motorSpeed
           }))
         })
         .finally(() => {
           this.historyLoading = false
         })
     },
-    initChart() {
-      this.$nextTick(() => {
-        if (this.chart || !this.$refs.waveChartRef) return
-        this.chart = echarts.init(this.$refs.waveChartRef)
-      })
+    initTrendChart() {
+      if (this.trendChart || !this.$refs.trendChartRef) return
+      this.trendChart = echarts.init(this.$refs.trendChartRef)
+    },
+    initDetailChart() {
+      if (this.detailChart || !this.$refs.waveChartRef) return
+      this.detailChart = echarts.init(this.$refs.waveChartRef)
     },
     refreshCharts() {
       this.$nextTick(() => {
@@ -378,12 +494,13 @@ export default {
       })
     },
     refreshGaugeCharts() {
+      if (!this.gaugeRefs) return
       this.channels.forEach(channel => {
-        const el = this.$refs[`gauge-${channel.id}`] || this.$refs[`gauge-${channel.id}`]
         const dom = this.$refs && this.$refs[`gauge-${channel.id}`]
-        const target = dom || this.gaugeCharts[channel.id]?.getDom?.()
+        const chart = this.gaugeCharts[channel.id]
+        const target = dom || (chart && chart.getDom ? chart.getDom() : null)
         const chartDom = Array.isArray(this.$refs[`gauge-${channel.id}`]) ? this.$refs[`gauge-${channel.id}`][0] : this.$refs[`gauge-${channel.id}`]
-        const realDom = chartDom || this.gaugeCharts[channel.id]?.getDom?.()
+        const realDom = chartDom || (chart && chart.getDom ? chart.getDom() : null)
         const holder = realDom || (this.gaugeRefs && this.gaugeRefs[channel.id])
         const box = this.gaugeRefs[channel.id]
         if (!box) return
@@ -398,18 +515,26 @@ export default {
       if (chart) chart.setOption(this.buildGaugeOption(channel.health), true)
     },
     refreshTrendChart() {
-      if (!this.chart) return
+      if (!this.trendChart) this.initTrendChart()
+      if (!this.trendChart) return
       const channel = this.channels[this.activeChannelId - 1]
       const live = this.liveData[this.activeChannelId] || { wave: [], fft: [] }
       if (this.chartMode === 'fft') {
-        this.chart.setOption(this.buildFftOption(channel, live.fft), true)
+        this.trendChart.setOption(this.buildFftOption(channel, live.fft), true)
       } else {
-        this.chart.setOption(this.buildTrendOption(channel, live.wave), true)
+        this.trendChart.setOption(this.buildTrendOption(channel, live.wave), true)
       }
     },
     refreshDetailChart() {
-      if (!this.chart) return
-      this.refreshTrendChart()
+      if (!this.detailChart) this.initDetailChart()
+      if (!this.detailChart) return
+      const channel = this.channels[this.activeChannelId - 1]
+      const live = this.liveData[this.activeChannelId] || { wave: [], fft: [] }
+      if (this.detailChartMode === 'fft') {
+        this.detailChart.setOption(this.buildFftOption(channel, live.fft), true)
+      } else {
+        this.detailChart.setOption(this.buildTrendOption(channel, live.wave), true)
+      }
     },
     buildGaugeOption(health) {
       return {
@@ -421,14 +546,14 @@ export default {
           max: 100,
           radius: '100%',
           progress: { show: true, width: 10, itemStyle: { color: health >= 85 ? '#67c23a' : health >= 60 ? '#e6a23c' : '#f56c6c' } },
-          axisLine: { lineStyle: { width: 10, color: [[1, 'rgba(0,255,255,0.15)']] } },
+          axisLine: { lineStyle: { width: 10, color: [[1, '#e5eaf1']] } },
           axisTick: { show: false },
           splitLine: { show: false },
           axisLabel: { show: false },
           pointer: { show: false },
           anchor: { show: false },
           title: { show: false },
-          detail: { valueAnimation: true, formatter: '{value}%', color: '#eaffff', fontSize: 14, offsetCenter: [0, '45%'] },
+          detail: { valueAnimation: true, formatter: '{value}%', color: '#1f2937', fontSize: 14, offsetCenter: [0, '45%'] },
           data: [{ value: health }]
         }]
       }
@@ -443,12 +568,12 @@ export default {
       return {
         backgroundColor: 'transparent',
         tooltip: { trigger: 'axis' },
-        legend: { data: ['振动速度', '温度'], textStyle: { color: '#d9e2e8' } },
+        legend: { data: ['振动速度', '温度'], textStyle: { color: '#475569' } },
         grid: { left: 52, right: 52, top: 42, bottom: 36 },
-        xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, axisLabel: { color: '#d9e2e8' } },
+        xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#64748b' } },
         yAxis: [
-          { type: 'value', name: 'mm/s', axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } }, axisLabel: { color: '#d9e2e8' } },
-          { type: 'value', name: '℃', axisLine: { lineStyle: { color: 'rgba(255,255,255,0.18)' } }, splitLine: { show: false }, axisLabel: { color: '#d9e2e8' } }
+          { type: 'value', name: 'mm/s', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#e5eaf1' } }, axisLabel: { color: '#64748b' } },
+          { type: 'value', name: '℃', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { show: false }, axisLabel: { color: '#64748b' } }
         ],
         series: [
           {
@@ -457,12 +582,12 @@ export default {
             smooth: true,
             showSymbol: false,
             data: vib,
-            lineStyle: { width: 2, color: '#00FFFF' },
-            itemStyle: { color: '#00FFFF' },
-            areaStyle: { color: 'rgba(0,255,255,0.14)' },
+            lineStyle: { width: 2, color: '#2563eb' },
+            itemStyle: { color: '#2563eb' },
+            areaStyle: { color: 'rgba(37,99,235,0.14)' },
             markLine: {
               symbol: 'none',
-              label: { color: '#fff' },
+              label: { color: '#475569' },
               lineStyle: { color: '#f5c542', type: 'dashed' },
               data: [{ yAxis: thresholdWarn, name: '预警线' }, { yAxis: thresholdAlarm, name: '报警线' }]
             }
@@ -474,11 +599,11 @@ export default {
             showSymbol: false,
             yAxisIndex: 1,
             data: temp,
-            lineStyle: { width: 2, color: '#7dd3fc' },
-            itemStyle: { color: '#7dd3fc' }
+            lineStyle: { width: 2, color: '#0ea5e9' },
+            itemStyle: { color: '#0ea5e9' }
           }
         ],
-        graphic: maxVibIndex >= 0 ? [{ type: 'text', left: 'center', top: 8, style: { text: `峰值点：${xData[maxVibIndex]} / ${vib[maxVibIndex].toFixed(2)}`, fill: '#eaffff', font: '12px sans-serif' } }] : []
+        graphic: maxVibIndex >= 0 ? [{ type: 'text', left: 'center', top: 8, style: { text: `峰值点：${xData[maxVibIndex]} / ${vib[maxVibIndex].toFixed(2)}`, fill: '#1f2937', font: '12px sans-serif' } }] : []
       }
     },
     buildFftOption(channel, fftSeries) {
@@ -488,8 +613,8 @@ export default {
         backgroundColor: 'transparent',
         tooltip: { trigger: 'axis' },
         grid: { left: 52, right: 24, top: 42, bottom: 36 },
-        xAxis: { type: 'category', name: 'Hz', data: points.map(item => item.freq), axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, axisLabel: { color: '#d9e2e8' } },
-        yAxis: { type: 'value', name: '幅值', axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } }, axisLabel: { color: '#d9e2e8' } },
+        xAxis: { type: 'category', name: 'Hz', data: points.map(item => item.freq), axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#64748b' } },
+        yAxis: { type: 'value', name: '幅值', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#e5eaf1' } }, axisLabel: { color: '#64748b' } },
         series: [{
           name: 'FFT',
           type: 'bar',
@@ -548,19 +673,30 @@ export default {
       return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
     },
     closeWebSocket() {
+      if (this.unsubscribeWs) {
+        this.unsubscribeWs()
+        this.unsubscribeWs = null
+      }
+      this.stopInferencePolling()
+      inferenceWebSocket.close()
       if (this.ws) {
         this.ws.close()
         this.ws = null
       }
     },
     disposeChart() {
-      if (this.chart) {
-        this.chart.dispose()
-        this.chart = null
+      if (this.trendChart) {
+        this.trendChart.dispose()
+        this.trendChart = null
+      }
+      if (this.detailChart) {
+        this.detailChart.dispose()
+        this.detailChart = null
       }
     },
     handleResize() {
-      if (this.chart) this.chart.resize()
+      if (this.trendChart) this.trendChart.resize()
+      if (this.detailChart) this.detailChart.resize()
       Object.values(this.gaugeCharts).forEach(chart => chart && chart.resize())
     }
   }
@@ -620,6 +756,275 @@ export default {
 :deep(.el-table::before) { background-color: rgba(0,255,255,0.08); }
 :deep(.el-radio-button__inner) { background: #2b3340; color: #eaf0f6; border-color: rgba(255,255,255,0.12); }
 :deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) { background: #409eff; border-color: #409eff; }
+
+/* 浅色工业生产主题覆盖 */
+.vibration-page { background: linear-gradient(180deg, #fbfcfe 0%, #f3f6f8 100%); color: #1f2937; }
+.channel-card,
+.trend-panel,
+.alarm-panel,
+.log-card,
+.wave-chart {
+  background: #ffffff;
+  border-color: #d7dee8;
+  color: #1f2937;
+  box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
+}
+.channel-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 10px 22px rgba(31, 41, 55, 0.12);
+}
+.channel-card.abnormal { border-color: rgba(220, 38, 38, 0.48); }
+.channel-card.warning { border-color: rgba(217, 119, 6, 0.48); }
+.metric-main,
+.main-metric,
+.detail-row,
+.sub-item,
+.health-box {
+  background: #f8fafc;
+  border-color: #e5eaf1;
+  color: #344054;
+}
+.main-metric--temp { background: #eff6ff; }
+.metric-label,
+.health-label { color: #475569; }
+.metric-value,
+.metric-value.big,
+.detail-row strong,
+.sub-item strong,
+.health-desc,
+.foot-time,
+.drawer-title,
+.trend-title,
+.alarm-panel__head { color: #1f2937; }
+.metric-unit,
+.channel-footer,
+.trend-subtitle,
+.drawer-subtitle,
+.drawer-chart-tip { color: #64748b; }
+.drawer-shell {
+  background: linear-gradient(180deg, #ffffff 0%, #f3f6f8 100%);
+  color: #1f2937;
+}
+.drawer-topbar { border-bottom-color: #d7dee8; }
+:deep(.vibration-drawer) { background: #f3f6f8; }
+:deep(.el-table) {
+  background: #ffffff;
+  color: #1f2937;
+}
+:deep(.el-table th) {
+  background: #eef3f8 !important;
+  color: #1f2937 !important;
+}
+:deep(.el-table tr),
+:deep(.el-table td) {
+  background: #ffffff !important;
+  color: #344054 !important;
+}
+:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) { background: #f8fafc !important; }
+:deep(.el-table::before) { background-color: #d7dee8; }
+:deep(.el-radio-button__inner) {
+  background: #ffffff;
+  color: #344054;
+  border-color: #cbd5e1;
+}
+:deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: calc(100vh - 104px);
+}
+.page-toolbar,
+.zone {
+  background: #ffffff;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+}
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+.page-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1f2937;
+}
+.page-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.analysis-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 380px;
+  grid-template-rows: auto minmax(360px, 1fr);
+  grid-template-areas:
+    "selector config execution"
+    "selector chart event";
+  gap: 12px;
+  min-height: 680px;
+}
+.zone {
+  min-width: 0;
+  padding: 12px;
+}
+.zone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-weight: 700;
+  color: #1f2937;
+}
+.selector-zone { grid-area: selector; }
+.config-zone { grid-area: config; }
+.execution-zone { grid-area: execution; }
+.chart-zone { grid-area: chart; }
+.event-zone {
+  grid-area: event;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.channel-list {
+  display: grid;
+  gap: 8px;
+}
+.channel-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  min-height: 72px;
+  padding: 10px;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #1f2937;
+  text-align: left;
+  cursor: pointer;
+}
+.channel-row.active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+.channel-row.warning { border-color: rgba(217, 119, 6, 0.46); }
+.channel-row.abnormal { border-color: rgba(220, 38, 38, 0.46); }
+.channel-row strong {
+  font-size: 20px;
+  line-height: 1.1;
+}
+.channel-row small {
+  grid-column: 1 / -1;
+  color: #64748b;
+}
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.config-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.config-item span {
+  font-size: 12px;
+  color: #64748b;
+}
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.kpi-item {
+  padding: 12px;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.kpi-item span,
+.kpi-item small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+.kpi-item strong {
+  display: block;
+  margin: 6px 0 2px;
+  font-size: 24px;
+  line-height: 1.1;
+  color: #1f2937;
+}
+.primary-chart {
+  width: 100%;
+  height: 420px;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.drawer-grid {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr) 420px;
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+  flex: 1;
+}
+.drawer-metric-zone,
+.drawer-history-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.65; } }
-@media (max-width: 1200px) { .card-body { grid-template-columns: 1fr; } .detail-zone { grid-template-columns: 1fr; } .trend-header, .drawer-topbar { flex-direction: column; align-items: flex-start; } .wave-chart { height: 260px; } }
+@media (max-width: 1200px) {
+  .page-toolbar,
+  .drawer-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .analysis-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "selector"
+      "config"
+      "execution"
+      "chart"
+      "event";
+  }
+  .drawer-grid {
+    grid-template-columns: 1fr;
+  }
+  .config-grid,
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .card-body { grid-template-columns: 1fr; }
+  .detail-zone { grid-template-columns: 1fr; }
+  .primary-chart,
+  .wave-chart { height: 320px; }
+}
+@media (max-width: 768px) {
+  .config-grid,
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

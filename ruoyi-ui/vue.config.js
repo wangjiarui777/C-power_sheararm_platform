@@ -19,7 +19,7 @@ const port = process.env.port || process.env.npm_config_port || 80 // 端口
 module.exports = {
   // 部署生产环境和开发环境下的URL。
   // 默认情况下，Vue CLI 会假设你的应用是被部署在一个域名的根路径上
-  // 例如 https://www.ruoyi.vip/。如果应用被部署在一个子路径上，你就需要用这个选项指定这个子路径。例如，如果你的应用被部署在 https://www.ruoyi.vip/admin/，则设置 baseUrl 为 /admin/。
+  // 例如 https://www.c-power.vip/。如果应用被部署在一个子路径上，你就需要用这个选项指定这个子路径。例如，如果你的应用被部署在 https://www.c-power.vip/admin/，则设置 baseUrl 为 /admin/。
   publicPath: process.env.NODE_ENV === "production" ? "/" : "/",
   // 在npm run build 或 yarn build 时 ，生成文件的目录名称（要和baseUrl的生产环境路径一致）（默认dist）
   outputDir: 'dist',
@@ -27,7 +27,7 @@ module.exports = {
   assetsDir: 'static',
   // 如果你不需要生产环境的 source map，可以将其设置为 false 以加速生产环境构建。
   productionSourceMap: false,
-  transpileDependencies: ['quill'],
+  transpileDependencies: ['quill', 'three'],
   // webpack-dev-server 相关配置
   devServer: {
     host: '0.0.0.0',
@@ -65,7 +65,7 @@ module.exports = {
       }
     },
     plugins: [
-      // http://doc.ruoyi.vip/ruoyi-vue/other/faq.html#使用gzip解压缩静态文件
+      // 使用gzip解压缩静态文件
       new CompressionPlugin({
         cache: false,                                  // 不启用文件缓存
         test: /\.(js|css|html|jpe?g|png|gif|svg)?$/i,  // 压缩文件格式
@@ -79,6 +79,23 @@ module.exports = {
   chainWebpack(config) {
     config.plugins.delete('preload') // TODO: need test
     config.plugins.delete('prefetch') // TODO: need test
+
+    // 强制 babel 转译 three.js（Webpack 4 的 acorn 解析器不支持 ES2022 static 类块）
+    config.module
+      .rule('js')
+      .exclude
+        .clear()
+        .add(filepath => {
+          if (/\.(m?jsx?|cjs)$/.test(filepath)) {
+            // 始终转译 node_modules/three 目录下的所有文件
+            if (/node_modules[\\/]three/.test(filepath)) return false
+            // 始终转译 transpileDependencies 中的包
+            if (/node_modules[\\/]quill/.test(filepath)) return false
+            // 不转译其他 node_modules
+            if (/node_modules/.test(filepath)) return true
+          }
+          return false
+        })
 
     // set svg-sprite-loader
     config.module

@@ -3,7 +3,7 @@ import { Notification, MessageBox, Message, Loading } from 'element-ui'
 import store from '@/store'
 import { getToken } from '@/utils/auth'
 import errorCode from '@/utils/errorCode'
-import { tansParams, blobValidate } from "@/utils/ruoyi"
+import { tansParams, blobValidate } from "@/utils/chuangli"
 import cache from '@/plugins/cache'
 import { saveAs } from 'file-saver'
 
@@ -96,7 +96,6 @@ service.interceptors.response.use(res => {
     }
       return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
     } else if (code === 500) {
-      Message({ message: msg, type: 'error' })
       return Promise.reject(new Error(msg))
     } else if (code === 601) {
       Message({ message: msg, type: 'warning' })
@@ -116,7 +115,12 @@ service.interceptors.response.use(res => {
     } else if (message.includes("timeout")) {
       message = "系统接口请求超时"
     } else if (message.includes("Request failed with status code")) {
-      message = "系统接口" + message.slice(-3) + "异常"
+      const statusCode = message.slice(-3)
+      if (statusCode !== '500') {
+        message = "系统接口" + statusCode + "异常"
+      } else {
+        return Promise.reject(error)
+      }
     }
     Message({ message: message, type: 'error', duration: 5 * 1000 })
     return Promise.reject(error)

@@ -82,25 +82,26 @@ export const constantRoutes = [
     component: Layout,
     redirect: '/monitoring-center/index',
     name: 'MonitoringCenter',
-    meta: { title: '监测中心', icon: 'chart' },
+    alwaysShow: true,
+    meta: { title: '监测与数据', icon: 'chart' },
     children: [
       {
         path: 'index',
         component: () => import('@/views/monitoring-center/index'),
         name: 'MonitoringCenterIndex',
-        meta: { title: '监测中心', icon: 'chart' }
+        meta: { title: '实时监测', icon: 'dashboard', affix: true }
       },
       {
         path: 'vibration',
         component: () => import('@/views/system/vibration/index'),
         name: 'VibrationData',
-        meta: { title: '振动数据', icon: 'chart' }
+        meta: { title: '振动分析', icon: 'chart' }
       },
       {
         path: 'temperature',
         component: () => import('@/views/system/temperature/index'),
         name: 'TemperatureData',
-        meta: { title: '温度数据', icon: 'chart' }
+        meta: { title: '温度分析', icon: 'chart' }
       },
       {
         path: 'multi-channel',
@@ -116,13 +117,19 @@ export const constantRoutes = [
     component: Layout,
     redirect: '/analysis-toolkit/bearing-diagnosis',
     name: 'AnalysisToolkit',
-    meta: { title: '轴承诊断分析', icon: 'chart' },
+    meta: { title: '诊断分析', icon: 'chart' },
     children: [
       {
         path: 'bearing-diagnosis',
         component: () => import('@/views/monitor/diagnosis/index'),
         name: 'BearingDiagnosis',
-        meta: { title: '轴承诊断分析', icon: 'chart' }
+        meta: { title: '诊断分析', icon: 'chart' }
+      },
+      {
+        path: 'python-sidecar',
+        component: () => import('@/views/system/vibration/analysis'),
+        name: 'PythonSidecarAnalysis',
+        meta: { title: 'Python Sidecar 分析', icon: 'chart' }
       }
     ]
   },
@@ -136,7 +143,7 @@ export const constantRoutes = [
         path: 'index',
         component: () => import('@/views/monitor/diagnosis/index'),
         name: 'MonitorBearingDiagnosis',
-        meta: { title: '轴承诊断分析', icon: 'chart' }
+        meta: { title: '诊断分析', icon: 'chart' }
       }
     ]
   },

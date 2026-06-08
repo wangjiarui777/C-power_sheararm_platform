@@ -1,5 +1,5 @@
--- �����豸���¶ȼ��ģ��
--- MySQL �����ű�
+-- 锟斤拷锟斤拷锟借备锟斤拷锟铰度硷拷锟侥ｏ拷锟�
+-- MySQL 锟斤拷锟斤拷锟脚憋拷
 
 DROP TABLE IF EXISTS sensor_feature;
 CREATE TABLE sensor_feature (
@@ -13,7 +13,7 @@ CREATE TABLE sensor_feature (
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_device_time (device_code, sample_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='�������ֵ��';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='锟斤拷锟斤拷锟斤拷锟街碉拷锟�';
 
 DROP TABLE IF EXISTS sensor_alarm;
 CREATE TABLE sensor_alarm (
@@ -24,8 +24,8 @@ CREATE TABLE sensor_alarm (
     sample_time DATETIME NOT NULL,
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_alarm_device_time (device_code, sample_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='��ⱨ����¼��';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='锟斤拷獗拷锟斤拷锟铰硷拷锟�';
 
--- TDengine ����ṹ��ʾ�⣩
+-- TDengine 锟斤拷锟斤拷峁癸拷锟绞撅拷猓�
 -- CREATE STABLE sensor_raw_wave (ts TIMESTAMP, value DOUBLE, point_index INT, sample_rate INT) TAGS (device_code NCHAR(64));
 -- CREATE STABLE sensor_fft_point (ts TIMESTAMP, frequency DOUBLE, amplitude DOUBLE, point_index INT) TAGS (device_code NCHAR(64));

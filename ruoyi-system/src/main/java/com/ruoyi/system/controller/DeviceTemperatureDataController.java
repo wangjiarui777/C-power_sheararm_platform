@@ -3,6 +3,7 @@ package com.ruoyi.system.controller;
 import java.util.List;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +21,7 @@ import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.system.domain.DeviceTemperatureData;
+import com.ruoyi.system.event.DataUploadEvent;
 import com.ruoyi.system.service.IDeviceTemperatureDataService;
 
 @RestController
@@ -28,6 +30,9 @@ public class DeviceTemperatureDataController extends BaseController
 {
     @Autowired
     private IDeviceTemperatureDataService deviceTemperatureDataService;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     @PreAuthorize("@ss.hasPermi('system:temperature:list')")
     @GetMapping("/list")
@@ -51,7 +56,18 @@ public class DeviceTemperatureDataController extends BaseController
     public AjaxResult upload(@RequestBody DeviceTemperatureData deviceTemperatureData)
     {
         deviceTemperatureData.setCreateBy("collector");
-        return toAjax(deviceTemperatureDataService.insertDeviceTemperatureData(deviceTemperatureData));
+        int result = deviceTemperatureDataService.insertDeviceTemperatureData(deviceTemperatureData);
+        if (result > 0)
+        {
+            eventPublisher.publishEvent(new DataUploadEvent(
+                    deviceTemperatureData.getDeviceCode(),
+                    "temperature",
+                    deviceTemperatureData.getTemperatureValue() != null
+                            ? deviceTemperatureData.getTemperatureValue().doubleValue()
+                            : null,
+                    deviceTemperatureData.getCollectionTime()));
+        }
+        return toAjax(result);
     }
 
     @PreAuthorize("@ss.hasPermi('system:temperature:export')")

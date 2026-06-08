@@ -17,7 +17,7 @@
     <div class="sparkline-strip">
       <div v-for="item in channels" :key="`spark-${item.channelId}`" class="spark-card" @click="toggleFocus(item.channelId)">
         <div class="spark-card__head">
-          <span>{{ item.title }}</span>
+          <span>{{ item.channelId === 1 && inferenceData ? (inferenceData.label || inferenceData.diagnosisResult || item.title) : item.title }}</span>
           <span :class="['spark-state', getHealthClass(item.channelId)]">{{ getHealthText(item.channelId) }}</span>
         </div>
         <div class="spark-card__value">{{ getLatestValue(item.channelId) }}</div>
@@ -47,7 +47,7 @@
         @click="toggleFocus(item.channelId)"
       >
         <div class="card-title">
-          <span>{{ item.title }}</span>
+          <span>{{ item.channelId === 1 && inferenceData ? (inferenceData.label || inferenceData.diagnosisResult || item.title) + ' · 推理诊断' : item.title }}</span>
           <span class="card-title__hint">点击聚焦</span>
         </div>
 
@@ -59,7 +59,11 @@
               <div class="metric-unit">mm/s</div>
             </div>
             <div class="metric-sub">
-              <div class="metric-sub__item">
+              <div class="metric-sub__item" v-if="item.channelId === 1 && inferenceData">
+                <span class="metric-sub__label">置信度</span>
+                <span class="metric-sub__value">{{ inferenceData.confidence != null ? Number(inferenceData.confidence).toFixed(1) + '%' : '--' }}</span>
+              </div>
+              <div class="metric-sub__item" v-else>
                 <span class="metric-sub__label">Temp</span>
                 <span class="metric-sub__value">{{ formatMetric(getChannelMetrics(item.channelId).temp) }} <small>°C</small></span>
               </div>
@@ -80,7 +84,11 @@
                 <span>Peak</span>
                 <strong>{{ formatMetric(getChannelMetrics(item.channelId).peak) }}</strong>
               </div>
-              <div class="detail-row">
+              <div class="detail-row" v-if="item.channelId === 1 && inferenceData">
+                <span>告警等级</span>
+                <strong>{{ inferenceData.alarmLevel || inferenceData.riskLevel || '--' }}</strong>
+              </div>
+              <div class="detail-row" v-else>
                 <span>频率峰值</span>
                 <strong>{{ formatMetric(getChannelMetrics(item.channelId).freqPeak) }}</strong>
               </div>
@@ -119,7 +127,9 @@ export default {
       syncZooming: false,
       ws: null,
       realtimeBuffers: {},
-      maxRealtimePoints: 2000
+      maxRealtimePoints: 2000,
+      inferenceData: null,
+      inferenceWs: null
     }
   },
   computed: {
@@ -132,7 +142,8 @@ export default {
     channelStatusMap() {
       const map = {}
       this.channels.forEach(item => {
-        const series = this.realtimeBuffers[item.channelId]?.vibration || this.getChannelSeries(this.vibrationData, item.channelId)
+        const buffer = this.realtimeBuffers[item.channelId]
+        const series = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, item.channelId)
         const latest = series.length ? series[series.length - 1].value : null
         map[item.channelId] = this.calcHealth(latest)
       })
@@ -146,6 +157,7 @@ export default {
   mounted() {
     this.initRealtimeBuffers()
     this.connectWebSocket()
+    this.connectInferenceWs()
     this.$nextTick(() => {
       this.initCharts()
       this.renderCharts()
@@ -155,6 +167,7 @@ export default {
   beforeDestroy() {
     window.removeEventListener('resize', this.resizeCharts)
     this.closeWebSocket()
+    this.closeInferenceWs()
     Object.values(this.chartInstances).forEach(chart => chart && chart.dispose())
   },
   methods: {
@@ -170,20 +183,50 @@ export default {
       return 'success'
     },
     getHealthClass(channelId) {
+      if (channelId === 1 && this.inferenceData) {
+        const level = this.inferenceData.alarmLevel || ''
+        if (level === 'normal') return 'success'
+        if (level === 'alarm') return 'danger'
+        return 'warning'
+      }
       return this.channelStatusMap[channelId] || 'warning'
     },
     getHealthText(channelId) {
+      if (channelId === 1 && this.inferenceData) {
+        const level = this.inferenceData.alarmLevel || ''
+        if (level === 'normal') return '正常'
+        if (level === 'alarm') return '告警'
+        return '预警'
+      }
       const cls = this.getHealthClass(channelId)
       return cls === 'success' ? '正常' : cls === 'warning' ? '预警' : '告警'
     },
     getLatestValue(channelId) {
-      const series = this.realtimeBuffers[channelId]?.vibration || this.getChannelSeries(this.vibrationData, channelId)
+      if (channelId === 1 && this.inferenceData) {
+        const rms = this.inferenceData.rms == null ? this.inferenceData.latestRms : this.inferenceData.rms
+        return rms == null ? '--' : Number(rms).toFixed(2)
+      }
+      const buffer = this.realtimeBuffers[channelId]
+      const series = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, channelId)
       const latest = series.length ? series[series.length - 1].value : null
       return latest == null ? '--' : Number(latest).toFixed(2)
     },
     getChannelMetrics(channelId) {
-      const vibSeries = this.realtimeBuffers[channelId]?.vibration || this.getChannelSeries(this.vibrationData, channelId)
-      const tempSeries = this.realtimeBuffers[channelId]?.temperature || this.getChannelSeries(this.temperatureData, channelId)
+      if (channelId === 1 && this.inferenceData) {
+        const d = this.inferenceData
+        const rms = d.rms == null ? (d.latestRms == null ? null : d.latestRms) : d.rms
+        const peak = d.peak == null ? (d.latestPeak == null ? null : d.latestPeak) : d.peak
+        return {
+          rms,
+          temp: null,
+          peakToPeak: peak == null ? null : peak * 2,
+          peak,
+          freqPeak: null
+        }
+      }
+      const buffer = this.realtimeBuffers[channelId]
+      const vibSeries = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, channelId)
+      const tempSeries = (buffer && buffer.temperature) || this.getChannelSeries(this.temperatureData, channelId)
       const latestVib = vibSeries.length ? Number(vibSeries[vibSeries.length - 1].value) : null
       const latestTemp = tempSeries.length ? Number(tempSeries[tempSeries.length - 1].value) : null
       return {
@@ -195,6 +238,9 @@ export default {
       }
     },
     getHealthPercent(channelId) {
+      if (channelId === 1 && this.inferenceData && this.inferenceData.healthIndex != null) {
+        return Math.round(Number(this.inferenceData.healthIndex))
+      }
       const { rms, temp } = this.getChannelMetrics(channelId)
       if (rms == null && temp == null) return 0
       const rmsScore = rms == null ? 0.5 : Math.max(0, Math.min(1, 1 - rms / 8))
@@ -228,6 +274,66 @@ export default {
         this.ws.close()
         this.ws = null
       }
+    },
+    getInferenceWsUrl() {
+      const base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5001'
+      return base.replace(/^http/, 'ws') + '/ws'
+    },
+    connectInferenceWs() {
+      this.closeInferenceWs()
+      try {
+        const url = this.getInferenceWsUrl()
+        this.inferenceWs = new WebSocket(url)
+        this.inferenceWs.onopen = () => {}
+        this.inferenceWs.onmessage = (evt) => {
+          try {
+            const msg = JSON.parse(evt.data)
+            this.handleInferenceMessage(msg)
+          } catch (e) { /* ignore parse errors */ }
+        }
+        this.inferenceWs.onerror = () => {}
+        this.inferenceWs.onclose = () => {
+          this.inferenceWs = null
+          setTimeout(() => { this.connectInferenceWs() }, 5000)
+        }
+      } catch (e) { /* ws not available */ }
+    },
+    closeInferenceWs() {
+      if (this.inferenceWs) {
+        this.inferenceWs.onclose = null
+        this.inferenceWs.close()
+        this.inferenceWs = null
+      }
+    },
+    handleInferenceMessage(msg) {
+      if (!msg || msg.type !== 'auto_analysis' || !msg.success || !msg.data) return
+      const data = msg.data
+      this.inferenceData = data
+
+      const waveform = data.time_data || data.waveform || []
+      const timeAxis = data.time_axis || []
+      const sampleRate = data.sampleRate || data.sample_rate || 5120
+      if (waveform.length && !this.realtimeBuffers[1]) {
+        this.$set(this.realtimeBuffers, 1, { vibration: [], temperature: [] })
+      }
+      if (waveform.length) {
+        const points = []
+        const len = Math.min(timeAxis.length, waveform.length)
+        for (let i = 0; i < len; i++) {
+          points.push({
+            time: new Date(Date.now() - (len - i) * (1 / sampleRate) * 1000).toISOString(),
+            value: Number(waveform[i])
+          })
+        }
+        this.realtimeBuffers[1].vibration = this.lttbDownsample(points, this.maxRealtimePoints)
+      }
+      this.$nextTick(() => {
+        this.updateSparkline(1)
+        this.updateGauge(1)
+        if (this.visibleChannels.some(c => c.channelId === 1)) {
+          this.updateChart(1)
+        }
+      })
     },
     handleRealtimeMessage(msg) {
       if (!msg || msg.channelId == null) return
@@ -317,7 +423,8 @@ export default {
     updateSparkline(channelId) {
       const chart = this.sparkInstances[channelId]
       if (!chart) return
-      const vibSource = this.realtimeBuffers[channelId]?.vibration || this.getChannelSeries(this.vibrationData, channelId)
+      const buffer = this.realtimeBuffers[channelId]
+      const vibSource = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, channelId)
       const vib = this.lttbDownsample(vibSource, 36)
       chart.setOption(this.buildSparklineOption(vib), true)
     },
@@ -332,8 +439,9 @@ export default {
         this.initCharts()
         const chart = this.chartInstances[channelId]
         if (!chart) return
-        const vibSource = this.realtimeBuffers[channelId]?.vibration || this.getChannelSeries(this.vibrationData, channelId)
-        const tempSource = this.realtimeBuffers[channelId]?.temperature || this.getChannelSeries(this.temperatureData, channelId)
+        const buffer = this.realtimeBuffers[channelId]
+        const vibSource = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, channelId)
+        const tempSource = (buffer && buffer.temperature) || this.getChannelSeries(this.temperatureData, channelId)
         const vib = this.lttbDownsample(vibSource, 1200)
         const temp = this.lttbDownsample(tempSource, 1200)
         chart.setOption(this.buildOption(channelId, vib, temp), true)

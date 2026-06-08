@@ -3,13 +3,55 @@
 
 .gradle
 /build/
+**/build/
 !gradle/wrapper/gradle-wrapper.jar
 
 target/
+**/target/
 !.mvn/wrapper/maven-wrapper.jar
 
 ######################################################################
-# IDE
+# Frontend / Node
+
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+**/coverage/
+.npm/
+.pnpm-store/
+.yarn/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+vite.svg
+*.tsbuildinfo
+
+######################################################################
+# Python
+
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.env.*
+
+######################################################################
+# IDE / Editor
+
+### VS Code ###
+.vscode/
+.history/
 
 ### STS ###
 .apt_generated
@@ -20,27 +62,47 @@ target/
 .springBeans
 
 ### IntelliJ IDEA ###
-.idea
+.idea/
 *.iws
 *.iml
 *.ipr
+out/
 
 ### JRebel ###
 rebel.xml
 
 ### NetBeans ###
 nbproject/private/
-build/*
 nbbuild/
 dist/
-nbdist/
+bdist/
 .nb-gradle/
 
 ######################################################################
-# Others
+# OS / Logs / Temp
+
+.DS_Store
+Thumbs.db
 *.log
 *.xml.versionsBackup
 *.swp
+*.tmp
+*.temp
+
+######################################################################
+# Data & Model files
+
+*.mat
+**/*.mat
+*.pth
+*.ckpt
+models/
+outputs/
+target_unlabeled/
+get/got/
+
+######################################################################
+# Generated files kept intentionally by the project
 
 !*/build/*.java
 !*/build/*.html

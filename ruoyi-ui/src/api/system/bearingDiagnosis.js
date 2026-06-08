@@ -1,49 +1,56 @@
 import request from '@/utils/request'
 
-export function listBearingDiagnosisHistory(query) {
+const inferenceBaseURL = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5001'
+
+export function getInferenceHealth() {
   return request({
-    url: '/sensor/vibration/batch/page',
-    method: 'get',
-    params: query
+    baseURL: inferenceBaseURL,
+    url: '/health',
+    method: 'get'
   })
 }
 
-export function getBearingDiagnosisFftData(params) {
+export function listMatFiles() {
   return request({
-    url: '/sensor/vibration/analysis/tdengine',
-    method: 'get',
-    params
+    baseURL: inferenceBaseURL,
+    url: '/mat-files',
+    method: 'get'
   })
 }
 
-export function getLatestBearingDiagnosis(params) {
+export function analyzeLatestFile(fileName) {
   return request({
-    url: '/sensor/vibration/diagnosis/latest',
+    baseURL: inferenceBaseURL,
+    url: '/analyze',
     method: 'get',
-    params
+    params: Object.assign({ _t: Date.now() }, fileName ? { file_name: fileName } : {})
   })
 }
 
-export function listBearingDevices(params) {
+export function uploadDiagnosisToInferenceService(formData) {
   return request({
-    url: '/sensor/vibration/device/list',
-    method: 'get',
-    params
+    baseURL: inferenceBaseURL,
+    url: '/analyze/upload',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 
-export function getBearingDiagnosisTrend(params) {
+export function inferWithFilePath(data) {
   return request({
-    url: '/sensor/vibration/diagnosis/trend',
-    method: 'get',
-    params
-  })
-}
-
-export function analyzeReceiverFile(data) {
-  return request({
-    url: '/sensor/vibration/receiver/analyze',
+    baseURL: inferenceBaseURL,
+    url: '/infer',
     method: 'post',
     data
+  })
+}
+
+export function fetchHistory(params) {
+  return request({
+    baseURL: inferenceBaseURL,
+    url: '/history',
+    method: 'get',
+    params
   })
 }

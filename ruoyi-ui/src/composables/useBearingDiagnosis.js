@@ -81,7 +81,10 @@ export function useBearingDiagnosis(options = {}) {
     pendingBatchCount.value = 0
   }
 
-  const latestValue = computed(() => seriesData.value[seriesData.value.length - 1] ?? 0)
+  const latestValue = computed(() => {
+    const latest = seriesData.value[seriesData.value.length - 1]
+    return latest == null ? 0 : latest
+  })
 
   onBeforeUnmount(() => stop())
 

@@ -105,10 +105,10 @@ export default {
     },
     chromeVars() {
       if (this.tagsViewStyle !== 'chrome') return {}
-      const primary = this.theme || '#409EFF'
+      const primary = this.theme || '#57d1ff'
       return {
-        '--chrome-tab-active-bg': this.mixHexWithWhite(primary, 0.15),
-        '--chrome-tab-text-active': primary,
+        '--chrome-tab-active-bg': this.mixHexWithWhite(primary, 0.24),
+        '--chrome-tab-text-active': '#0f172a',
         '--chrome-wing-r': '14px'
       }
     }
@@ -394,18 +394,18 @@ $tags-bar-height: 34px;
 .tags-view-container {
   height: $tags-bar-height;
   width: 100%;
-  background: #fff;
-  border-bottom: 1px solid #d8dce5;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%);
+  border-bottom: 1px solid #d7dee8;
   display: flex;
   align-items: center;
   overflow: hidden;
 
   $btn-width: 28px;
-  $btn-color: #71717a;
-  $btn-hover-bg: #f0f2f5;
-  $btn-hover-color: #303133;
-  $btn-disabled-color: #c0c4cc;
-  $divider: 1px solid #d8dce5;
+  $btn-color: #64748b;
+  $btn-hover-bg: #e8eef6;
+  $btn-hover-color: #1f2937;
+  $btn-disabled-color: #b8c3d4;
+  $divider: 1px solid #d7dee8;
 
   .tags-nav-btn {
     flex-shrink: 0;
@@ -445,9 +445,9 @@ $tags-bar-height: 34px;
       cursor: pointer;
       height: 26px;
       line-height: 26px;
-      border: 1px solid #d8dce5;
-      color: #495060;
-      background: #fff;
+      border: 1px solid #d7dee8;
+      color: #475569;
+      background: #ffffff;
       padding: 0 8px;
       font-size: 12px;
       margin-left: 5px;
@@ -463,7 +463,7 @@ $tags-bar-height: 34px;
     border-color: #42b983;
     &::before {
       content: '';
-      background: #fff;
+      background: #ffffff;
       display: inline-block;
       width: 8px;
       height: 8px;
@@ -508,7 +508,7 @@ $tags-bar-height: 34px;
 
   .contextmenu {
     margin: 0;
-    background: #fff;
+    background: #ffffff;
     z-index: 3000;
     position: fixed;
     list-style-type: none;
@@ -516,22 +516,23 @@ $tags-bar-height: 34px;
     border-radius: 4px;
     font-size: 12px;
     font-weight: 400;
-    color: #333;
-    box-shadow: 2px 2px 3px 0 rgba(0, 0, 0, .3);
+    color: #1f2937;
+    border: 1px solid #d7dee8;
+    box-shadow: 0 8px 20px rgba(31, 41, 55, .12);
 
     li {
       margin: 0;
       padding: 7px 16px;
       cursor: pointer;
       &:hover {
-        background: #eee;
+        background: #eef6ff;
       }
     }
   }
   &.tags-view-container--chrome {
-    --chrome-strip-bg: #ffffff;
-    --chrome-strip-border: #e4e7ed;
-    --chrome-tab-text: #606266;
+    --chrome-strip-bg: #eef2f6;
+    --chrome-strip-border: #d7dee8;
+    --chrome-tab-text: #475569;
 
     overflow: visible;
     background: var(--chrome-strip-bg);
@@ -607,9 +608,9 @@ $tags-bar-height: 34px;
         }
 
         &:hover:not(.active) {
-          background: #f5f7fa !important;
+          background: #e8eef6 !important;
           border-radius: 6px 6px 0 0;
-          color: #303133 !important;
+          color: #1f2937 !important;
         }
 
         &.active {

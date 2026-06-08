@@ -2,49 +2,38 @@ import request from '@/utils/request'
 import axios from 'axios'
 import { listBearingDiagnosisHistory, getBearingDiagnosisFftData } from './bearingDiagnosis'
 
-/**
- * @deprecated Use `@/api/system/bearingDiagnosis` instead.
- * This file is kept as a backward-compatible shim during migration.
- */
-export function mockVibrationAnalysis(data) {
-  return request({
-    url: '/sensor/vibration/analysis/mock',
-    method: 'post',
-    data
-  })
-}
+const SIDE_CAR_BASE_URL = process.env.VUE_APP_VIBRATION_SIDECAR_URL || 'http://127.0.0.1:5001'
 
-/**
- * @deprecated Use `@/api/system/bearingDiagnosis` instead.
- */
-export function analyzeVibration(data) {
-  return request({
-    url: '/sensor/vibration/analysis/analyze',
-    method: 'post',
-    data
-  })
-}
-
-/**
- * Call Python sidecar service directly for .mat diagnosis.
- * @param {string} fileName file name without extension
- */
 export function fetchMatFiles() {
   return axios({
-    url: 'http://127.0.0.1:5000/mat-files',
+    url: `${SIDE_CAR_BASE_URL}/mat-files`,
     method: 'get'
   })
 }
 
 export function analyzeVibrationFromSidecar(fileName) {
   return axios({
-    url: 'http://127.0.0.1:5000/analyze',
+    url: `${SIDE_CAR_BASE_URL}/analyze`,
     method: 'get',
-    params: {
-      file_name: fileName
-    }
+    params: { file_name: fileName }
   })
 }
+
+/**
+ * Analyze an uploaded `.mat` file directly through the Python sidecar.
+ * @param {File} file
+ */
+export function analyzeUploadedMatFromSidecar(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return axios({
+    url: `${SIDE_CAR_BASE_URL}/analyze/upload`,
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 
 /**
  * @deprecated Use `@/api/system/bearingDiagnosis` instead.
