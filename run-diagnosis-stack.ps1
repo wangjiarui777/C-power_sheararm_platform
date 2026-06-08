@@ -71,7 +71,7 @@ foreach ($tool in @('java', 'mvn', 'node', 'npm', 'python')) {
 Write-Host '[2/5] Releasing occupied ports if needed...' -ForegroundColor Cyan
 Ensure-PortFree -Port 8080
 Ensure-PortFree -Port 9528
-Ensure-PortFree -Port 5000
+Ensure-PortFree -Port 5001
 
 Write-Host '[3/5] Starting backend (ruoyi-admin)...' -ForegroundColor Cyan
 Start-ProcessWindow -Name 'Backend' -WorkingDirectory $PSScriptRoot -Command 'cmd /c "mvn -pl ruoyi-admin -am spring-boot:run -Dspring-boot.run.profiles=dev"'

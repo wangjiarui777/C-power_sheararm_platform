@@ -18,12 +18,12 @@ export function listMatFiles() {
   })
 }
 
-export function analyzeLatestFile(fileName) {
+export function analyzeLatestFile(fileName, modelType = 'gear') {
   return request({
     baseURL: inferenceBaseURL,
     url: '/analyze',
     method: 'get',
-    params: Object.assign({ _t: Date.now() }, fileName ? { file_name: fileName } : {})
+    params: Object.assign({ _t: Date.now(), model_type: modelType }, fileName ? { file_name: fileName } : {})
   })
 }
 
@@ -50,6 +50,24 @@ export function fetchHistory(params) {
   return request({
     baseURL: inferenceBaseURL,
     url: '/history',
+    method: 'get',
+    params
+  })
+}
+
+/**
+ * @deprecated Compatibility alias for legacy vibration APIs.
+ */
+export function listBearingDiagnosisHistory(params) {
+  return fetchHistory(params)
+}
+
+/**
+ * @deprecated Compatibility alias for legacy vibration APIs.
+ */
+export function getBearingDiagnosisFftData(params) {
+  return request({
+    url: '/system/bearing/fft/latest',
     method: 'get',
     params
   })

@@ -11,11 +11,11 @@ export function fetchMatFiles() {
   })
 }
 
-export function analyzeVibrationFromSidecar(fileName) {
+export function analyzeVibrationFromSidecar(fileName, modelType = 'gear') {
   return axios({
     url: `${SIDE_CAR_BASE_URL}/analyze`,
     method: 'get',
-    params: { file_name: fileName }
+    params: { file_name: fileName, model_type: modelType }
   })
 }
 
@@ -23,9 +23,10 @@ export function analyzeVibrationFromSidecar(fileName) {
  * Analyze an uploaded `.mat` file directly through the Python sidecar.
  * @param {File} file
  */
-export function analyzeUploadedMatFromSidecar(file) {
+export function analyzeUploadedMatFromSidecar(file, modelType = 'gear') {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('model_type', modelType)
   return axios({
     url: `${SIDE_CAR_BASE_URL}/analyze/upload`,
     method: 'post',

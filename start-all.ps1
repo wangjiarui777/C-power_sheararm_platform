@@ -36,6 +36,41 @@ Read-Host
         -ArgumentList "-NoExit", "-Command", "`$Host.UI.RawUI.WindowTitle = '$Title'; powershell -EncodedCommand $encoded"
 }
 
+function Get-PortProcessId {
+    param([Parameter(Mandatory = $true)][int]$Port)
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $conn) {
+        return $conn.OwningProcess
+    }
+    return $null
+}
+
+function Stop-PortProcess {
+    param([Parameter(Mandatory = $true)][int]$Port)
+    $processId = Get-PortProcessId -Port $Port
+    if ($null -eq $processId) {
+        return $false
+    }
+    try {
+        Stop-Process -Id $processId -Force -ErrorAction Stop
+        Write-Host "[OK] Stopped process $processId on port $Port" -ForegroundColor Yellow
+        Start-Sleep -Seconds 2
+        return $true
+    } catch {
+        Write-Host "[WARN] Failed to stop process $processId on port $Port : $($_.Exception.Message)" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+function Ensure-PortFree {
+    param([Parameter(Mandatory = $true)][int]$Port)
+    while (Get-PortProcessId -Port $Port) {
+        if (-not (Stop-PortProcess -Port $Port)) {
+            break
+        }
+    }
+}
+
 # =============================================================================
 # 1. Spring Boot 后端 (ruoyi-admin)
 # =============================================================================
@@ -92,6 +127,8 @@ Start-Sleep -Seconds 1
 # =============================================================================
 # 4. Python 推理服务 (inference_service.py  :5001)
 # =============================================================================
+Ensure-PortFree -Port 5001
+
 Start-InNewWindow `
     -Title 'Inference Service (Python :5001)' `
     -WorkingDir "$projectRoot" `

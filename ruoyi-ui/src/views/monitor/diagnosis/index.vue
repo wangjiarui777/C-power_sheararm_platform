@@ -10,6 +10,20 @@
         <span class="top-time">{{ lastUpdateText }}</span>
       </div>
       <div class="top-right">
+        <div class="model-picker">
+          <span class="model-picker-label">诊断模型</span>
+          <el-select
+            v-model="selectedModelType"
+            size="mini"
+            class="model-select"
+            popper-class="dark-select-dropdown"
+            :disabled="polling || uploading"
+            @change="handleModelTypeChange"
+          >
+            <el-option label="齿轮诊断模型" value="gear" />
+            <el-option label="轴承诊断模型" value="bearing" />
+          </el-select>
+        </div>
         <!-- 当前选中的文件名（溢出省略） -->
         <span class="top-file" :title="selectedFileLabel">{{ selectedFileLabel }}</span>
         <el-button size="mini" type="success" plain @click="handleRefresh">刷新</el-button>
@@ -280,6 +294,7 @@ export default {
       // ---- 文件选择 ----
       matFileList: [],        // 后端 DATA_DIR 中的文件列表
       selectedMatFile: '',    // 当前选中的文件名
+      selectedModelType: 'gear', // 当前选择的推理模型：gear / bearing
       filename: '',           // 当前分析文件名
       filePath: '',           // 文件完整路径
       deviceCode: '',         // 设备编码（从分析结果回传）
@@ -979,7 +994,7 @@ export default {
      */
     async fetchLatestAnalysis() {
       try {
-        const res = await analyzeLatestFile()
+        const res = await analyzeLatestFile(null, this.selectedModelType)
         const data = this.normalizeAnalyzeResponse(res)
         if (!data || !Object.keys(data).length) return
         this.applyDiagnosis(data)
@@ -1011,7 +1026,8 @@ export default {
           filePath: targetPath,
           analysisMode: 'latest',
           filename: targetPath.split(/[\\/]/).pop(),  // 从路径中提取纯文件名
-          deviceCode: this.deviceCode
+          deviceCode: this.deviceCode,
+          modelType: this.selectedModelType
         })
         const data = this.normalizeAnalyzeResponse(res)
         if (!data || !Object.keys(data).length) {
@@ -1038,6 +1054,14 @@ export default {
       this.userManualMode = true
       this.localFilePath = selected
       this.fetchLatest(selected)
+    },
+
+    handleModelTypeChange() {
+      if (this.selectedMatFile || this.localFilePath) {
+        this.fetchLatest(this.selectedMatFile || this.localFilePath)
+      } else {
+        this.fetchLatestAnalysis()
+      }
     },
 
     // -----------------------------------------------------------------------
@@ -1085,6 +1109,7 @@ export default {
       try {
         const formData = new FormData()
         formData.append('file', file)
+        formData.append('model_type', this.selectedModelType)
         const response = await uploadDiagnosisToInferenceService(formData)
         const data = this.normalizeAnalyzeResponse(response)
         this.applyDiagnosis(data)
@@ -1116,7 +1141,8 @@ export default {
           deviceCode: this.deviceCode,
           filePath: normalizedPath,
           analysisMode: 'upload',
-          filename: normalizedPath.split(/[\\/]/).pop()
+          filename: normalizedPath.split(/[\\/]/).pop(),
+          modelType: this.selectedModelType
         })
         const data = this.normalizeAnalyzeResponse(response)
         this.applyDiagnosis(data)
@@ -1289,6 +1315,19 @@ export default {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.model-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.model-picker-label {
+  color: #7a94a8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.model-select {
+  width: 132px;
 }
 .top-file {
   color: #b0c8da;

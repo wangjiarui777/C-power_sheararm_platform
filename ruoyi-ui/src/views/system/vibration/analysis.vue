@@ -27,6 +27,12 @@
             <el-option v-for="item in matFiles" :key="item.name" :label="item.label" :value="item.name" />
           </el-select>
         </el-form-item>
+        <el-form-item label="诊断模型">
+          <el-select v-model="queryForm.modelType" style="width: 180px;" popper-class="dark-sidecar-select">
+            <el-option label="齿轮诊断模型" value="gear" />
+            <el-option label="轴承诊断模型" value="bearing" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="手动文件名">
           <el-input
             v-model="queryForm.fileName"
@@ -137,7 +143,8 @@ export default {
       loadingUpload: false,
       queryForm: {
         fileName: '',
-        selectedMat: ''
+        selectedMat: '',
+        modelType: 'gear'
       },
       matFiles: [],
       sampleRate: 10240,
@@ -321,7 +328,7 @@ export default {
           this.$modal.msgWarning('请先选择或输入 MAT 文件名')
           return
         }
-        const res = await analyzeVibrationFromSidecar(fileName)
+        const res = await analyzeVibrationFromSidecar(fileName, this.queryForm.modelType)
         const normalized = this.normalizeAnalysisResult(res)
         this.captureRawResponse('GET', '/analyze', res)
         this.applyAnalysisResult(normalized)
@@ -336,7 +343,7 @@ export default {
     async handleUploadAnalyze(file) {
       this.loadingUpload = true
       try {
-        const res = await analyzeUploadedMatFromSidecar(file)
+        const res = await analyzeUploadedMatFromSidecar(file, this.queryForm.modelType)
         const normalized = this.normalizeAnalysisResult(res)
         this.captureRawResponse('POST', '/analyze/upload', res)
         this.applyAnalysisResult(normalized)
@@ -420,7 +427,8 @@ export default {
     handleReset() {
       this.queryForm = {
         fileName: '',
-        selectedMat: ''
+        selectedMat: '',
+        modelType: 'gear'
       }
       this.sampleRate = 10240
       this.generateDemoSignal()
