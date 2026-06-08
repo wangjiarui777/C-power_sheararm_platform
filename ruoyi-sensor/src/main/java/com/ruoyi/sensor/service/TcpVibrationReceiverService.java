@@ -35,7 +35,7 @@ import com.ruoyi.sensor.domain.dto.SensorSampleDto;
 import com.ruoyi.sensor.domain.dto.VibrationCsvRecord;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
 import com.ruoyi.sensor.tdengine.SensorTdengineWriter;
-import com.ruoyi.system.domain.DeviceVibrationData;
+import com.ruoyi.sensor.domain.DeviceVibrationData;
 
 /**
  * TCP 振动数据接收服务。
@@ -64,8 +64,8 @@ public class TcpVibrationReceiverService implements ApplicationRunner
     // 标记服务是否已经启动，避免重复开启监听线程
     private final AtomicBoolean running = new AtomicBoolean(false);
 
-    // TCP 监听端口，默认 8888
-    @Value("${sensor.tcp.port:8888}")
+    // TCP 监听端口，默认 8890，8888 保留给 CwruMatReceiver。
+    @Value("${sensor.tcp.port:8890}")
     private int tcpPort;
 
     // 是否启用 TCP 接收功能，默认开启

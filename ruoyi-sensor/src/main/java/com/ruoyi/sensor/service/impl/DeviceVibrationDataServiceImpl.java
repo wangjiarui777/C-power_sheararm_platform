@@ -1,11 +1,11 @@
-package com.ruoyi.system.service.impl;
+package com.ruoyi.sensor.service.impl;
 
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import com.ruoyi.system.domain.DeviceVibrationData;
-import com.ruoyi.system.mapper.DeviceVibrationDataMapper;
-import com.ruoyi.system.service.IDeviceVibrationDataService;
+import com.ruoyi.sensor.domain.DeviceVibrationData;
+import com.ruoyi.sensor.mapper.DeviceVibrationDataMapper;
+import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 
 @Service
 public class DeviceVibrationDataServiceImpl implements IDeviceVibrationDataService
@@ -59,3 +59,4 @@ public class DeviceVibrationDataServiceImpl implements IDeviceVibrationDataServi
         return deviceVibrationDataMapper.deleteDeviceVibrationDataByIds(dataIds);
     }
 }
+

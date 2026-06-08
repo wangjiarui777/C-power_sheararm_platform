@@ -1,4 +1,4 @@
-package com.ruoyi.system.service.impl;
+package com.ruoyi.sensor.service.impl;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -7,13 +7,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import com.ruoyi.system.domain.DeviceTemperatureData;
-import com.ruoyi.system.domain.DeviceVibrationData;
-import com.ruoyi.system.domain.vo.MonitoringOverviewVo;
-import com.ruoyi.system.domain.vo.MonitoringOverviewVo.DevicePointVo;
-import com.ruoyi.system.service.IDeviceTemperatureDataService;
-import com.ruoyi.system.service.IDeviceVibrationDataService;
-import com.ruoyi.system.service.IMonitoringService;
+import com.ruoyi.sensor.domain.DeviceTemperatureData;
+import com.ruoyi.sensor.domain.DeviceVibrationData;
+import com.ruoyi.sensor.domain.vo.MonitoringOverviewVo;
+import com.ruoyi.sensor.domain.vo.MonitoringOverviewVo.DevicePointVo;
+import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
+import com.ruoyi.sensor.service.IDeviceVibrationDataService;
+import com.ruoyi.sensor.service.IMonitoringService;
 
 @Service
 public class MonitoringServiceImpl implements IMonitoringService
@@ -82,3 +82,4 @@ public class MonitoringServiceImpl implements IMonitoringService
         return vo;
     }
 }
+

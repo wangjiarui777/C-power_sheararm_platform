@@ -5,10 +5,10 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import com.ruoyi.sensor.service.OverviewPushService;
-import com.ruoyi.system.event.DataUploadEvent;
+import com.ruoyi.sensor.event.DataUploadEvent;
 
 /**
- * Listens for {@code DataUploadEvent} (published by the system module after each
+ * Listens for {@code DataUploadEvent} (published by the sensor module after each
  * vibration/temperature upload) and forwards the data to the WebSocket push layer.
  */
 @Component

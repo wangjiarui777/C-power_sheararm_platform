@@ -4,7 +4,7 @@
       <div class="hero-left">
         <div class="hero-badge">振动诊断</div>
         <h2>采煤机摇臂振动智能分析</h2>
-        <p>从 `get/got` 自动加载振动数据完成诊断与频谱分析。</p>
+        <p>从 `ruoyi-sensor/inference/get/got` 自动加载振动数据完成诊断与频谱分析。</p>
       </div>
       <div class="hero-right">
         <el-tag effect="dark" type="info">{{ matFiles.length }} 个文件可选</el-tag>
@@ -19,7 +19,7 @@
           <el-select
             v-model="queryForm.selectedMat"
             filterable
-            placeholder="请选择 get/got 下的 .mat 文件"
+            placeholder="请选择 inference/get/got 下的 .mat 文件"
             style="width: 460px;"
             clearable
             popper-class="dark-sidecar-select"

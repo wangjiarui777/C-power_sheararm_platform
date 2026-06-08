@@ -18,9 +18,10 @@ from pathlib import Path
 # Configuration
 # =============================================================================
 
-MAT_DIR = Path(r"C:\Users\123\Desktop\BiShe\RuoYi-Vue-master\target_unlabeled")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MAT_DIR = PROJECT_ROOT / "target_unlabeled"
 HOST = "127.0.0.1"
-PORT = 8889
+PORT = 8888
 
 MAGIC = b"CWRU_MAT_V1\n"
 CHUNK_SIZE = 64 * 1024

@@ -1,7 +1,7 @@
-package com.ruoyi.system.mapper;
+package com.ruoyi.sensor.mapper;
 
 import java.util.List;
-import com.ruoyi.system.domain.DeviceTemperatureData;
+import com.ruoyi.sensor.domain.DeviceTemperatureData;
 
 public interface DeviceTemperatureDataMapper
 {
@@ -19,3 +19,4 @@ public interface DeviceTemperatureDataMapper
 
     int deleteDeviceTemperatureDataByIds(Long[] dataIds);
 }
+

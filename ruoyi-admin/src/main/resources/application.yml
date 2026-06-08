@@ -14,8 +14,28 @@ ruoyi:
   captchaType: math
 
 sensor:
+  startup:
+    inference:
+      enabled: true
+      dir: ruoyi-sensor/inference
+      script: inference_service.py
+      python-command: python
+    receiver:
+      enabled: true
+      dir: ruoyi-sensor/inference/get
+      source: CwruMatReceiver.java
+      port: 8888
+      save-dir: got
+      javac-command: javac
+      java-command: java
   netty:
     port: 9000
+  tcp:
+    enabled: true
+    port: 8890
+  channel-tcp:
+    enabled: true
+    port: 8891
   tdengine:
     enabled: true
     database: power

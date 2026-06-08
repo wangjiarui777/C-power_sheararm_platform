@@ -72,7 +72,7 @@ python --version
 winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements
 
 # 安装项目依赖
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install -r ruoyi-sensor/inference/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 ---
@@ -259,16 +259,16 @@ npm run dev
 
 #### 5.3（可选）启动 Python 推理服务（新终端窗口）
 ```bash
-cd <项目根目录>
+cd <项目根目录>/ruoyi-sensor/inference
 python inference_service.py
 ```
-推理服务运行在 http://localhost:5000
+推理服务运行在 http://localhost:5001
 
 #### 5.4（可选）启动 Java 数据接收器（新终端窗口）
 ```bash
-cd <项目根目录>/get
+cd <项目根目录>/ruoyi-sensor/inference/get
 javac CwruMatReceiver.java
-java CwruMatReceiver 8889 got
+java CwruMatReceiver 8888 got
 ```
 
 ---
@@ -282,7 +282,7 @@ java CwruMatReceiver 8889 got
    - 密码：`admin123`
 4. **Druid 监控**：http://localhost:8080/druid（用户名 `ruoyi`，密码 `123456`）
 5. **Swagger 文档**：http://localhost:8080/swagger-ui/index.html
-6. **Python 推理健康**：http://localhost:5000/health
+6. **Python 推理健康**：http://localhost:5001/health
 
 ---
 
@@ -359,8 +359,9 @@ Start-Service Memurai*
 | Redis | 6379 | TCP |
 | TDengine | 6041 | TCP |
 | Netty 传感器 | 9000 | TCP |
-| TCP 传感器 | 8888 | TCP |
-| CwruMatReceiver | 8889 | TCP |
+| CwruMatReceiver | 8888 | TCP |
+| TCP 传感器 | 8890 | TCP |
+| 通道帧 TCP | 8891 | TCP |
 | Python 推理服务 | 5000 | HTTP |
 
 ---

@@ -10,8 +10,8 @@ import com.alibaba.fastjson2.JSONObject;
 import com.ruoyi.common.utils.spring.SpringUtils;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
 import com.ruoyi.sensor.domain.vo.SensorWebSocketMessageVo;
-import com.ruoyi.system.domain.vo.MonitoringOverviewVo;
-import com.ruoyi.system.service.IMonitoringService;
+import com.ruoyi.sensor.domain.vo.MonitoringOverviewVo;
+import com.ruoyi.sensor.service.IMonitoringService;
 
 import jakarta.websocket.OnClose;
 import jakarta.websocket.OnMessage;

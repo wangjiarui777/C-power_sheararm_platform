@@ -61,31 +61,28 @@ function Ensure-PortFree {
     }
 }
 
-Write-Host '[1/5] Checking required tools...' -ForegroundColor Cyan
+Write-Host '[1/4] Checking required tools...' -ForegroundColor Cyan
 foreach ($tool in @('java', 'mvn', 'node', 'npm', 'python')) {
     if (-not (Test-CommandExists -CommandName $tool)) {
         Write-Host "[WARN] $tool not found in PATH" -ForegroundColor Yellow
     }
 }
 
-Write-Host '[2/5] Releasing occupied ports if needed...' -ForegroundColor Cyan
+Write-Host '[2/4] Releasing occupied ports if needed...' -ForegroundColor Cyan
 Ensure-PortFree -Port 8080
 Ensure-PortFree -Port 9528
 Ensure-PortFree -Port 5001
+Ensure-PortFree -Port 8888
+Ensure-PortFree -Port 8890
+Ensure-PortFree -Port 8891
 
-Write-Host '[3/5] Starting backend (ruoyi-admin)...' -ForegroundColor Cyan
+Write-Host '[3/4] Starting backend (ruoyi-admin, includes inference service and MAT receiver)...' -ForegroundColor Cyan
 Start-ProcessWindow -Name 'Backend' -WorkingDirectory $PSScriptRoot -Command 'cmd /c "mvn -pl ruoyi-admin -am spring-boot:run -Dspring-boot.run.profiles=dev"'
 
-Write-Host '[4/5] Starting frontend (ruoyi-ui)...' -ForegroundColor Cyan
+Write-Host '[4/4] Starting frontend (ruoyi-ui)...' -ForegroundColor Cyan
 Start-ProcessWindow -Name 'Frontend' -WorkingDirectory (Join-Path $PSScriptRoot 'ruoyi-ui') -Command 'cmd /c "npm run dev"'
-
-Write-Host '[5/5] Starting Python inference service...' -ForegroundColor Cyan
-Start-ProcessWindow -Name 'Python inference service' -WorkingDirectory $PSScriptRoot -Command 'python inference_service.py'
 
 Write-Host ''
 Write-Host 'All requested services have been launched in separate windows.' -ForegroundColor Green
-Write-Host 'Starting MAT receiver in a separate window now...' -ForegroundColor Green
-Start-ProcessWindow -Name 'MAT receiver' -WorkingDirectory (Join-Path $PSScriptRoot 'get') -Command 'cmd /c "javac CwruMatReceiver.java && java CwruMatReceiver 8888 got"'
-
-Write-Host ''
-Write-Host 'If any service fails, check the corresponding window output.' -ForegroundColor Green
+Write-Host 'Python inference service (:5001) and MAT receiver (:8888) are started by the backend.' -ForegroundColor Green
+Write-Host 'If any service fails, check the backend window output.' -ForegroundColor Green

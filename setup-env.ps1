@@ -277,14 +277,14 @@ if (Test-Command 'python') {
 
 # 安装 Python 依赖
 if (Test-Command 'python') {
-    $reqFile = Join-Path $projectRoot 'requirements.txt'
+    $reqFile = Join-Path $projectRoot 'ruoyi-sensor\inference\requirements.txt'
     if (Test-Path $reqFile) {
-        Write-Host '    安装 Python 依赖 (requirements.txt)...'
+        Write-Host '    安装 Python 依赖 (ruoyi-sensor\inference\requirements.txt)...'
         pip install -r $reqFile -i https://pypi.tuna.tsinghua.edu.cn/simple 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
             Write-OK 'Python 依赖安装完成'
         } else {
-            Write-Warn '部分 Python 依赖安装失败，请手动执行: pip install -r requirements.txt'
+            Write-Warn '部分 Python 依赖安装失败，请手动执行: pip install -r ruoyi-sensor\inference\requirements.txt'
         }
     }
 }

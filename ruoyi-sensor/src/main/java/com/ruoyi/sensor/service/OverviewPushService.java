@@ -6,8 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.ruoyi.sensor.websocket.SensorWebSocketHandler;
-import com.ruoyi.system.domain.vo.MonitoringOverviewVo;
-import com.ruoyi.system.service.IMonitoringService;
+import com.ruoyi.sensor.domain.vo.MonitoringOverviewVo;
+import com.ruoyi.sensor.service.IMonitoringService;
 
 /**
  * Bridges Spring-managed {@code IMonitoringService} with the non-Spring JSR 356

@@ -1,9 +1,12 @@
-package com.ruoyi.system.mapper;
+package com.ruoyi.sensor.service;
 
 import java.util.List;
-import com.ruoyi.system.domain.DeviceVibrationData;
+import com.ruoyi.sensor.domain.DeviceVibrationData;
 
-public interface DeviceVibrationDataMapper
+/**
+ * Device vibration data service interface.
+ */
+public interface IDeviceVibrationDataService
 {
     DeviceVibrationData selectDeviceVibrationDataById(Long dataId);
 
@@ -17,7 +20,6 @@ public interface DeviceVibrationDataMapper
 
     int updateDeviceVibrationData(DeviceVibrationData deviceVibrationData);
 
-    int deleteDeviceVibrationDataById(Long dataId);
-
     int deleteDeviceVibrationDataByIds(Long[] dataIds);
 }
+

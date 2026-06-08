@@ -1,4 +1,4 @@
-package com.ruoyi.system.controller;
+package com.ruoyi.sensor.web;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Anonymous;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
-import com.ruoyi.system.service.IMonitoringService;
+import com.ruoyi.sensor.service.IMonitoringService;
 
 @RestController
 @RequestMapping("/system/monitoring")
@@ -23,3 +23,4 @@ public class MonitoringController extends BaseController
         return success(monitoringService.getOverview());
     }
 }
+

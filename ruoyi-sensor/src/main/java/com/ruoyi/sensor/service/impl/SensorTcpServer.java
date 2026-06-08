@@ -16,10 +16,10 @@ import com.ruoyi.sensor.service.ChannelFrameIngestService;
 @Component
 public class SensorTcpServer
 {
-    @Value("${sensor.tcp.enabled:true}")
+    @Value("${sensor.channel-tcp.enabled:true}")
     private boolean enabled;
 
-    @Value("${sensor.tcp.port:8888}")
+    @Value("${sensor.channel-tcp.port:8891}")
     private int port;
 
     private final ChannelFrameIngestService ingestService;

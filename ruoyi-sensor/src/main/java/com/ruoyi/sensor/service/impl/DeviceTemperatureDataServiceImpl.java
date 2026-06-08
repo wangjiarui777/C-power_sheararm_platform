@@ -1,11 +1,11 @@
-package com.ruoyi.system.service.impl;
+package com.ruoyi.sensor.service.impl;
 
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import com.ruoyi.system.domain.DeviceTemperatureData;
-import com.ruoyi.system.mapper.DeviceTemperatureDataMapper;
-import com.ruoyi.system.service.IDeviceTemperatureDataService;
+import com.ruoyi.sensor.domain.DeviceTemperatureData;
+import com.ruoyi.sensor.mapper.DeviceTemperatureDataMapper;
+import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
 
 @Service
 public class DeviceTemperatureDataServiceImpl implements IDeviceTemperatureDataService
@@ -49,3 +49,4 @@ public class DeviceTemperatureDataServiceImpl implements IDeviceTemperatureDataS
         return deviceTemperatureDataMapper.deleteDeviceTemperatureDataByIds(dataIds);
     }
 }
+

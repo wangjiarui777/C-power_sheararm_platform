@@ -1,4 +1,4 @@
-package com.ruoyi.system.domain.vo;
+package com.ruoyi.sensor.domain.vo;
 
 import java.util.List;
 
@@ -56,3 +56,4 @@ public class MonitoringOverviewVo
         public void setTemperatureValue(Double temperatureValue) { this.temperatureValue = temperatureValue; }
     }
 }
+

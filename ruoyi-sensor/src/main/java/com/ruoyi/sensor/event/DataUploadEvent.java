@@ -1,4 +1,4 @@
-package com.ruoyi.system.event;
+package com.ruoyi.sensor.event;
 
 import java.util.Date;
 
@@ -27,3 +27,4 @@ public class DataUploadEvent
     public Double getValue() { return value; }
     public Date getSampleTime() { return sampleTime; }
 }
+

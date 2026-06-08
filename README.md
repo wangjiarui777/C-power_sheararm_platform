@@ -164,20 +164,21 @@
 - Node.js（前端开发环境，如需本地运行前端）
 - MySQL / 业务所需数据库
 - TDengine（如项目中启用了时序数据存储）
-- Python 3.10+（用于 `inference_service.py` 副手推理服务）
+- Python 3.10+（用于 `ruoyi-sensor/inference/inference_service.py` 副手推理服务）
 
 ## Python 副手推理服务
 
-项目根目录新增了 `inference_service.py`，用于直接加载 `./get/best_model_classwise_maha.pth` 并分析 `./get/got/*.mat` 文件。
+`ruoyi-sensor/inference/inference_service.py` 用于直接加载 `ruoyi-sensor/inference/get/best_model_classwise_maha.pth` 并分析 `ruoyi-sensor/inference/get/got/*.mat` 文件。
 
 启动方式如下：
 
 ```powershell
-pip install -r requirements.txt
+pip install -r ruoyi-sensor/inference/requirements.txt
+cd ruoyi-sensor/inference
 python inference_service.py
 ```
 
-启动后默认监听 `0.0.0.0:5000`，可通过以下接口访问：
+启动后默认监听 `0.0.0.0:5001`，可通过以下接口访问：
 
 - `GET /health`
 - `GET /analyze?file_name=data001`

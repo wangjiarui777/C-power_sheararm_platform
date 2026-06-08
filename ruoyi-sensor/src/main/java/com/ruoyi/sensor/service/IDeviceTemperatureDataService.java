@@ -1,7 +1,7 @@
-package com.ruoyi.system.service;
+package com.ruoyi.sensor.service;
 
 import java.util.List;
-import com.ruoyi.system.domain.DeviceTemperatureData;
+import com.ruoyi.sensor.domain.DeviceTemperatureData;
 
 /**
  * Device temperature data service interface.
@@ -20,3 +20,4 @@ public interface IDeviceTemperatureDataService
 
     int deleteDeviceTemperatureDataByIds(Long[] dataIds);
 }
+

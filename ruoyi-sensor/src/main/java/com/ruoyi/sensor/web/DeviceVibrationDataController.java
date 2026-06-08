@@ -1,4 +1,4 @@
-package com.ruoyi.system.controller;
+package com.ruoyi.sensor.web;
 
 import java.util.List;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,9 +20,9 @@ import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
-import com.ruoyi.system.domain.DeviceVibrationData;
-import com.ruoyi.system.event.DataUploadEvent;
-import com.ruoyi.system.service.IDeviceVibrationDataService;
+import com.ruoyi.sensor.domain.DeviceVibrationData;
+import com.ruoyi.sensor.event.DataUploadEvent;
+import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 
 @RestController
 @RequestMapping("/system/vibration")
@@ -130,3 +130,4 @@ public class DeviceVibrationDataController extends BaseController
         return toAjax(deviceVibrationDataService.deleteDeviceVibrationDataByIds(dataIds));
     }
 }
+

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Generate random CWRU-style .mat files and send them to the receiver.
 
-Protocol expected by `get/CwruMatReceiver.java`:
+Protocol expected by `ruoyi-sensor/inference/get/CwruMatReceiver.java`:
 1. Send the ASCII protocol line `CWRU_MAT_V1\n`
 2. Send a 4-byte big-endian integer header length
 3. Send UTF-8 JSON header bytes
@@ -14,8 +14,8 @@ Default behavior:
 - use a reference `.mat` file to copy the field structure
 
 Examples:
-  python mock/cwru_mat_sender.py --file get/got/CH1_20260515_085738_sr7497_rpm3000_UN_7500.mat
-  python mock/cwru_mat_sender.py --file get/got --once
+  python ruoyi-sensor/mock/cwru_mat_sender.py --file ruoyi-sensor/inference/get/got/CH1_20260515_085738_sr7497_rpm3000_UN_7500.mat
+  python ruoyi-sensor/mock/cwru_mat_sender.py --file ruoyi-sensor/inference/get/got --once
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ import numpy as np
 from scipy.io import loadmat, savemat
 
 MAGIC = b"CWRU_MAT_V1\n"
-DEFAULT_PORT = 8889
+DEFAULT_PORT = 8888
 DEFAULT_INTERVAL = 10
 CHUNK_SIZE = 64 * 1024
 
@@ -263,13 +263,14 @@ def iter_files(target: Path):
 
 
 def parse_args() -> argparse.Namespace:
+    default_output_dir = Path(__file__).resolve().parents[1] / "inference" / "get" / "got"
     parser = argparse.ArgumentParser(description="Generate random CWRU-style .mat files and send them.")
     parser.add_argument("--host", default="127.0.0.1", help="Receiver host, default: 127.0.0.1")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Receiver port, default: {DEFAULT_PORT}")
     parser.add_argument("--file", required=True, help="Reference .mat file or a directory containing .mat files")
     parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL, help=f"Seconds between sends, default: {DEFAULT_INTERVAL}")
     parser.add_argument("--once", action="store_true", help="Generate and send one file only")
-    parser.add_argument("--output-dir", default="get/got", help="Directory for generated .mat files")
+    parser.add_argument("--output-dir", default=str(default_output_dir), help="Directory for generated .mat files")
     parser.add_argument("--keep-generated", action="store_true", help="Keep generated files instead of deleting them after send")
     return parser.parse_args()
 
@@ -277,10 +278,11 @@ def parse_args() -> argparse.Namespace:
 def resolve_reference_files(target: Path) -> list[Path]:
     candidates = [target]
     if not target.exists():
+        sensor_root = Path(__file__).resolve().parents[1]
         candidates.extend([
             Path("got").resolve(),
             Path("get") / "got",
-            Path("get") / "get" / "got",
+            sensor_root / "inference" / "get" / "got",
         ])
     for candidate in candidates:
         try:

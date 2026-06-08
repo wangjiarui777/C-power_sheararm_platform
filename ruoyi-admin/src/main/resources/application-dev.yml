@@ -60,13 +60,30 @@ mybatis:
   mapperLocations: classpath*:mapper/**/*Mapper.xml
 
 sensor:
+  startup:
+    inference:
+      enabled: true
+      dir: ruoyi-sensor/inference
+      script: inference_service.py
+      python-command: python
+    receiver:
+      enabled: true
+      dir: ruoyi-sensor/inference/get
+      source: CwruMatReceiver.java
+      port: 8888
+      save-dir: got
+      javac-command: javac
+      java-command: java
   netty:
     port: 9000
     boss-threads: 1
     worker-threads: 0
   tcp:
     enabled: true
-    port: 8888
+    port: 8890
+  channel-tcp:
+    enabled: true
+    port: 8891
   tdengine:
     enabled: true
     url: jdbc:TAOS-RS://localhost:6041/sensor_db

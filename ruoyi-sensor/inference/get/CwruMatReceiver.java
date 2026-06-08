@@ -80,7 +80,7 @@ public class CwruMatReceiver {
      * <p>命令行参数（均可选）：</p>
      * <ul>
      *   <li>args[0] — 监听端口，默认 8888</li>
-     *   <li>args[1] — 文件保存目录，默认 ./get/got/</li>
+     *   <li>args[1] — 文件保存目录，默认 ruoyi-sensor/inference/get/got/</li>
      * </ul>
      *
      * @param args 命令行参数
@@ -129,8 +129,8 @@ public class CwruMatReceiver {
      * 获取默认保存目录。
      *
      * <p>逻辑：如果当前工作目录名为 "get"，则在其下创建 "got" 子目录；
-     * 否则使用 "get/got" 路径。这样无论在项目根目录还是 get 目录下运行，
-     * 文件都能保存到正确位置。</p>
+     * 如果在 inference 目录下运行，则使用 inference/get/got；如果在项目根目录
+     * 运行，则优先使用 ruoyi-sensor/inference/get/got。</p>
      *
      * @return 默认保存目录
      */
@@ -138,6 +138,13 @@ public class CwruMatReceiver {
         File cwd = new File(System.getProperty("user.dir"));
         if ("get".equalsIgnoreCase(cwd.getName())) {
             return new File(cwd, "got");
+        }
+        if ("inference".equalsIgnoreCase(cwd.getName())) {
+            return new File(cwd, "get/got");
+        }
+        File sensorInferenceDir = new File(cwd, "ruoyi-sensor/inference/get/got");
+        if (sensorInferenceDir.getParentFile().exists()) {
+            return sensorInferenceDir;
         }
         return new File(cwd, "get/got");
     }

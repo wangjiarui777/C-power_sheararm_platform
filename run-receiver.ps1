@@ -1,4 +1,4 @@
-Set-Location "$PSScriptRoot\get"
+Set-Location "$PSScriptRoot\ruoyi-sensor\inference\get"
 
 $ErrorActionPreference = 'Stop'
 
@@ -10,4 +10,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host '[2/2] Starting CwruMatReceiver...' -ForegroundColor Cyan
-cmd /c "java CwruMatReceiver 8889 got"
+cmd /c "java CwruMatReceiver 8888 got"
