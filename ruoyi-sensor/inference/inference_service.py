@@ -21,7 +21,9 @@ import importlib.util
 import json
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -42,7 +44,9 @@ from starlette.responses import JSONResponse
 # 项目内部模块
 # =============================================================================
 from models.wdcnn_mech_dg2 import WDCNNMechDG
+from models.resnet18_1d import ResNet1D18
 from utils_signal import _extract_signal_from_dict
+from utils.dataset import FileInferenceDataset
 from db_writer import save_inference_result, query_history
 
 # ---------------------------------------------------------------------------
@@ -72,19 +76,94 @@ GEAR_MODEL_PATH = BASE_DIR / "get" / "best_model_classwise_maha.pth"
 BEARING_MODEL_PATH = BASE_DIR / "get" / "best_model.pth"
 DATA_DIR = BASE_DIR / "get" / "got"
 
-DEFAULT_PORT = int(os.environ.get("PORT", 5001))
+DEFAULT_PORT = int(os.environ.get("PORT", 5000))
 DISPLAY_POINTS = 2048
 DISPLAY_SPECTRUM_POINTS = 512
 CONFIDENCE_MIN = 1.0
 CONFIDENCE_MAX = 99.0
 CACHE_MAX_SIZE = 32
 VALID_MODEL_TYPES = {"gear", "bearing"}
-BEARING_CLASS_NAMES_CN = ["正常", "内圈故障", "外圈故障", "滚动体故障"]
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(128 * 1024 * 1024)))
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+INFERENCE_WORKERS = max(1, int(os.environ.get("INFERENCE_WORKERS", "1")))
+BEARING_CLASS_CN_MAP = {
+    "N": "正常",
+    "normal": "正常",
+    "healthy": "正常",
+    "OR": "轴承外圈故障",
+    "outer_ring": "轴承外圈故障",
+    "outer": "轴承外圈故障",
+    "B": "滚动体故障",
+    "ball": "滚动体故障",
+    "rolling_element": "滚动体故障",
+    "IR": "轴承内圈故障",
+    "inner_ring": "轴承内圈故障",
+    "inner": "轴承内圈故障",
+}
 
 # =============================================================================
 # 响应缓存
 # =============================================================================
 _response_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_inference_executor = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS, thread_name_prefix="inference-worker")
+_model_inference_lock = threading.Lock()
+
+# =============================================================================
+# 主事件循环引用（用于从同步端点安全广播 WebSocket 消息）
+# =============================================================================
+_main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _ensure_json_serializable(obj: Any) -> Any:
+    """递归地将 numpy 数组/标量转换为 Python 原生类型，确保 JSON 可序列化。
+
+    HTTP 的 JSONResponse 会自动处理 numpy，但 WebSocket 的 send_json 不会。
+    """
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, dict):
+        return {k: _ensure_json_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_ensure_json_serializable(v) for v in obj]
+    return obj
+
+
+def _broadcast_analysis_sync(result: Dict[str, Any]) -> None:
+    """从同步上下文中广播分析结果到所有 WebSocket 客户端（线程安全）。"""
+    if _main_loop is None or _main_loop.is_closed():
+        return
+    try:
+        payload = _ensure_json_serializable({
+            "type": "auto_analysis",
+            "success": True,
+            "data": result,
+        })
+        asyncio.run_coroutine_threadsafe(
+            ws_manager.broadcast(payload),
+            _main_loop,
+        )
+    except Exception:
+        logger.exception("WebSocket auto_analysis broadcast failed")
+
+
+async def _broadcast_analysis_async(result: Dict[str, Any]) -> None:
+    """从异步上下文中广播分析结果到所有 WebSocket 客户端。"""
+    try:
+        payload = _ensure_json_serializable({
+            "type": "auto_analysis",
+            "success": True,
+            "data": result,
+        })
+        await ws_manager.broadcast(payload)
+    except Exception:
+        logger.exception("WebSocket auto_analysis broadcast failed")
+
 
 # =============================================================================
 # FastAPI 应用
@@ -92,19 +171,23 @@ _response_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager: startup & shutdown logic (FastAPI modern pattern)."""
+    global _main_loop
     global gear_model, gear_model_params, gear_class_names, gear_classwise_cfg
-    global bearing_model, bearing_model_params
+    global bearing_model, bearing_model_params, bearing_class_names
     global CLASS_FILE_UNK_OVERRIDES, MEAN_MAHA_ACCEPT_OVERRIDES, KNOWN_FAULT_PROTECT_CLASSES
     global _watcher_task, _health_broadcaster_task
 
     # ---- startup ----
+    _main_loop = asyncio.get_running_loop()
+    logger.info("Main event loop stored for WebSocket broadcast")
+
     logger.info("Loading gear model from %s", GEAR_MODEL_PATH)
     gear_model, gear_model_params, gear_class_names, gear_classwise_cfg = load_gear_model()
     logger.info("Gear model loaded on %s", DEVICE)
 
     logger.info("Loading bearing model from %s", BEARING_MODEL_PATH)
-    bearing_model, bearing_model_params = load_bearing_model()
-    logger.info("Bearing model placeholder loaded on %s", DEVICE)
+    bearing_model, bearing_model_params, bearing_class_names = load_bearing_model()
+    logger.info("Bearing model loaded on %s", DEVICE)
 
     CLASS_FILE_UNK_OVERRIDES = v6.parse_class_threshold_overrides(
         "healthy:0.70,single_pitting:0.85,multi_pitting:0.85,single_spalling:0.85"
@@ -125,12 +208,15 @@ async def lifespan(app: FastAPI):
     yield  # app runs here
 
     # ---- shutdown ----
+    _main_loop = None
     if _watcher_task:
         _watcher_task.cancel()
         logger.info("File watcher stopped")
     if _health_broadcaster_task:
         _health_broadcaster_task.cancel()
         logger.info("Health broadcaster stopped")
+    _inference_executor.shutdown(wait=False, cancel_futures=True)
+    logger.info("Inference executor stopped")
 
 
 app = FastAPI(title="Vibration Diagnosis Service v2", version="2.0.0", lifespan=lifespan)
@@ -220,32 +306,20 @@ _known_files: Dict[str, float] = {}
 _watcher_task: Optional[asyncio.Task] = None
 
 
-async def _auto_analyze_and_broadcast(file_path: Path) -> None:
+async def _notify_file_available(file_path: Path) -> None:
+    """Notify clients that a new analysis file is available."""
     try:
-        loop = asyncio.get_running_loop()
-        raw_signal, _signal_field = await loop.run_in_executor(
-            None, _load_signal_from_path, file_path,
-        )
-        fs = float(gear_model_params.get("fs", 5120.0))
-        v6_result = await loop.run_in_executor(
-            None, _diagnose_gear, raw_signal, file_path.name,
-        )
-        result = await loop.run_in_executor(
-            None, _build_frontend_payload, v6_result, raw_signal,
-            file_path.name, fs, {
-                "analysis_mode": "gear_auto",
-                "filename": file_path.name,
-                "modelType": "gear",
-                "modelVersion": "best_model_classwise_maha.pth (v6)",
-            },
-        )
-        await _save_to_db(result)
-        await ws_manager.broadcast({"type": "auto_analysis", "success": True, "data": result})
-        logger.info("Auto-analyzed & pushed: %s -> %s", file_path.name, result.get("diagnosisResult"))
-    except Exception as exc:
-        logger.exception("Auto-analysis failed for %s", file_path.name)
         await ws_manager.broadcast({
-            "type": "auto_analysis", "success": False,
+            "type": "file_available",
+            "success": True,
+            "filename": file_path.name,
+            "source_name": file_path.name,
+        })
+        logger.info("New analysis file available: %s", file_path.name)
+    except Exception as exc:
+        logger.exception("File availability broadcast failed for %s", file_path.name)
+        await ws_manager.broadcast({
+            "type": "file_available", "success": False,
             "filename": file_path.name, "error": str(exc),
         })
 
@@ -280,7 +354,7 @@ async def _file_watcher_loop(interval: float = 3.0) -> None:
             prev = _known_files.get(path_str)
             if prev is None or prev != mtime:
                 _known_files[path_str] = mtime
-                await _auto_analyze_and_broadcast(Path(path_str))
+                await _notify_file_available(Path(path_str))
                 await ws_manager.broadcast_file_list()
 
         for path_str in list(_known_files.keys()):
@@ -298,6 +372,7 @@ gear_class_names: List[str] = []
 gear_classwise_cfg: Dict[str, Any] = {}
 bearing_model: Optional[nn.Module] = None
 bearing_model_params: Dict[str, Any] = {}
+bearing_class_names: List[str] = []
 CLASS_FILE_UNK_OVERRIDES: Dict[str, float] = {}
 MEAN_MAHA_ACCEPT_OVERRIDES: Dict[str, float] = {}
 KNOWN_FAULT_PROTECT_CLASSES: List[str] = []
@@ -306,36 +381,106 @@ KNOWN_FAULT_PROTECT_CLASSES: List[str] = []
 # =============================================================================
 # 信号加载 — 委托给 utils_signal
 # =============================================================================
-def _load_signal_from_path(file_path: Path) -> Tuple[np.ndarray, str]:
+def _resolve_analysis_file(file_name: Optional[str]) -> Path:
+
+    if file_name:
+        safe_name = Path(file_name).name
+        suffix = Path(safe_name).suffix.lower()
+        candidates = [DATA_DIR / safe_name] if suffix in {".mat", ".npy"} else [
+            DATA_DIR / f"{Path(safe_name).stem}.npy",
+            DATA_DIR / f"{Path(safe_name).stem}.mat",
+        ]
+        file_path = next((p for p in candidates if p.exists()), candidates[0])
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+    else:
+        all_files = sorted(
+            list(DATA_DIR.glob("*.mat")) + list(DATA_DIR.glob("*.npy")),
+            key=lambda p: (p.stat().st_mtime, p.name),
+            reverse=True,
+        )
+        if not all_files:
+            raise FileNotFoundError(f"No .mat or .npy files found in {DATA_DIR}")
+        file_path = all_files[0]
+
+    suffix = file_path.suffix.lower()
+    if suffix not in {".mat", ".npy"}:
+        raise ValueError(f"Unsupported file type: {suffix}. Only .mat and .npy are supported.")
+    return file_path
+
+
+def _load_signal_from_path(
+    file_path: Path,
+    preferred_signal_key: Optional[str] = None,
+) -> Tuple[np.ndarray, str, Dict[str, Any]]:
     """
     从文件路径加载振动信号（.mat / .npy）。
 
-    .mat 使用 scipy.io.loadmat + _extract_signal_from_dict（自动匹配变量名），
-    .npy 使用 load_npy_signal（固定 key）。
+    Parameters
+    ----------
+    file_path : Path
+    preferred_signal_key : str or None
+        优先使用的信号变量名。对 .mat 文件会优先匹配该 key；
+        对 .npy 文件会作为 load_npy_signal 的 signal_key。
+
+    Returns
+    -------
+    (signal, filename, metadata)
+        metadata 包含从文件中提取的 sample_rate / rpm（可能为 None）。
     """
+    from utils_signal import load_npy_signal, _extract_mat_metadata
+
     suffix = file_path.suffix.lower()
+    meta: Dict[str, Any] = {"sample_rate": None, "rpm": None}
+
     if suffix == ".mat":
         if not file_path.exists():
             raise FileNotFoundError(f".mat file not found: {file_path}")
         mat = scipy.io.loadmat(str(file_path))
-        sig = _extract_signal_from_dict(mat, source_name=file_path.name)
+        sig = _extract_signal_from_dict(
+            mat,
+            source_name=file_path.name,
+            preferred_signal_key=preferred_signal_key,
+        )
+        # 从 .mat 元数据字段提取 sample_rate / rpm
+        meta = _extract_mat_metadata(mat)
     elif suffix == ".npy":
-        from utils_signal import load_npy_signal
-        sig = load_npy_signal(file_path, signal_key="sig_acc_5120")
+        sig = load_npy_signal(
+            file_path,
+            signal_key=preferred_signal_key or "sig_acc_5120",
+        )
     else:
         raise ValueError(f"Unsupported file type: {suffix}. Only .mat and .npy are supported.")
 
     sig = np.nan_to_num(np.asarray(sig, dtype=np.float32).reshape(-1),
                         nan=0.0, posinf=0.0, neginf=0.0)
-    return sig, file_path.name
+    return sig, file_path.name, meta
 
 
-def _load_signal_from_bytes(filename: str, content: bytes) -> Tuple[np.ndarray, str]:
-    """从上传字节流加载振动信号（.mat / .npy）。"""
+def _load_signal_from_bytes(
+    filename: str,
+    content: bytes,
+    preferred_signal_key: Optional[str] = None,
+) -> Tuple[np.ndarray, str, Dict[str, Any]]:
+    """从上传字节流加载振动信号（.mat / .npy）。
+
+    Returns
+    -------
+    (signal, filename, metadata)
+    """
+    from utils_signal import _extract_mat_metadata
+
     suffix = Path(filename).suffix.lower()
+    meta: Dict[str, Any] = {"sample_rate": None, "rpm": None}
+
     if suffix == ".mat":
         payload = scipy.io.loadmat(BytesIO(content))
-        sig = _extract_signal_from_dict(payload, source_name=filename)
+        sig = _extract_signal_from_dict(
+            payload,
+            source_name=filename,
+            preferred_signal_key=preferred_signal_key,
+        )
+        meta = _extract_mat_metadata(payload)
     elif suffix == ".npy":
         payload = np.load(BytesIO(content), allow_pickle=True)
         if isinstance(payload, np.lib.npyio.NpzFile):
@@ -343,12 +488,20 @@ def _load_signal_from_bytes(filename: str, content: bytes) -> Tuple[np.ndarray, 
                 if not payload.files:
                     raise ValueError("No arrays found in uploaded npz file.")
                 arrays = {name: payload[name] for name in payload.files}
-                sig = _extract_signal_from_dict(arrays, source_name=filename)
+                sig = _extract_signal_from_dict(
+                    arrays,
+                    source_name=filename,
+                    preferred_signal_key=preferred_signal_key,
+                )
             finally:
                 payload.close()
         elif isinstance(payload, np.ndarray) and payload.dtype == object:
             if payload.size == 1 and isinstance(payload.reshape(-1)[0], dict):
-                sig = _extract_signal_from_dict(payload.reshape(-1)[0], source_name=filename)
+                sig = _extract_signal_from_dict(
+                    payload.reshape(-1)[0],
+                    source_name=filename,
+                    preferred_signal_key=preferred_signal_key,
+                )
             else:
                 sig = np.concatenate([np.asarray(item).reshape(-1) for item in payload.flat])
         else:
@@ -358,7 +511,38 @@ def _load_signal_from_bytes(filename: str, content: bytes) -> Tuple[np.ndarray, 
 
     sig = np.nan_to_num(np.asarray(sig, dtype=np.float32).reshape(-1),
                         nan=0.0, posinf=0.0, neginf=0.0)
-    return sig, filename
+    return sig, filename, meta
+
+
+async def _read_upload_limited(file: UploadFile) -> bytes:
+    """Read an upload in chunks, rejecting oversized files before memory spikes."""
+    chunks: List[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Uploaded file is too large. Limit is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _analyze_uploaded_content(model_type: str, filename: str, content: bytes) -> Dict[str, Any]:
+    preferred_key = (
+        bearing_model_params.get("signal_key", "DE_time") if model_type == "bearing"
+        else gear_model_params.get("signal_key", "sig_acc_5120")
+    )
+    raw_signal, _, file_meta = _load_signal_from_bytes(filename, content, preferred_key)
+    extra: Dict[str, Any] = {"filename": filename}
+    if model_type == "bearing" and file_meta.get("sample_rate"):
+        extra["sampleRate"] = float(file_meta["sample_rate"])
+        extra["sample_rate"] = float(file_meta["sample_rate"])
+    return _run_analysis(model_type, raw_signal, filename, f"{model_type}_upload", extra=extra)
 
 
 # =============================================================================
@@ -414,29 +598,15 @@ def _save_to_db_sync(result: Dict[str, Any]) -> None:
 # =============================================================================
 # 模型加载
 # =============================================================================
-class BearingPlaceholderModel(nn.Module):
-    """
-    轴承模型网络结构占位。
-
-    当前仓库缺少真实轴承模型结构定义，后续替换为训练时使用的 nn.Module 后，
-    即可严格加载 get/best_model.pth 中的真实权重。
-    """
-    def __init__(self, num_classes: int = 4) -> None:
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Conv1d(1, 16, kernel_size=64, stride=4, padding=32),
-            nn.BatchNorm1d(16),
-            nn.ReLU(inplace=True),
-            nn.Conv1d(16, 32, kernel_size=3, padding=1),
-            nn.BatchNorm1d(32),
-            nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool1d(1),
-        )
-        self.classifier = nn.Linear(32, num_classes)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        feat = self.net(x).flatten(1)
-        return self.classifier(feat)
+def _clean_state_dict(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    """Remove 'module.' prefix from DataParallel-wrapped state dict keys."""
+    cleaned: Dict[str, torch.Tensor] = {}
+    for k, v in state_dict.items():
+        if k.startswith("module."):
+            cleaned[k[len("module."):]] = v
+        else:
+            cleaned[k] = v
+    return cleaned
 
 
 def load_gear_model() -> Tuple[WDCNNMechDG, Dict[str, Any], List[str], Dict[str, Any]]:
@@ -463,38 +633,63 @@ def load_gear_model() -> Tuple[WDCNNMechDG, Dict[str, Any], List[str], Dict[str,
     return model, params, class_names, classwise_cfg
 
 
-def load_bearing_model() -> Tuple[nn.Module, Dict[str, Any]]:
+def load_bearing_model() -> Tuple[nn.Module, Dict[str, Any], List[str]]:
+    """
+    Load bearing diagnosis model (ResNet1D18) from best_model.pth.
+
+    The checkpoint follows the CCDG training pipeline format:
+        state_dict  — model weights (possibly wrapped with 'module.' prefix)
+        classes     — list of class label strings, e.g. ['N', 'OR', 'B']
+        window_size / stride / signal_key / normalize — preprocessing config
+    """
     if not BEARING_MODEL_PATH.exists():
         raise FileNotFoundError(f"Bearing model checkpoint not found: {BEARING_MODEL_PATH}")
 
     ckpt = v6.safe_torch_load(BEARING_MODEL_PATH, map_location=DEVICE)
+
+    # ---- extract state dict ----
+    if "state_dict" in ckpt:
+        state_dict = _clean_state_dict(ckpt["state_dict"])
+    else:
+        state_dict = _clean_state_dict(ckpt)
+
+    # ---- class names ----
+    if "classes" in ckpt and ckpt["classes"]:
+        class_names = [str(c) for c in ckpt["classes"]]
+    else:
+        # fallback: infer from fc.weight shape
+        for k, v in state_dict.items():
+            if k.endswith("fc.weight"):
+                num_classes = int(v.shape[0])
+                class_names = [f"class_{i}" for i in range(num_classes)]
+                break
+        else:
+            class_names = ["N", "OR", "B"]
+
+    num_classes = len(class_names)
+
+    # ---- params ----
     params = {
-        "fs": float(ckpt.get("fs", 7500.0)),
-        "win_len": int(ckpt.get("win_len", 4096)),
-        "stride": int(ckpt.get("stride", 1024)),
-        "batch_size": int(ckpt.get("batch_size", 128)),
-        "source_classes": [str(x) for x in ckpt.get("classes", [])],
+        "fs": float(ckpt.get("sample_rate", ckpt.get("fs", 16000.0))),
+        "win_len": int(ckpt.get("window_size", ckpt.get("win_len", 4096))),
+        "stride": int(ckpt.get("stride", 4096)),
+        "batch_size": int(ckpt.get("batch_size", 64)),
+        "signal_key": str(ckpt.get("signal_key", "DE_time")),
+        "normalize": str(ckpt.get("normalize", "zscore")),
+        "num_classes": num_classes,
     }
 
-    model = BearingPlaceholderModel(num_classes=len(BEARING_CLASS_NAMES_CN)).to(DEVICE)
-    source_state = ckpt.get("model_state", {})
-    target_state = model.state_dict()
-    compatible_state = {
-        key: value
-        for key, value in source_state.items()
-        if key in target_state and tuple(value.shape) == tuple(target_state[key].shape)
-    }
-    if compatible_state:
-        target_state.update(compatible_state)
-        model.load_state_dict(target_state)
-    skipped = len(source_state) - len(compatible_state)
-    logger.warning(
-        "Bearing placeholder model loaded with %d compatible tensors, skipped %d checkpoint tensors",
-        len(compatible_state),
-        skipped,
-    )
+    # ---- build model ----
+    model = ResNet1D18(num_classes=num_classes).to(DEVICE)
+    model.load_state_dict(state_dict, strict=True)
     model.eval()
-    return model, params
+
+    logger.info(
+        "Bearing model loaded: %d classes %s on %s (window=%d, stride=%d, fs=%.0f)",
+        num_classes, class_names, DEVICE,
+        params["win_len"], params["stride"], params["fs"],
+    )
+    return model, params, class_names
 
 
 # =============================================================================
@@ -508,13 +703,19 @@ def _diagnose_gear(raw_signal: np.ndarray, source_name: str = "") -> Dict[str, A
         raise RuntimeError("Gear model is not loaded.")
 
     sig = np.asarray(raw_signal, dtype=np.float32).reshape(-1)
+    win_len = int(gear_model_params["win_len"])
+    stride = int(gear_model_params["stride"])
+    if v6.count_windows(len(sig), win_len, stride) <= 0:
+        raise ValueError(
+            f"Signal too short ({sig.size} samples) for gear window size {win_len}"
+        )
 
     return v6.diagnose_signal_array(
         model=gear_model,
         sig=sig,
         device=DEVICE,
-        win_len=int(gear_model_params["win_len"]),
-        stride=int(gear_model_params["stride"]),
+        win_len=win_len,
+        stride=stride,
         batch_size=int(gear_model_params.get("batch_size", 128)),
         class_names=gear_class_names,
         classwise_cfg=gear_classwise_cfg,
@@ -541,75 +742,94 @@ def _normalize_model_type(model_type: Optional[str]) -> str:
     return value
 
 
-def _zscore_1d(x: np.ndarray) -> np.ndarray:
-    arr = np.asarray(x, dtype=np.float32).reshape(-1)
-    std = float(arr.std())
-    if std < 1e-8:
-        return arr - float(arr.mean())
-    return (arr - float(arr.mean())) / std
-
-
-def _window_count(sig_len: int, win_len: int, stride: int) -> int:
-    if sig_len <= win_len:
-        return 1
-    return 1 + max(0, (sig_len - win_len) // stride)
-
-
-def _get_signal_window(sig: np.ndarray, start: int, win_len: int) -> np.ndarray:
-    chunk = sig[start:start + win_len]
-    if chunk.size >= win_len:
-        return chunk
-    padded = np.zeros(win_len, dtype=np.float32)
-    padded[:chunk.size] = chunk
-    return padded
-
-
 @torch.no_grad()
 def _diagnose_bearing(raw_signal: np.ndarray, source_name: str = "") -> Dict[str, Any]:
+    """
+    Bearing diagnosis using ResNet1D18 with sliding-window inference.
+
+    Preprocessing matches the CCDG training pipeline:
+      - Per-window z-score normalization
+      - Window size / stride from checkpoint params
+      - File-level prediction = argmax of mean softmax probabilities
+    """
     if bearing_model is None:
         raise RuntimeError("Bearing model is not loaded.")
 
-    sig = np.asarray(raw_signal, dtype=np.float32).reshape(-1)
-    win_len = int(bearing_model_params.get("win_len", 4096))
-    stride = int(bearing_model_params.get("stride", 1024))
-    batch_size = int(bearing_model_params.get("batch_size", 128))
-    n_win = _window_count(sig.size, win_len, stride)
+    sig = np.asarray(raw_signal, dtype=np.float64).reshape(-1)
+    win_len = int(bearing_model_params["win_len"])
+    stride = int(bearing_model_params["stride"])
+    batch_size = int(bearing_model_params.get("batch_size", 64))
+
+    # window count
+    if sig.size < win_len:
+        n_win = 0
+    else:
+        n_win = (sig.size - win_len) // stride + 1
+
+    if n_win == 0:
+        raise ValueError(
+            f"Signal too short ({sig.size} samples) for window size {win_len}"
+        )
 
     probs_all: List[torch.Tensor] = []
     seg_preds: List[int] = []
     bearing_model.eval()
 
     for i in range(0, n_win, batch_size):
-        xs = []
+        windows = []
         for j in range(i, min(i + batch_size, n_win)):
-            window = _get_signal_window(sig, j * stride, win_len)
-            xs.append(_zscore_1d(window))
-        xb = torch.from_numpy(np.stack(xs)).float().unsqueeze(1).to(DEVICE)
-        logits = bearing_model(xb)
+            start = j * stride
+            chunk = sig[start:start + win_len].copy()
+            # per-window z-score (matches CCDG training pipeline)
+            mu = chunk.mean()
+            sigma = chunk.std()
+            if sigma > 1e-8:
+                chunk = (chunk - mu) / sigma
+            else:
+                chunk = chunk - mu
+            windows.append(chunk)
+
+        xb = torch.from_numpy(np.stack(windows)).float().unsqueeze(1).to(DEVICE)
+        logits, _feat = bearing_model(xb)
         probs = torch.softmax(logits, dim=1).cpu()
         probs_all.append(probs)
         seg_preds.extend(torch.argmax(probs, dim=1).tolist())
 
-    probs_tensor = torch.cat(probs_all, dim=0)
-    mean_probs = probs_tensor.mean(dim=0).numpy()
+    probs_tensor = torch.cat(probs_all, dim=0)          # [n_win, num_classes]
+    mean_probs = probs_tensor.mean(dim=0).numpy()       # [num_classes]
     final_idx = int(np.argmax(mean_probs))
+
     seg_preds_np = np.asarray(seg_preds, dtype=np.int64)
-    segment_consistency = float((seg_preds_np == final_idx).mean()) if seg_preds_np.size else 0.0
+    segment_consistency = (
+        float((seg_preds_np == final_idx).mean()) if seg_preds_np.size else 0.0
+    )
+
     entropy_per_segment = -torch.sum(
         probs_tensor * torch.log(torch.clamp(probs_tensor, min=1e-12)),
         dim=1,
     )
+    mean_entropy = float(entropy_per_segment.mean().item())
+
+    # determine decision reason based on confidence and consistency
+    confidence = float(mean_probs[final_idx])
+    if confidence >= 0.80 and segment_consistency >= 0.80:
+        decision_reason = "bearing_high_confidence"
+    elif confidence >= 0.65 and segment_consistency >= 0.60:
+        decision_reason = "bearing_moderate_confidence"
+    else:
+        decision_reason = "bearing_low_confidence"
 
     return {
         "source_name": source_name,
         "prediction_index": final_idx,
-        "prediction": BEARING_CLASS_NAMES_CN[final_idx],
-        "confidence": float(mean_probs[final_idx]),
+        "prediction": bearing_class_names[final_idx] if final_idx < len(bearing_class_names) else "unknown",
+        "confidence": confidence,
         "mean_probs": mean_probs,
         "segment_consistency": segment_consistency,
         "num_segments": int(n_win),
-        "mean_entropy": float(entropy_per_segment.mean().item()),
-        "decision_reason": "bearing_placeholder_argmax",
+        "mean_entropy": mean_entropy,
+        "decision_reason": decision_reason,
+        "class_names": bearing_class_names,
     }
 
 
@@ -708,6 +928,7 @@ def _build_frontend_payload(
     """
     # ---- 核心诊断字段 ----
     final_pred = str(v6_result["final_prediction"])
+    final_pred_cn = str(v6_result.get("final_result_cn", final_pred))
     closed_pred = str(v6_result["closed_prediction"])
     confidence = float(v6_result["closed_confidence"])
     health_score = float(v6_result["health_score"])
@@ -747,10 +968,10 @@ def _build_frontend_payload(
 
     # ---- 组装返回 ----
     data: Dict[str, Any] = {
-        # 核心
-        "label": final_pred,
-        "diagnosisResult": final_pred,
-        "diagnosisName": final_pred,
+        # 核心 — 优先使用中文名称
+        "label": final_pred_cn,
+        "diagnosisResult": final_pred_cn,
+        "diagnosisName": final_pred_cn,
         "confidence": confidence_pct,
         "healthIndex": int(round(health_score)),
         "riskLevel": alarm_to_risk.get(alarm_level, "中"),
@@ -808,7 +1029,7 @@ def _build_bearing_frontend_payload(
     bearing_result: Dict[str, Any],
     raw_signal: np.ndarray,
     source_name: str,
-    sample_rate: float = 7500.0,
+    sample_rate: float = 16000.0,
     extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     sig = np.asarray(raw_signal, dtype=np.float64).reshape(-1)
@@ -818,7 +1039,10 @@ def _build_bearing_frontend_payload(
     spectrum = v6.compute_fft_full_curve(sig, fs=sample_rate, max_points=DISPLAY_SPECTRUM_POINTS, f_min=0.0)
     metrics = v6.compute_industrial_metrics(sig, fs=sample_rate)
 
+    # use checkpoint class names dynamically
+    class_names = bearing_result.get("class_names", bearing_class_names)
     prediction = str(bearing_result["prediction"])
+    prediction_cn = BEARING_CLASS_CN_MAP.get(prediction, prediction)
     confidence = float(bearing_result["confidence"])
     confidence_pct = round(float(np.clip(confidence * 100.0, CONFIDENCE_MIN, CONFIDENCE_MAX)), 2)
     mean_entropy = float(bearing_result["mean_entropy"])
@@ -827,18 +1051,20 @@ def _build_bearing_frontend_payload(
 
     top_probs = [
         {"class": cname, "probability": round(float(prob) * 100.0, 2)}
-        for cname, prob in zip(BEARING_CLASS_NAMES_CN, mean_probs)
+        for cname, prob in zip(class_names, mean_probs)
     ]
     top_probs.sort(key=lambda x: x["probability"], reverse=True)
 
-    risk_level = "低" if prediction == "正常" else "高"
-    alarm_level = "normal" if prediction == "正常" else "alarm"
-    health_score = confidence * 100.0 if prediction == "正常" else max(0.0, 100.0 - confidence * 100.0)
+    # risk / health assessment
+    is_normal = prediction.lower() in ("n", "normal", "healthy")
+    risk_level = "低" if is_normal else "高"
+    alarm_level = "normal" if is_normal else "alarm"
+    health_score = confidence * 100.0 if is_normal else max(0.0, 100.0 - confidence * 100.0)
 
     evidence = [
         {
             "title": "模型类型",
-            "desc": "轴承诊断模型",
+            "desc": f"轴承诊断模型 (ResNet1D18, {len(class_names)}类)",
             "type": "info",
             "level": "信息",
         },
@@ -863,18 +1089,18 @@ def _build_bearing_frontend_payload(
     ]
 
     data: Dict[str, Any] = {
-        "label": prediction,
-        "diagnosisResult": prediction,
-        "diagnosisName": prediction,
+        "label": prediction_cn,
+        "diagnosisResult": prediction_cn,
+        "diagnosisName": prediction_cn,
         "confidence": confidence_pct,
         "healthIndex": int(round(health_score)),
         "riskLevel": risk_level,
         "alarmLevel": alarm_level,
         "diagnosisDetail": (
-            f"轴承占位模型决策: {bearing_result['decision_reason']} | "
-            f"预测:{prediction} conf={confidence:.4f}"
+            f"轴承诊断: {bearing_result['decision_reason']} | "
+            f"预测:{prediction}({prediction_cn}) conf={confidence:.4f}"
         ),
-        "diagnosis_detail": f"轴承占位模型决策: {bearing_result['decision_reason']}",
+        "diagnosis_detail": f"轴承诊断: {bearing_result['decision_reason']}",
         "decision_reason": str(bearing_result["decision_reason"]),
         "closedPrediction": prediction,
         "unknownRatio": 0.0,
@@ -883,7 +1109,7 @@ def _build_bearing_frontend_payload(
         "meanEntropy": round(mean_entropy, 6),
         "source_name": source_name,
         "sourceName": source_name,
-        "topProbabilities": top_probs[:4],
+        "topProbabilities": top_probs[:len(class_names)],
         "evidence": evidence,
         "time_axis": time_axis,
         "time_data": time_data,
@@ -899,9 +1125,9 @@ def _build_bearing_frontend_payload(
         "sample_rate": sample_rate,
         "sampleRate": sample_rate,
         "count": len(time_data),
-        "analysis_mode": "bearing_placeholder",
+        "analysis_mode": "bearing_resnet18",
         "modelType": "bearing",
-        "modelVersion": "best_model.pth (placeholder)",
+        "modelVersion": "best_model.pth (ResNet1D18)",
         "numSegments": int(bearing_result["num_segments"]),
     }
 
@@ -924,24 +1150,27 @@ def _run_analysis(
     extra_payload = dict(extra or {})
     extra_payload["modelType"] = model_type
 
-    if model_type == "gear":
-        fs = float(gear_model_params.get("fs", 5120.0))
-        v6_result = _diagnose_gear(raw_signal, source_name=source_name)
-        extra_payload.setdefault("modelVersion", "best_model_classwise_maha.pth (v6)")
-        extra_payload["analysis_mode"] = mode
-        return _build_frontend_payload(v6_result, raw_signal, source_name, sample_rate=fs, extra=extra_payload)
+    with _model_inference_lock:
+        if model_type == "gear":
+            fs = float(extra_payload.get("sample_rate") or extra_payload.get("sampleRate")
+                       or gear_model_params.get("fs", 5120.0))
+            v6_result = _diagnose_gear(raw_signal, source_name=source_name)
+            extra_payload.setdefault("modelVersion", "best_model_classwise_maha.pth (v6)")
+            extra_payload["analysis_mode"] = mode
+            return _build_frontend_payload(v6_result, raw_signal, source_name, sample_rate=fs, extra=extra_payload)
 
-    fs = float(bearing_model_params.get("fs", 7500.0))
-    bearing_result = _diagnose_bearing(raw_signal, source_name=source_name)
-    extra_payload.setdefault("modelVersion", "best_model.pth (placeholder)")
-    extra_payload["analysis_mode"] = mode
-    return _build_bearing_frontend_payload(
-        bearing_result,
-        raw_signal,
-        source_name,
-        sample_rate=fs,
-        extra=extra_payload,
-    )
+        fs = float(extra_payload.get("sample_rate") or extra_payload.get("sampleRate")
+                   or bearing_model_params.get("fs", 16000.0))
+        bearing_result = _diagnose_bearing(raw_signal, source_name=source_name)
+        extra_payload.setdefault("modelVersion", "best_model.pth (ResNet1D18)")
+        extra_payload["analysis_mode"] = mode
+        return _build_bearing_frontend_payload(
+            bearing_result,
+            raw_signal,
+            source_name,
+            sample_rate=fs,
+            extra=extra_payload,
+        )
 
 
 def _build_health_payload() -> Dict[str, Any]:
@@ -957,7 +1186,8 @@ def _build_health_payload() -> Dict[str, Any]:
         "version": "v2_dual_model",
         "classes": gear_class_names,
         "gear_classes": gear_class_names,
-        "bearing_classes": BEARING_CLASS_NAMES_CN,
+        "bearing_classes": bearing_class_names,
+        "bearing_classes_cn": [BEARING_CLASS_CN_MAP.get(c, c) for c in bearing_class_names],
         "win_len": gear_model_params.get("win_len"),
         "stride": gear_model_params.get("stride"),
         "fs": gear_model_params.get("fs"),
@@ -1001,33 +1231,30 @@ def analyze(
     model_type: str = Query(default="gear"),
 ) -> Dict[str, Any]:
     model_type = _normalize_model_type(model_type)
-    if model_type == "gear" and gear_model is None:
-        raise HTTPException(status_code=500, detail="Gear model is not loaded.")
-    if model_type == "bearing" and bearing_model is None:
-        raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
 
     try:
-        if file_name:
-            safe_name = Path(file_name).name
-            suffix = Path(safe_name).suffix.lower()
-            if suffix not in {".mat", ".npy"}:
-                safe_name = f"{Path(file_name).stem}.mat"
-            file_path = DATA_DIR / safe_name
-        else:
-            mat_files_list = sorted(DATA_DIR.glob("*.mat"))
-            npy_files_list = sorted(DATA_DIR.glob("*.npy"))
-            all_files = mat_files_list + npy_files_list
-            if not all_files:
-                raise FileNotFoundError(f"No .mat or .npy files found in {DATA_DIR}")
-            file_path = max(all_files, key=lambda p: (p.stat().st_mtime, p.name))
+        file_path = _resolve_analysis_file(file_name)
+        if model_type == "gear" and gear_model is None:
+            raise HTTPException(status_code=500, detail="Gear model is not loaded.")
+        if model_type == "bearing" and bearing_model is None:
+            raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
 
         def _compute() -> Dict[str, Any]:
-            raw_signal, _ = _load_signal_from_path(file_path)
+            preferred_key = (
+                bearing_model_params.get("signal_key", "DE_time") if model_type == "bearing"
+                else gear_model_params.get("signal_key", "sig_acc_5120")
+            )
+            raw_signal, _, file_meta = _load_signal_from_path(file_path, preferred_key)
+            extra: Dict[str, Any] = {}
+            if file_meta.get("sample_rate"):
+                extra["sample_rate"] = float(file_meta["sample_rate"])
+                extra["sampleRate"] = float(file_meta["sample_rate"])
             return _run_analysis(
                 model_type,
                 raw_signal,
                 file_path.name,
                 f"{model_type}_{'latest' if file_name is None else 'specified'}",
+                extra=extra,
             )
 
         result = _get_cached_or_compute(file_path, model_type, _compute)
@@ -1038,11 +1265,16 @@ def analyze(
             result.get("diagnosisResult"),
         )
         _save_to_db_sync(result)
+        _broadcast_analysis_sync(result)
         return JSONResponse(
             content={"success": True, "data": result},
             headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
         )
 
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("analyze failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -1054,33 +1286,38 @@ async def analyze_upload(
     model_type: str = Form(default="gear"),
 ) -> Dict[str, Any]:
     model_type = _normalize_model_type(model_type)
-    if model_type == "gear" and gear_model is None:
-        raise HTTPException(status_code=500, detail="Gear model is not loaded.")
-    if model_type == "bearing" and bearing_model is None:
-        raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
 
     suffix = Path(file.filename).suffix.lower()
     if suffix not in {".mat", ".npy"}:
         raise HTTPException(status_code=400, detail="Only .mat and .npy files are supported.")
 
-    content = await file.read()
+    content = await _read_upload_limited(file)
     try:
-        raw_signal, _ = _load_signal_from_bytes(file.filename, content)
+        if model_type == "gear" and gear_model is None:
+            raise HTTPException(status_code=500, detail="Gear model is not loaded.")
+        if model_type == "bearing" and bearing_model is None:
+            raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            _inference_executor,
+            _analyze_uploaded_content,
+            model_type,
+            file.filename,
+            content,
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}") from exc
+        raise HTTPException(status_code=400, detail=f"Failed to analyze file: {exc}") from exc
 
-    result = _run_analysis(model_type, raw_signal, file.filename, f"{model_type}_upload")
     await _save_to_db(result)
+    await _broadcast_analysis_async(result)
     return {"success": True, "data": result}
 
 
 @app.post("/infer")
 def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     model_type = _normalize_model_type(payload.get("modelType") or payload.get("model_type") or "gear")
-    if model_type == "gear" and gear_model is None:
-        raise HTTPException(status_code=500, detail="Gear model is not loaded.")
-    if model_type == "bearing" and bearing_model is None:
-        raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
 
     file_path = str(payload.get("filePath") or "")
     if not file_path:
@@ -1093,23 +1330,41 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not source_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {source_path}")
 
+    suffix = source_path.suffix.lower()
+    if suffix not in {".mat", ".npy"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}. Only .mat and .npy are supported.")
+
+    if model_type == "gear" and gear_model is None:
+        raise HTTPException(status_code=500, detail="Gear model is not loaded.")
+    if model_type == "bearing" and bearing_model is None:
+        raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
+
     def _compute() -> Dict[str, Any]:
-        raw_signal, _ = _load_signal_from_path(source_path)
+        preferred_key = (
+            bearing_model_params.get("signal_key", "DE_time") if model_type == "bearing"
+            else gear_model_params.get("signal_key", "sig_acc_5120")
+        )
+        raw_signal, _, file_meta = _load_signal_from_path(source_path, preferred_key)
+        extra = {
+            "deviceCode": payload.get("deviceCode"),
+            "filename": payload.get("filename") or source_path.name,
+            "batchId": payload.get("batchId"),
+            "sampleTime": payload.get("sampleTime"),
+        }
+        if file_meta.get("sample_rate"):
+            extra["sample_rate"] = float(file_meta["sample_rate"])
+            extra["sampleRate"] = float(file_meta["sample_rate"])
         return _run_analysis(
             model_type,
             raw_signal,
             source_path.name,
             payload.get("analysisMode", f"{model_type}_infer"),
-            extra={
-                "deviceCode": payload.get("deviceCode"),
-                "filename": payload.get("filename") or source_path.name,
-                "batchId": payload.get("batchId"),
-                "sampleTime": payload.get("sampleTime"),
-            },
+            extra=extra,
         )
 
     result = _get_cached_or_compute(source_path, model_type, _compute)
     _save_to_db_sync(result)
+    _broadcast_analysis_sync(result)
     return {"success": True, "data": result}
 
 

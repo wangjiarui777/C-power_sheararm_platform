@@ -318,22 +318,16 @@ export default {
       }
     },
     fetchLatestInference() {
-      var base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5001'
+      var base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
       fetch(base.replace(/\/$/, '') + '/analyze', { cache: 'no-store' })
         .then(res => res.json())
         .then(payload => this.handleWebSocketMessage(payload))
         .catch(() => {})
     },
     handleWebSocketMessage(evt) {
-      let msg = evt && evt.data ? null : evt
-      if (!msg) {
-        try {
-          msg = JSON.parse(evt.data)
-        } catch (error) {
-          return
-        }
-      }
-      msg = this.normalizeInferencePayload(msg)
+      // evt is already a parsed JSON object from WebSocket subscription or HTTP fetch.
+      // normalizeInferencePayload handles both wrapped {data:...} and unwrapped payloads.
+      const msg = this.normalizeInferencePayload(evt)
       if (!msg) return
       const channelId = Number(msg.channelId || msg.channel || msg.id)
       if (!channelId || !this.liveData[channelId]) return

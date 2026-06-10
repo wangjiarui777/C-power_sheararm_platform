@@ -7,7 +7,7 @@
           <div class="page-subtitle">8 通道实时追踪 · 推理服务数据流 · 异常快速定位</div>
         </div>
         <div class="toolbar-actions">
-          <el-tag size="mini" type="success">推理服务 5001</el-tag>
+          <el-tag size="mini" type="success">推理服务 5000</el-tag>
           <el-button size="mini" icon="el-icon-refresh" @click="fetchLatestInference">刷新</el-button>
           <el-button size="mini" type="primary" icon="el-icon-data-analysis" @click="$router.push('/monitoring-center/vibration')">历史分析</el-button>
         </div>
@@ -296,7 +296,7 @@ export default {
       }
     },
     fetchLatestInference() {
-      var base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5001'
+      var base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
       fetch(base.replace(/\/$/, '') + '/analyze', { cache: 'no-store' })
         .then(res => res.json())
         .then(payload => this.applyRealtimeData(payload))

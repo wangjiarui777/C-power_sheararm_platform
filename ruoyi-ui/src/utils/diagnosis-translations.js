@@ -22,6 +22,12 @@ export const DIAGNOSIS_LABEL_MAP = {
   bearing_outer: '轴承外圈故障',
   bearing_ball: '轴承滚珠故障',
 
+  // 轴承模型短码（ResNet1D18 CCDG-v2 输出）
+  n: '正常',
+  or: '轴承外圈故障',
+  b: '滚动体故障',
+  ir: '轴承内圈故障',
+
   // 齿轮故障
   gear_wear: '齿轮磨损',
   gear_broken: '齿轮断裂',
@@ -33,6 +39,8 @@ export const DIAGNOSIS_LABEL_MAP = {
   // 点蚀/剥落
   single_pitting: '单点蚀',
   multi_pitting: '多点蚀',
+  single_spalling: '单剥落',
+  multi_spalling: '多剥落',
   pitting: '点蚀',
   spalling: '剥落',
 

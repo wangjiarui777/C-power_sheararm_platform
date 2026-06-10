@@ -195,11 +195,16 @@ public class VibrationDiagnosisController
         HttpURLConnection conn = (HttpURLConnection) new URL(PYTHON_INFER_URL).openConnection();
         conn.setRequestMethod("POST");
         conn.setConnectTimeout(5000);
-        conn.setReadTimeout(30000);
+        conn.setReadTimeout(120000);  // 推理耗时约 6-8s (CPU)，预留充足余量
         conn.setDoOutput(true);
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 
-        String body = JSON.toJSONString(payload == null ? new LinkedHashMap<>() : payload);
+        Map<String, Object> inferPayload = new LinkedHashMap<>(payload == null ? new LinkedHashMap<>() : payload);
+        // 推理模型由客户端显式选择；缺省时仅作为兼容回退使用齿轮模型。
+        if (!inferPayload.containsKey("modelType") && !inferPayload.containsKey("model_type")) {
+            inferPayload.put("modelType", "gear");
+        }
+        String body = JSON.toJSONString(inferPayload);
         try (OutputStream os = conn.getOutputStream()) {
             os.write(body.getBytes(StandardCharsets.UTF_8));
         }
@@ -226,29 +231,61 @@ public class VibrationDiagnosisController
         Map<String, Object> payload)
     {
         Map<String, Object> data = pythonResult == null ? new LinkedHashMap<>() : pythonResult;
+        // Python 服务返回 {"success": true, "data": {...}}
         Map<String, Object> nested = data.containsKey("data") && data.get("data") instanceof Map ? (Map<String, Object>) data.get("data") : data;
+
+        // 诊断结果：Python返回 diagnosisResult / label / diagnosisName
+        String diagResult = stringValue(nested.get("diagnosisResult"),
+            stringValue(nested.get("diagnosisName"),
+                stringValue(nested.get("label"), "正常")));
+        String diagDetail = stringValue(nested.get("diagnosisDetail"),
+            stringValue(nested.get("diagnosis_detail"), "模型推理完成"));
+        String modelVersion = stringValue(nested.get("modelVersion"),
+            stringValue(nested.get("model_version"), "best_model_classwise_maha.pth"));
+        String modelType = stringValue(nested.get("modelType"),
+            stringValue(nested.get("model_type"), "gear"));
+
         Map<String, Object> latest = new LinkedHashMap<>();
         latest.put("deviceCode", deviceCode);
         latest.put("sampleTime", new Date());
-        latest.put("modelVersion", "best_model_classwise_maha.pth");
-        latest.put("diagnosisResult", stringValue(nested.get("diagnosis"), stringValue(nested.get("label"), "正常")));
-        latest.put("diagnosisName", stringValue(nested.get("diagnosis"), stringValue(nested.get("label"), "正常")));
-        latest.put("diagnosisDetail", stringValue(nested.get("diagnosis_detail"), stringValue(nested.get("diagnosisDetail"), "模型推理完成")));
+        latest.put("modelVersion", modelVersion);
+        latest.put("modelType", modelType);
+        latest.put("diagnosisResult", diagResult);
+        latest.put("diagnosisName", diagResult);
+        latest.put("diagnosisDetail", diagDetail);
+        // Python 返回 confidence(百分比) / healthIndex / riskLevel / alarmLevel
         latest.put("confidence", toNumber(nested.get("confidence"), 0));
-        latest.put("healthIndex", toNumber(nested.get("health_index"), 100));
-        latest.put("riskLevel", stringValue(nested.get("risk_level"), "低"));
+        latest.put("healthIndex", toNumber(nested.get("healthIndex"),
+            toNumber(nested.get("health_index"), 100)));
+        latest.put("riskLevel", stringValue(nested.get("riskLevel"),
+            stringValue(nested.get("risk_level"), "低")));
+        latest.put("alarmLevel", stringValue(nested.get("alarmLevel"),
+            stringValue(nested.get("alarm_level"), "normal")));
         latest.put("status", "完成");
-        latest.put("latestRms", toNumber(nested.get("rms"), 0));
-        latest.put("latestPeak", toNumber(nested.get("peak"), 0));
+        latest.put("latestRms", toNumber(nested.get("rms"),
+            toNumber(nested.get("latestRms"), 0)));
+        latest.put("latestPeak", toNumber(nested.get("peak"),
+            toNumber(nested.get("latestPeak"), 0)));
         latest.put("batchId", payload == null ? null : payload.get("batchId"));
         latest.put("filePath", filePath);
-        latest.put("waveform", nested.getOrDefault("time_data", new ArrayList<>()));
-        latest.put("frequencyAxis", nested.getOrDefault("freq_axis", new ArrayList<>()));
-        latest.put("spectrum", nested.getOrDefault("freq_data", new ArrayList<>()));
-        latest.put("evidence", Arrays.asList(
-            evidence("模型标签", "Python 推理服务返回了实时分类标签。", "中"),
-            evidence("置信度", "模型输出已同步到前端面板。", "中")
-        ));
+        // 波形/频谱：Python 返回 time_data / freq_axis / freq_data
+        latest.put("waveform", nested.getOrDefault("time_data",
+            nested.getOrDefault("waveform", new ArrayList<>())));
+        latest.put("frequencyAxis", nested.getOrDefault("freq_axis",
+            nested.getOrDefault("frequencyAxis", new ArrayList<>())));
+        latest.put("spectrum", nested.getOrDefault("freq_data",
+            nested.getOrDefault("spectrum", new ArrayList<>())));
+
+        // 诊断证据：优先使用 Python 返回的 evidence 列表
+        Object evidenceObj = nested.get("evidence");
+        if (evidenceObj instanceof List) {
+            latest.put("evidence", evidenceObj);
+        } else {
+            latest.put("evidence", Arrays.asList(
+                evidence("模型标签", "Python 推理服务返回了实时分类标签 (模型: " + modelType + ")。", "中"),
+                evidence("置信度", "模型输出已同步到前端面板。", "中")
+            ));
+        }
         return latest;
     }
 
@@ -332,6 +369,7 @@ public class VibrationDiagnosisController
         message.setDiagnosisResult(stringValue(diagnosis.get("diagnosisResult"), stringValue(diagnosis.get("diagnosisName"), "正常")));
         message.setDiagnosisName(stringValue(diagnosis.get("diagnosisName"), stringValue(diagnosis.get("diagnosisResult"), "正常")));
         message.setDiagnosisDetail(stringValue(diagnosis.get("diagnosisDetail"), ""));
+        message.setModelType(stringValue(diagnosis.get("modelType"), "gear"));
         message.setConfidence(toNumber(diagnosis.get("confidence"), 0));
         message.setHealthIndex(toNumber(diagnosis.get("healthIndex"), 0));
         message.setRiskLevel(stringValue(diagnosis.get("riskLevel"), "低"));

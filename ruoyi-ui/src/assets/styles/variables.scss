@@ -1,62 +1,62 @@
 // base color
-$blue: #2563eb;
-$light-blue: #2f80ed;
-$red: #e5484d;
+$blue: #22d3ee;
+$light-blue: #38bdf8;
+$red: #ef4444;
 $pink: #e65d6e;
-$green: #1f9d55;
-$tiffany: #227c9d;
-$yellow: #d97706;
-$panGreen: #1f9d55;
+$green: #10b981;
+$tiffany: #22d3ee;
+$yellow: #f59e0b;
+$panGreen: #10b981;
 
 // 浅色工业生产模式全局配色
-$base-page-background: #121212;
-$base-page-background-overlay: rgba(255, 255, 255, 0.88);
-$base-primary-color: #2563eb;
-$base-card-border: #d7dee8;
-$base-card-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
-$base-grid-line: rgba(87, 99, 116, 0.08);
+$base-page-background: #0b1426;
+$base-page-background-overlay: rgba(15, 23, 42, 0.88);
+$base-primary-color: #22d3ee;
+$base-card-border: #1e293b;
+$base-card-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
+$base-grid-line: rgba(34, 211, 238, 0.04);
 
 // 默认菜单主题风格
-$base-menu-color: #3f4b5f;
-$base-menu-color-active: #0f172a;
-$base-menu-background: #171717;
-$base-logo-title-color: #0f172a;
+$base-menu-color: #cbd5e1;
+$base-menu-color-active: #22d3ee;
+$base-menu-background: #08111f;
+$base-logo-title-color: #22d3ee;
 
-$base-menu-light-color: #3f4b5f;
-$base-menu-light-background: #171717;
-$base-logo-light-title-color: #0f172a;
+$base-menu-light-color: #cbd5e1;
+$base-menu-light-background: #08111f;
+$base-logo-light-title-color: #22d3ee;
 
-$base-sub-menu-background: #171717;
-$base-sub-menu-hover: #1f1f1f;
+$base-sub-menu-background: #0f172a;
+$base-sub-menu-hover: rgba(34, 211, 238, 0.1);
 
 $base-sidebar-width: 200px;
 
 :root {
-  --tech-page-bg: #121212;
-  --tech-page-overlay: rgba(255, 255, 255, 0.88);
-  --tech-primary: #2563eb;
-  --tech-card-border: #d7dee8;
-  --tech-card-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
-  --tech-grid-line: rgba(87, 99, 116, 0.08);
-  --industrial-surface: #1a1a1a;
-  --industrial-surface-muted: #171717;
-  --industrial-text: #1f2937;
-  --industrial-text-muted: #64748b;
-  --industrial-border: #d7dee8;
+  --tech-page-bg: #0b1426;
+  --tech-page-overlay: rgba(15, 23, 42, 0.88);
+  --tech-primary: #22d3ee;
+  --tech-card-border: #1e293b;
+  --tech-card-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
+  --tech-grid-line: rgba(34, 211, 238, 0.04);
+  --industrial-surface: #111c30;
+  --industrial-surface-muted: #0f172a;
+  --industrial-text: #cbd5e1;
+  --industrial-text-muted: #94a3b8;
+  --industrial-border: #1e293b;
 
   /* === 语义化文本颜色系统（暗色背景专用） === */
-  --text-heading:  #ffffff;  /* 标题：纯白，最高对比度 */
-  --text-body:     #e2e8f0;  /* 正文：暖白，长时间阅读舒适 */
+  --text-heading:  #f8fafc;  /* 标题：亮白，最高对比度 */
+  --text-body:     #cbd5e1;  /* 正文：冷灰白，长时间阅读舒适 */
   --text-label:    #94a3b8;  /* 标签/字段名：冷灰蓝，不抢眼 */
-  --text-value:    #fbbf24;  /* 数据值/KPI：琥珀金，突出醒目 */
+  --text-value:    #22d3ee;  /* 数据值/KPI：亮青，突出醒目 */
   --text-link:     #38bdf8;  /* 链接/可点击：亮天蓝，可辨识 */
-  --text-success:  #4ade80;  /* 成功/正常：亮绿 */
-  --text-warning:  #fbbf24;  /* 警告：亮琥珀黄 */
-  --text-danger:   #f87171;  /* 危险/错误：亮红 */
-  --text-info:     #60a5fa;  /* 信息提示：亮蓝 */
-  --text-muted:    #64748b;  /* 辅助/时间戳：冷灰 */
+  --text-success:  #10b981;  /* 成功/正常：荧光绿 */
+  --text-warning:  #f59e0b;  /* 警告：明黄 */
+  --text-danger:   #ef4444;  /* 危险/错误：警示红 */
+  --text-info:     #38bdf8;  /* 信息提示：亮蓝 */
+  --text-muted:    #94a3b8;  /* 辅助/时间戳：冷灰 */
   --text-code:     #5eead4;  /* 代码/monospace：青绿 */
-  --text-accent:   #fbbf24;  /* 强调/活跃：琥珀金 */
+  --text-accent:   #22d3ee;  /* 强调/活跃：亮青 */
 }
 
 // 全局浅色工业生产模式

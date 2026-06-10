@@ -24,7 +24,7 @@ let reconnectDelay = 3000
 let listeners = []
 
 function getWsUrl() {
-  const base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5001'
+  const base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
   return base.replace(/^http/, 'ws') + '/ws'
 }
 

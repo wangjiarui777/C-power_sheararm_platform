@@ -16,6 +16,7 @@ public class SensorWebSocketMessageVo
     private String diagnosisResult;
     private String diagnosisName;
     private String diagnosisDetail;
+    private String modelType;
     private Double confidence;
     private Double healthIndex;
     private String riskLevel;
@@ -48,6 +49,8 @@ public class SensorWebSocketMessageVo
     public void setDiagnosisName(String diagnosisName) { this.diagnosisName = diagnosisName; }
     public String getDiagnosisDetail() { return diagnosisDetail; }
     public void setDiagnosisDetail(String diagnosisDetail) { this.diagnosisDetail = diagnosisDetail; }
+    public String getModelType() { return modelType; }
+    public void setModelType(String modelType) { this.modelType = modelType; }
     public Double getConfidence() { return confidence; }
     public void setConfidence(Double confidence) { this.confidence = confidence; }
     public Double getHealthIndex() { return healthIndex; }

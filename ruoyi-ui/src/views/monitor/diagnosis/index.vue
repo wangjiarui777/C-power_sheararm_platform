@@ -158,27 +158,28 @@
 
       <!-- 右栏：辅助面板 -->
       <div class="right-column">
-        <el-card v-if="topProbabilities.length" shadow="hover" class="panel-card prob-card">
+        <el-card shadow="hover" class="panel-card prob-card">
           <div slot="header" class="card-header">
             <span class="card-title">各类别概率</span>
           </div>
-          <div class="prob-list">
+          <div v-if="topProbabilities.length" class="prob-list">
             <div v-for="(item, i) in topProbabilities" :key="i" class="prob-row" v-show="i < 6">
               <span class="prob-class">{{ item.class }}</span>
               <div class="prob-track">
                 <div class="prob-fill" :class="getProbBarClass(item.probability)" :style="{ width: Math.max(item.probability, 1) + '%' }"></div>
               </div>
-              <span class="prob-pct">{{ item.probability.toFixed(1) }}%</span>
+              <span class="prob-pct">{{ formatProbability(item.probability) }}</span>
             </div>
           </div>
+          <div v-else class="field-empty">概率字段为空</div>
         </el-card>
 
-        <el-card v-if="evidence.length" shadow="hover" class="panel-card evidence-card">
+        <el-card shadow="hover" class="panel-card evidence-card">
           <div slot="header" class="card-header">
             <span class="card-title">证据链</span>
             <span class="card-badge">{{ evidence.length }}</span>
           </div>
-          <div class="evidence-scroll">
+          <div v-if="evidence.length" class="evidence-scroll">
             <div v-for="(item, i) in evidence" :key="i" class="evidence-row" v-show="i < 5">
               <span class="ev-dot" :class="'dot-' + (item.type || 'info')"></span>
               <div class="ev-body">
@@ -187,19 +188,15 @@
               </div>
             </div>
           </div>
+          <div v-else class="field-empty">证据字段为空</div>
         </el-card>
 
-        <el-card v-if="decisionReason" shadow="hover" class="panel-card reason-card">
+        <el-card shadow="hover" class="panel-card reason-card">
           <div slot="header" class="card-header">
             <span class="card-title">决策原因</span>
           </div>
-          <div class="reason-text">{{ decisionReason }}</div>
+          <div class="reason-text" :class="{ 'is-empty': !decisionReason }">{{ decisionReason || '决策原因字段为空' }}</div>
         </el-card>
-
-        <div v-if="!decisionReason && !evidence.length && !topProbabilities.length" class="empty-info-placeholder">
-          <i class="el-icon-upload2"></i>
-          <span>上传数据文件开始分析</span>
-        </div>
       </div>
     </div>
 
@@ -218,7 +215,7 @@
         <el-table-column prop="healthIndex" label="健康" width="60" />
         <el-table-column prop="riskLevel" label="风险" width="60">
           <template slot-scope="scope">
-            <el-tag size="mini" :type="riskTagType(scope.row.riskLevel)">{{ scope.row.riskLevel }}</el-tag>
+            <span class="history-risk-badge" :class="'history-risk-' + riskTagType(scope.row.riskLevel)">{{ scope.row.riskLevel || '--' }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -273,8 +270,13 @@
         </div>
         <!-- 后端文件下拉选择：列出 DATA_DIR 中的 .mat/.npy 文件 -->
         <div class="mat-file-row">
-          <el-select v-model="selectedMatFile" filterable clearable placeholder="自动选择后端最新文件" popper-class="dark-select-dropdown" style="width: 100%" @change="handleSelectedMatFileChange">
-            <el-option v-for="item in matFileList" :key="item.source_name || item.name" :label="item.label || item.name" :value="item.source_name || item.name" />
+          <el-select v-model="selectedMatFile" filterable clearable placeholder="自动选择后端最新文件" popper-class="dark-select-dropdown" style="width: 100%" :disabled="polling || uploading" @change="handleSelectedMatFileChange">
+            <el-option
+              v-for="item in matFileList"
+              :key="item.source_name || item.name"
+              :label="(item.label || item.name) + (item.modelType ? ' / ' + (item.modelType === 'gear' ? '齿轮' : '轴承') : '')"
+              :value="item.source_name || item.name"
+            />
           </el-select>
         </div>
       </div>
@@ -383,8 +385,14 @@ export default {
     selectedFileLabel() {
       return this.selectedMatFile || this.filename || '--'
     },
+    selectedModelLabel() {
+      if (this.selectedModelType === 'gear') return '齿轮诊断模型'
+      if (this.selectedModelType === 'bearing') return '轴承诊断模型'
+      return '齿轮诊断模型'
+    },
     /** 置信度文本（百分比，取整） */
     confidenceText() {
+      if (this.confidence == null || this.confidence === '') return '--'
       return `${Number.isFinite(Number(this.confidence)) ? Number(this.confidence).toFixed(0) : 0}%`
     },
     /** 将内部状态码映射为用户可读的中文状态文本 */
@@ -433,6 +441,7 @@ export default {
     },
     /** 健康条颜色：>=80 绿色，>=60 黄色，<60 红色 */
     healthBarClass() {
+      if (this.healthIndex == null || this.healthIndex === '') return 'bar-empty'
       const v = this.healthBarPercent
       if (v >= 80) return 'bar-high'
       if (v >= 60) return 'bar-mid'
@@ -446,12 +455,14 @@ export default {
     },
     /** 风险徽章样式：高=危险红，中=警告黄，低=成功绿 */
     riskBadgeClass() {
+      if (!this.riskLevel) return 'empty'
       if (this.riskLevel === '高') return 'danger'
       if (this.riskLevel === '中') return 'warning'
       return 'success'
     },
     /** 环形置信度的颜色类 */
     confidenceRingClass() {
+      if (this.confidence == null || this.confidence === '') return 'fill-empty'
       const v = Number(this.confidence) || 0
       if (v >= 80) return 'fill-high'
       if (v >= 50) return 'fill-mid'
@@ -509,6 +520,23 @@ export default {
   // 方法
   // =========================================================================
   methods: {
+    /** 从对象中按顺序取第一个非空字段 */
+    pickFirst(source, keys) {
+      if (!source || !Array.isArray(keys)) return undefined
+      for (const key of keys) {
+        const value = source[key]
+        if (value !== undefined && value !== null && value !== '') return value
+      }
+      return undefined
+    },
+
+    /** 将后端数值字段转为安全数字；缺失或非法时返回 null */
+    toFiniteNumber(value) {
+      if (value === undefined || value === null || value === '') return null
+      const num = Number(value)
+      return Number.isFinite(num) ? num : null
+    },
+
     /**
      * 安全地格式化数值指标显示
      * 处理 null / undefined / NaN / Infinity 等边界情况
@@ -524,14 +552,70 @@ export default {
       return num.toFixed(digits)
     },
 
+    /** 安全格式化概率文本，避免缺 probability 字段时报错 */
+    formatProbability(value) {
+      const num = this.toFiniteNumber(value)
+      return num == null ? '--' : `${num.toFixed(1)}%`
+    },
+
     /**
      * 概率条颜色分类
      * >=80% 绿色（高置信），>=50% 黄色（中等），<50% 蓝色（低置信）
      */
     getProbBarClass(pct) {
-      if (pct >= 80) return 'fill-high'
-      if (pct >= 50) return 'fill-mid'
+      const value = this.toFiniteNumber(pct) || 0
+      if (value >= 80) return 'fill-high'
+      if (value >= 50) return 'fill-mid'
       return 'fill-low'
+    },
+
+    /** 标准化后端概率字段，支持数组、对象以及不完整数组项 */
+    normalizeProbabilities(data) {
+      const raw = this.pickFirst(data, ['topProbabilities', 'top_probabilities', 'probabilities', 'classProbabilities', 'class_probabilities'])
+      let list = []
+      if (Array.isArray(raw)) {
+        list = raw
+      } else if (raw && typeof raw === 'object') {
+        list = Object.keys(raw).map(key => ({ class: key, probability: raw[key] }))
+      }
+      return list
+        .map((item, index) => {
+          if (item && typeof item === 'object') {
+            return {
+              class: item.class || item.label || item.name || item.category || `类别 ${index + 1}`,
+              probability: this.toFiniteNumber(item.probability != null ? item.probability : item.value)
+            }
+          }
+          return {
+            class: `类别 ${index + 1}`,
+            probability: this.toFiniteNumber(item)
+          }
+        })
+        .map(item => ({
+          class: item.class,
+          probability: item.probability == null ? null : Math.max(0, Math.min(100, item.probability))
+        }))
+        .sort((a, b) => (b.probability || 0) - (a.probability || 0))
+    },
+
+    /** 标准化证据链，缺少 title/desc 时显示明确空字段 */
+    normalizeEvidence(data) {
+      const raw = this.pickFirst(data, ['evidence', 'diagnosisEvidence', 'diagnosis_evidence', 'decisionEvidence', 'decision_evidence'])
+      if (!Array.isArray(raw)) return []
+      return raw.map((item, index) => {
+        if (item && typeof item === 'object') {
+          return {
+            type: item.type || item.level || 'info',
+            title: item.title || item.name || `证据 ${index + 1}`,
+            desc: item.desc || item.description || item.message || '描述字段为空'
+          }
+        }
+        return {
+          type: 'info',
+          title: `证据 ${index + 1}`,
+          desc: String(item || '描述字段为空')
+        }
+      })
     },
 
     // -----------------------------------------------------------------------
@@ -794,21 +878,20 @@ export default {
       }
 
       // ---- 诊断核心结果（兼容 Python snake_case 和 JS camelCase） ----
-      if (data.diagnosisResult || data.diagnosisName || data.label) {
-        const rawDiagnosis = data.diagnosisResult || data.diagnosisName || data.label
-        this.diagnosisName = translateDiagnosisLabel(rawDiagnosis)
-      }
-      if (data.diagnosisDetail || data.diagnosis_detail) {
-        this.diagnosisDetail = data.diagnosisDetail || data.diagnosis_detail
-      }
-      if (data.decision_reason) this.decisionReason = data.decision_reason
-      if (data.closedPrediction || data.closed_prediction) {
-        const rawPrediction = data.closedPrediction || data.closed_prediction
-        this.closedPrediction = translateDiagnosisLabel(rawPrediction)
-      }
-      if (data.confidence != null) this.confidence = Math.max(0, Math.min(100, Number(data.confidence)))
-      if (data.healthIndex != null) {
-        this.healthIndex = Number(data.healthIndex)
+      const rawDiagnosis = this.pickFirst(data, ['diagnosisResult', 'diagnosisName', 'diagnosis_result', 'label'])
+      const rawDetail = this.pickFirst(data, ['diagnosisDetail', 'diagnosis_detail'])
+      const rawDecisionReason = this.pickFirst(data, ['decisionReason', 'decision_reason'])
+      const rawPrediction = this.pickFirst(data, ['closedPrediction', 'closed_prediction'])
+      const confidenceValue = this.toFiniteNumber(this.pickFirst(data, ['confidence']))
+      const healthValue = this.toFiniteNumber(this.pickFirst(data, ['healthIndex', 'health_index']))
+
+      this.diagnosisName = rawDiagnosis ? translateDiagnosisLabel(rawDiagnosis) : ''
+      this.diagnosisDetail = rawDetail || ''
+      this.decisionReason = rawDecisionReason || ''
+      this.closedPrediction = rawPrediction ? translateDiagnosisLabel(rawPrediction) : ''
+      this.confidence = confidenceValue == null ? null : Math.max(0, Math.min(100, confidenceValue))
+      if (healthValue != null) {
+        this.healthIndex = healthValue
         // 记录健康趋势（带完整时间戳）
         const now = new Date()
         this.healthTrendData.push({
@@ -819,42 +902,52 @@ export default {
         const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
         this.healthTrendData = this.healthTrendData.filter(d => new Date(d.time).getTime() > cutoff)
         this.$nextTick(() => this.renderHealthTrend())
+      } else {
+        this.healthIndex = null
       }
-      if (data.riskLevel) this.riskLevel = translateRiskLevel(data.riskLevel)
-      if (data.alarmLevel || data.alarm_level) {
-        const rawAlarm = data.alarmLevel || data.alarm_level
-        this.alarmLevel = translateAlarmLevel(rawAlarm)
-      }
+
+      const rawRisk = this.pickFirst(data, ['riskLevel', 'risk_level'])
+      const rawAlarm = this.pickFirst(data, ['alarmLevel', 'alarm_level'])
+      this.riskLevel = rawRisk ? translateRiskLevel(rawRisk) : ''
+      this.alarmLevel = rawAlarm ? translateAlarmLevel(rawAlarm) : ''
 
       // ---- 数值指标（多字段名兼容） ----
-      if (data.latestRms != null) this.latestRms = Number(data.latestRms)
-      else if (data.rms != null) this.latestRms = Number(data.rms)
-      if (data.latestPeak != null) this.latestPeak = Number(data.latestPeak)
-      else if (data.peak != null) this.latestPeak = Number(data.peak)
-      if (data.unknownRatio != null) this.unknownRatio = Number(data.unknownRatio)
-      if (data.segmentConsistency != null) this.segmentConsistency = Number(data.segmentConsistency)
-      if (data.meanMahalanobis != null) this.meanMahalanobis = Number(data.meanMahalanobis)
-      if (data.meanEntropy != null) this.meanEntropy = Number(data.meanEntropy)
-      if (data.sampleRate) this.sampleRate = Number(data.sampleRate)
-      else if (data.sample_rate) this.sampleRate = Number(data.sample_rate)
-      if (data.count != null) this.dataPointCount = Number(data.count)
+      this.latestRms = this.toFiniteNumber(this.pickFirst(data, ['latestRms', 'latest_rms', 'rms']))
+      this.latestPeak = this.toFiniteNumber(this.pickFirst(data, ['latestPeak', 'latest_peak', 'peak']))
+      this.unknownRatio = this.toFiniteNumber(this.pickFirst(data, ['unknownRatio', 'unknown_ratio']))
+      this.segmentConsistency = this.toFiniteNumber(this.pickFirst(data, ['segmentConsistency', 'segment_consistency']))
+      this.meanMahalanobis = this.toFiniteNumber(this.pickFirst(data, ['meanMahalanobis', 'mean_mahalanobis']))
+      this.meanEntropy = this.toFiniteNumber(this.pickFirst(data, ['meanEntropy', 'mean_entropy']))
+      this.sampleRate = this.toFiniteNumber(this.pickFirst(data, ['sampleRate', 'sample_rate']))
+      this.dataPointCount = this.toFiniteNumber(this.pickFirst(data, ['count', 'dataPointCount', 'data_point_count']))
 
       // ---- 元信息 ----
-      if (data.filename) this.filename = data.filename
-      if (data.filePath) this.filePath = data.filePath
-      if (data.deviceCode) this.deviceCode = data.deviceCode
-      if (data.modelVersion) this.modelVersion = data.modelVersion
-      if (data.sourceName) this.filePath = data.filePath || data.sourceName
+      this.filename = this.pickFirst(data, ['filename', 'fileName', 'file_name']) || ''
+      this.filePath = this.pickFirst(data, ['filePath', 'file_path', 'sourceName', 'source_name']) || ''
+      this.deviceCode = this.pickFirst(data, ['deviceCode', 'device_code']) || ''
+      this.modelVersion = this.pickFirst(data, ['modelVersion', 'model_version']) || ''
+      // 从后端响应中读取实际使用的模型类型，确保 UI 与后端一致
+      const responseModelType = this.pickFirst(data, ['modelType', 'model_type'])
+      if (responseModelType && ['gear', 'bearing'].includes(responseModelType)) {
+        this.selectedModelType = responseModelType
+      }
 
       // ---- 状态推导 ----
       if (data.status || data.resultState) {
         this.resultState = this.resolveState(data.status || data.resultState)
-      } else if (data.diagnosisName || data.diagnosisResult || data.label) {
+      } else if (rawDiagnosis) {
         this.resultState = 'done'  // 有诊断结果即视为完成
+      } else {
+        this.resultState = 'done'  // 有返回但缺诊断字段，也展示为已完成并显示空字段
       }
       this.lastUpdate = data.sampleTime || data.updateTime || new Date()
 
       // ---- 时域波形数据（多字段名兼容 + 降采样） ----
+      this.timeAxis = []
+      this.timeData = []
+      this.freqAxis = []
+      this.freqData = []
+      this.chartDirty = true
       if (Array.isArray(data.waveform) && data.waveform.length) {
         if (Array.isArray(data.time_axis) && data.time_axis.length === data.waveform.length) {
           const ds = this.downsampleSpectrum(data.time_axis, data.waveform, 800)
@@ -900,12 +993,8 @@ export default {
       }
 
       // ---- 证据链与概率（分别更新，不会互相覆盖） ----
-      if (Array.isArray(data.topProbabilities) && data.topProbabilities.length) {
-        this.topProbabilities = data.topProbabilities.sort((a, b) => (b.probability || 0) - (a.probability || 0))
-      }
-      if (Array.isArray(data.evidence) && data.evidence.length) {
-        this.evidence = data.evidence
-      }
+      this.topProbabilities = this.normalizeProbabilities(data)
+      this.evidence = this.normalizeEvidence(data)
 
       // 触发图表重绘
       this.renderCharts()
@@ -917,19 +1006,19 @@ export default {
       this.diagnosisName = ''
       this.diagnosisDetail = ''
       this.closedPrediction = ''
-      this.confidence = 0
-      this.healthIndex = 0
+      this.confidence = null
+      this.healthIndex = null
       this.riskLevel = ''
       this.alarmLevel = ''
-      this.latestRms = 0
-      this.latestPeak = 0
-      this.unknownRatio = 0
-      this.segmentConsistency = 0
-      this.meanMahalanobis = 0
-      this.meanEntropy = 0
+      this.latestRms = null
+      this.latestPeak = null
+      this.unknownRatio = null
+      this.segmentConsistency = null
+      this.meanMahalanobis = null
+      this.meanEntropy = null
       this.decisionReason = ''
-      this.sampleRate = 0
-      this.dataPointCount = 0
+      this.sampleRate = null
+      this.dataPointCount = null
       this.filename = ''
       this.filePath = ''
       this.modelVersion = ''
@@ -981,6 +1070,7 @@ export default {
      * 高/alarm → danger（红色），中/warning → warning（黄色），其余 → success（绿色）
      */
     riskTagType(level) {
+      if (!level) return 'empty'
       if (level === '高' || level === 'alarm') return 'danger'
       if (level === '中' || level === 'warning') return 'warning'
       return 'success'
@@ -1018,7 +1108,7 @@ export default {
     connectInferenceWs() {
       this.unsubscribeInferenceWs = inferenceWebSocket.subscribe((event, payload) => {
         if (event === 'open') {
-          // Subscribe to health + file_list channels; auto_analysis is broadcast to all
+          // Subscribe to health + file_list channels; analysis is triggered manually by selected model.
           inferenceWebSocket.send({ type: 'subscribe', channel: 'health' })
           inferenceWebSocket.send({ type: 'subscribe', channel: 'mat_files' })
           return
@@ -1052,15 +1142,8 @@ export default {
         if (latestName && !this.selectedMatFile && !this.userManualMode) {
           this.selectedMatFile = latestName
         }
-      } else if (msg.type === 'auto_analysis') {
-        if (msg.success && msg.data) {
-          const data = this.normalizeAnalyzeResponse({ data: msg.data })
-          this.applyDiagnosis(data)
-          this.lastAnalyzeResultText = data.diagnosisResult || data.label || ''
-          this.appendLocalHistory(data)
-          if (data.sourceName) this.selectedMatFile = data.sourceName
-          else if (data.filename) this.selectedMatFile = data.filename
-        }
+      } else if (msg.type === 'file_available') {
+        this.fetchMatFiles()
       }
     },
 
@@ -1139,6 +1222,7 @@ export default {
         this.clearDiagnosis()
         return
       }
+      this.polling = true
       try {
         const res = await inferWithFilePath({
           filePath: targetPath,
@@ -1150,6 +1234,7 @@ export default {
         const data = this.normalizeAnalyzeResponse(res)
         if (!data || !Object.keys(data).length) {
           this.clearDiagnosis()
+          this.$message.warning('分析完成但未返回有效数据')
           return
         }
         this.applyDiagnosis(data)
@@ -1157,11 +1242,19 @@ export default {
         this.appendLocalHistory(data)
         if (data.sourceName) this.selectedMatFile = data.sourceName
         else if (data.filename) this.selectedMatFile = data.filename
+        // 如果是从上传弹窗触发的，关闭弹窗
+        if (this.uploadDialogVisible) {
+          this.uploadDialogVisible = false
+          this.$message.success('文件已提交分析')
+        }
       } catch (error) {
         this.clearDiagnosis()
         if (error && error.response && error.response.status !== 500) {
           console.error('获取最新推理结果失败', error)
         }
+        this.$message.error('分析失败，请检查文件路径或后端服务')
+      } finally {
+        this.polling = false
       }
     },
 
@@ -1233,6 +1326,7 @@ export default {
         this.applyDiagnosis(data)
         this.selectedMatFile = file.name
         this.localFilePath = file.name
+        this.uploadDialogVisible = false
         this.$message.success('文件已提交分析')
       } catch (error) {
         this.clearDiagnosis()
@@ -1266,6 +1360,7 @@ export default {
         this.applyDiagnosis(data)
         this.selectedMatFile = normalizedPath.split(/[\\/]/).pop()
         this.localFilePath = normalizedPath
+        this.uploadDialogVisible = false
         this.$message.success('文件路径已提交分析')
       } catch (error) {
         this.clearDiagnosis()
@@ -2416,6 +2511,1132 @@ export default {
 .upload-dropzone .el-upload__text {
   color: #e2e8f0;
 }
+
+/* =====================================================================
+   IIoT dark theme override
+   Scoped CSS enhancement layer: keep all state, requests and events intact.
+   ===================================================================== */
+.diagnosis-page {
+  --iiot-bg: #0b1426;
+  --iiot-panel: rgba(17, 28, 48, 0.92);
+  --iiot-panel-soft: rgba(15, 23, 42, 0.72);
+  --iiot-border: #1e293b;
+  --iiot-border-strong: rgba(34, 211, 238, 0.28);
+  --iiot-text: #94a3b8;
+  --iiot-title: #f8fafc;
+  --iiot-cyan: #22d3ee;
+  --iiot-blue: #38bdf8;
+  --iiot-success: #10b981;
+  --iiot-warning: #f59e0b;
+  --iiot-danger: #ef4444;
+  height: calc(100vh - 84px);
+  padding: 16px;
+  gap: 16px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(34, 211, 238, 0.08), transparent 30%),
+    linear-gradient(180deg, #0b1426 0%, #08111f 100%) !important;
+  color: var(--iiot-text) !important;
+}
+
+.diagnosis-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 72%);
+}
+
+.top-bar,
+.panel-card,
+.center-column,
+.center-hero,
+.confidence-strip,
+.health-trend-card,
+.empty-info-placeholder {
+  background: var(--iiot-panel) !important;
+  border: 1px solid var(--iiot-border) !important;
+  border-radius: 8px !important;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04) !important;
+}
+
+.top-bar {
+  position: relative;
+  z-index: 1;
+  min-height: 54px;
+  margin-bottom: 0;
+  padding: 10px 16px;
+}
+
+.top-bar::before,
+.center-column::before,
+.panel-card::before,
+.health-trend-card::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(180deg, var(--iiot-cyan), rgba(34, 211, 238, 0.12));
+}
+
+.top-left,
+.top-right {
+  position: relative;
+  z-index: 1;
+}
+
+.top-eyebrow {
+  color: var(--iiot-cyan) !important;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.top-divider {
+  color: rgba(34, 211, 238, 0.28) !important;
+}
+
+.top-time,
+.top-file,
+.model-picker-label,
+.card-unit,
+.trend-sub,
+.hero-meta,
+.cm-label,
+.cm-unit,
+.ev-desc,
+.empty-overlay {
+  color: var(--iiot-text) !important;
+}
+
+.top-file {
+  padding: 5px 10px;
+  max-width: 240px;
+  border: 1px solid rgba(30, 41, 59, 0.9);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.84);
+}
+
+.top-status,
+.diag-tag,
+.history-risk-badge,
+.card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px !important;
+  border: 1px solid currentColor;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.top-status {
+  padding: 5px 12px;
+}
+
+.top-status.is-running,
+.top-status.is-warning {
+  background: rgba(245, 158, 11, 0.12) !important;
+  color: var(--iiot-warning) !important;
+}
+
+.top-status.is-failed,
+.top-status.is-alarm {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: var(--iiot-danger) !important;
+}
+
+.top-status.is-done {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: var(--iiot-success) !important;
+}
+
+.top-status.is-idle {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: #cbd5e1 !important;
+}
+
+.main-area {
+  position: relative;
+  z-index: 1;
+  grid-template-columns: minmax(280px, 1.45fr) minmax(420px, 2.15fr) minmax(280px, 1.45fr);
+  gap: 16px;
+  margin-bottom: 0;
+}
+
+.left-column,
+.center-column,
+.right-column {
+  gap: 16px;
+}
+
+.center-column,
+.panel-card,
+.health-trend-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.center-column {
+  padding: 16px;
+  background:
+    linear-gradient(160deg, rgba(34, 211, 238, 0.08), transparent 34%),
+    var(--iiot-panel) !important;
+}
+
+.center-hero,
+.confidence-strip {
+  padding: 14px;
+  background: rgba(15, 23, 42, 0.68) !important;
+}
+
+.diag-label {
+  color: var(--iiot-title) !important;
+  font-size: 34px;
+  letter-spacing: 0;
+  text-shadow: 0 0 18px rgba(34, 211, 238, 0.18);
+}
+
+.diag-label.tone-running {
+  color: var(--iiot-warning) !important;
+}
+
+.diag-label.tone-failed {
+  color: var(--iiot-danger) !important;
+}
+
+.diag-label.tone-done {
+  color: var(--iiot-success) !important;
+}
+
+.diag-tag {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.diag-tag.dt-danger,
+.history-risk-danger {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: var(--iiot-danger) !important;
+}
+
+.diag-tag.dt-warning,
+.history-risk-warning {
+  background: rgba(245, 158, 11, 0.12) !important;
+  color: var(--iiot-warning) !important;
+}
+
+.diag-tag.dt-success,
+.history-risk-success {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: var(--iiot-success) !important;
+}
+
+.diag-tag.dt-alarm {
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: var(--iiot-danger) !important;
+}
+
+.diag-tag.dt-model {
+  background: rgba(34, 211, 238, 0.1) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+.diag-tag.dt-danger .dt-dot,
+.diag-tag.dt-alarm .dt-dot {
+  background: var(--iiot-danger) !important;
+}
+
+.diag-tag.dt-warning .dt-dot {
+  background: var(--iiot-warning) !important;
+}
+
+.diag-tag.dt-success .dt-dot {
+  background: var(--iiot-success) !important;
+}
+
+.diag-tag.dt-model .dt-dot {
+  background: var(--iiot-cyan) !important;
+}
+
+.g-track {
+  stroke: rgba(148, 163, 184, 0.14) !important;
+}
+
+.g-fill.bar-high,
+.health-bar.bar-high,
+.conf-bar.fill-high,
+.prob-fill.fill-high {
+  stroke: var(--iiot-success) !important;
+  background: linear-gradient(90deg, var(--iiot-cyan), var(--iiot-success)) !important;
+}
+
+.g-fill.bar-mid,
+.health-bar.bar-mid,
+.conf-bar.fill-mid,
+.prob-fill.fill-mid {
+  stroke: var(--iiot-warning) !important;
+  background: linear-gradient(90deg, var(--iiot-cyan), var(--iiot-warning)) !important;
+}
+
+.g-fill.bar-low,
+.health-bar.bar-low,
+.conf-bar.fill-low {
+  stroke: var(--iiot-danger) !important;
+  background: linear-gradient(90deg, var(--iiot-warning), var(--iiot-danger)) !important;
+}
+
+.prob-fill.fill-low {
+  background: var(--iiot-cyan) !important;
+}
+
+.g-num,
+.conf-label strong,
+.cm-val,
+.prob-pct {
+  color: var(--iiot-cyan) !important;
+  font-weight: 900;
+}
+
+.gauge-label,
+.conf-label span {
+  color: var(--iiot-text) !important;
+}
+
+.health-bar-wrap,
+.conf-bar-wrap,
+.prob-track {
+  background: rgba(2, 6, 23, 0.74) !important;
+  border: 1px solid rgba(30, 41, 59, 0.9);
+}
+
+.center-metrics {
+  gap: 10px;
+}
+
+.cm-cell {
+  min-height: 58px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  background: var(--iiot-panel-soft) !important;
+  border: 1px solid var(--iiot-border) !important;
+  border-radius: 6px;
+  flex-direction: column;
+}
+
+.cm-val {
+  width: 100%;
+  margin-top: 6px;
+  text-align: left;
+  font-size: 22px;
+}
+
+.cm-val-sm {
+  color: var(--iiot-title) !important;
+  font-size: 15px;
+}
+
+.cm-val.val-danger {
+  color: var(--iiot-danger) !important;
+}
+
+.cm-val.val-warn {
+  color: var(--iiot-warning) !important;
+}
+
+.cm-val.val-ok {
+  color: var(--iiot-success) !important;
+}
+
+.panel-card ::v-deep .el-card {
+  background: transparent !important;
+}
+
+.panel-card ::v-deep .el-card__header,
+.trend-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--iiot-border) !important;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.panel-card ::v-deep .el-card__body {
+  background: transparent !important;
+}
+
+.card-title,
+.trend-title {
+  position: relative;
+  padding-left: 12px;
+  color: var(--iiot-title) !important;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.card-title::before,
+.trend-title::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--iiot-cyan);
+}
+
+.card-badge {
+  padding: 4px 8px;
+  border-color: rgba(34, 211, 238, 0.38);
+  background: rgba(34, 211, 238, 0.1) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+.chart-box,
+.trend-chart {
+  filter: saturate(1.12);
+}
+
+.empty-info-placeholder {
+  border-style: dashed !important;
+  color: var(--iiot-text) !important;
+}
+
+.empty-info-placeholder i {
+  color: var(--iiot-cyan);
+}
+
+.evidence-row,
+.prob-row {
+  border-radius: 6px;
+}
+
+.evidence-row {
+  border: 1px solid var(--iiot-border) !important;
+  background: rgba(15, 23, 42, 0.62) !important;
+}
+
+.ev-title,
+.reason-text,
+.prob-class {
+  color: var(--iiot-title) !important;
+}
+
+.ev-dot.dot-success {
+  background: var(--iiot-success) !important;
+}
+
+.ev-dot.dot-warning {
+  background: var(--iiot-warning) !important;
+}
+
+.ev-dot.dot-danger {
+  background: var(--iiot-danger) !important;
+}
+
+.ev-dot.dot-info {
+  background: var(--iiot-cyan) !important;
+}
+
+.diag-tag.dt-empty {
+  background: rgba(148, 163, 184, 0.1) !important;
+  color: #94a3b8 !important;
+}
+
+.history-risk-empty {
+  background: rgba(148, 163, 184, 0.1) !important;
+  color: #94a3b8 !important;
+}
+
+.diag-tag.dt-empty .dt-dot {
+  background: #64748b !important;
+}
+
+.g-fill.bar-empty {
+  stroke: #475569 !important;
+}
+
+.health-bar.bar-empty,
+.conf-bar.fill-empty {
+  background: #475569 !important;
+}
+
+.field-empty,
+.reason-text.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 10px 12px;
+  color: #94a3b8 !important;
+  font-size: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.22);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.history-card {
+  position: relative;
+  z-index: 1;
+}
+
+.history-risk-badge {
+  min-width: 42px;
+  justify-content: center;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.compact-table ::v-deep .el-table,
+.compact-table ::v-deep .el-table__expanded-cell {
+  background: transparent !important;
+}
+
+.compact-table ::v-deep .el-table th {
+  background: #0f172a !important;
+  color: #cbd5e1 !important;
+  border-bottom: 1px solid var(--iiot-border) !important;
+}
+
+.compact-table ::v-deep .el-table tr,
+.compact-table ::v-deep .el-table td {
+  background: transparent !important;
+  color: #cbd5e1 !important;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.7) !important;
+}
+
+.compact-table ::v-deep .el-table--enable-row-hover .el-table__body tr:hover > td {
+  background: rgba(34, 211, 238, 0.07) !important;
+}
+
+.compact-table ::v-deep .el-table::before {
+  background: var(--iiot-border) !important;
+}
+
+.diagnosis-page ::v-deep .el-input__inner,
+.diagnosis-page ::v-deep .el-select .el-input__inner {
+  background: rgba(15, 23, 42, 0.86) !important;
+  border-color: var(--iiot-border) !important;
+  color: var(--iiot-title) !important;
+}
+
+.diagnosis-page ::v-deep .el-input__inner:hover,
+.diagnosis-page ::v-deep .el-input__inner:focus {
+  border-color: var(--iiot-border-strong) !important;
+}
+
+.diagnosis-page ::v-deep .el-button {
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.diagnosis-page ::v-deep .el-button--primary.is-plain,
+.diagnosis-page ::v-deep .el-button--primary {
+  background: rgba(34, 211, 238, 0.12) !important;
+  border-color: rgba(34, 211, 238, 0.45) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+.diagnosis-page ::v-deep .el-button--success.is-plain,
+.diagnosis-page ::v-deep .el-button--success {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  color: var(--iiot-success) !important;
+}
+
+.diagnosis-page ::v-deep .el-button--warning.is-plain,
+.diagnosis-page ::v-deep .el-button--warning {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  color: var(--iiot-warning) !important;
+}
+
+.diagnosis-page ::v-deep .el-button:hover {
+  transform: translateY(-1px);
+}
+
+.upload-dropzone {
+  background: rgba(15, 23, 42, 0.72) !important;
+  border-color: rgba(34, 211, 238, 0.32) !important;
+}
+
+.upload-dropzone:hover {
+  background: rgba(34, 211, 238, 0.08) !important;
+  border-color: var(--iiot-cyan) !important;
+}
+
+.upload-dropzone .el-icon-upload,
+.upload-dropzone .el-upload__text em {
+  color: var(--iiot-cyan) !important;
+}
+
+.download-dialog-body ::v-deep .el-alert--info,
+.upload-dialog-body ::v-deep .el-alert--info {
+  background: rgba(34, 211, 238, 0.08) !important;
+  border: 1px solid rgba(34, 211, 238, 0.2) !important;
+}
+
+.download-dialog-body ::v-deep .el-alert__icon,
+.upload-dialog-body ::v-deep .el-alert__icon {
+  color: var(--iiot-cyan) !important;
+}
+
+@media (max-width: 1280px) {
+  .main-area {
+    grid-template-columns: minmax(300px, 1fr) minmax(420px, 1.4fr);
+  }
+
+  .right-column {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 992px) {
+  .main-area {
+    grid-template-columns: 1fr;
+  }
+
+  .right-column {
+    display: flex;
+  }
+}
+
+@media (max-width: 768px) {
+  .diagnosis-page {
+    padding: 12px;
+    height: auto;
+  }
+
+  .top-right,
+  .model-picker,
+  .path-upload-row,
+  .center-hero,
+  .confidence-strip {
+    width: 100%;
+  }
+
+  .top-right,
+  .center-hero {
+    align-items: stretch;
+  }
+
+  .top-right {
+    flex-wrap: wrap;
+  }
+
+  .center-hero,
+  .confidence-strip {
+    flex-direction: column;
+  }
+
+  .center-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .diag-label {
+    white-space: normal;
+    font-size: 28px;
+  }
+}
+
+/* =====================================================================
+   Layout collision fix
+   卡片内容会随着诊断结果、证据链和历史记录变多而增高，页面不能再被固定
+   视口高度压缩；图表和侧栏卡片也需要明确的最小尺寸来避免互相挤压。
+   ===================================================================== */
+.diagnosis-page {
+  height: auto !important;
+  min-height: calc(100vh - 84px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-items: stretch;
+}
+
+.main-area {
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  align-items: start;
+  grid-auto-rows: auto;
+}
+
+.left-column,
+.center-column,
+.right-column {
+  min-height: 0;
+  align-self: stretch;
+}
+
+.center-column,
+.panel-card,
+.health-trend-card {
+  overflow: hidden;
+}
+
+.center-column {
+  height: auto;
+}
+
+.panel-card,
+.health-trend-card,
+.center-hero,
+.confidence-strip,
+.cm-cell,
+.empty-info-placeholder {
+  min-width: 0;
+}
+
+.panel-card {
+  height: auto;
+  min-height: 0;
+}
+
+.panel-card ::v-deep .el-card__header {
+  min-height: 42px;
+}
+
+.panel-card ::v-deep .el-card__body {
+  min-height: 0;
+}
+
+.left-column .chart-card {
+  flex: none;
+  min-height: 300px;
+}
+
+.chart-card ::v-deep .el-card__body {
+  min-height: 240px;
+}
+
+.chart-box {
+  height: 240px;
+  min-height: 220px;
+}
+
+.right-column {
+  align-content: start;
+}
+
+.right-column .panel-card {
+  width: 100%;
+}
+
+.prob-list,
+.evidence-scroll {
+  min-width: 0;
+}
+
+.history-card {
+  margin-top: 0;
+}
+
+@media (min-width: 1281px) {
+  .left-column .chart-card {
+    min-height: 320px;
+  }
+
+  .chart-card ::v-deep .el-card__body {
+    min-height: 260px;
+  }
+
+  .chart-box {
+    height: 260px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .main-area {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  }
+
+  .right-column {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 992px) {
+  .main-area {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .left-column,
+  .right-column {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .left-column .chart-card,
+  .chart-card ::v-deep .el-card__body,
+  .chart-box {
+    min-height: 220px;
+  }
+
+  .chart-box {
+    height: 220px;
+  }
+}
+
+/* =====================================================================
+   Single-screen overview layout
+   诊断页作为总览仪表盘使用：桌面端固定在一个视口内展示全部核心信息，
+   内容在卡片内部做紧凑裁切，不让整页出现纵向滚动。
+   ===================================================================== */
+@media (min-width: 1024px) {
+  .diagnosis-page {
+    height: calc(100vh - 84px) !important;
+    min-height: 640px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 10px 12px;
+    overflow: hidden !important;
+  }
+
+  .top-bar {
+    min-height: 44px;
+    padding: 7px 12px;
+  }
+
+  .top-right {
+    gap: 8px;
+  }
+
+  .main-area {
+    min-height: 0 !important;
+    height: 100%;
+    display: grid;
+    grid-template-columns: minmax(250px, 1.25fr) minmax(430px, 1.8fr) minmax(250px, 1.25fr);
+    gap: 10px;
+    overflow: hidden;
+    align-items: stretch;
+  }
+
+  .left-column,
+  .center-column,
+  .right-column {
+    height: 100%;
+    min-height: 0;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  .left-column {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .left-column .chart-card {
+    min-height: 0 !important;
+    height: 100%;
+  }
+
+  .chart-card ::v-deep .el-card__body {
+    min-height: 0 !important;
+    height: 100%;
+    padding: 4px 8px;
+  }
+
+  .chart-box {
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  .center-column {
+    display: grid;
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    padding: 10px;
+  }
+
+  .center-hero {
+    min-height: 96px;
+    padding: 8px 10px;
+    gap: 10px;
+  }
+
+  .gauge-ring {
+    width: 78px;
+    height: 78px;
+  }
+
+  .g-num {
+    font-size: 22px;
+  }
+
+  .diag-row {
+    gap: 6px;
+  }
+
+  .diag-label {
+    font-size: 26px;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .diag-tag {
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+
+  .hero-meta {
+    gap: 10px;
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+
+  .confidence-strip {
+    min-height: 42px;
+    padding: 6px 10px;
+  }
+
+  .conf-label strong {
+    font-size: 20px;
+  }
+
+  .center-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .cm-cell {
+    min-height: 48px !important;
+    padding: 7px 8px;
+  }
+
+  .cm-label {
+    width: 100%;
+    margin-right: 0;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cm-val {
+    margin-top: 3px;
+    font-size: 17px;
+    line-height: 1.1;
+  }
+
+  .cm-val-sm {
+    font-size: 12px;
+  }
+
+  .cm-unit {
+    display: none;
+  }
+
+  .health-trend-card {
+    min-height: 0;
+  }
+
+  .trend-header {
+    min-height: 34px;
+    padding: 6px 10px;
+  }
+
+  .trend-chart {
+    height: calc(100% - 35px) !important;
+    min-height: 74px;
+  }
+
+  .right-column {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .right-column .panel-card {
+    min-height: 0;
+    width: 100%;
+  }
+
+  .right-column .prob-card,
+  .right-column .evidence-card {
+    flex: 1 1 0;
+  }
+
+  .right-column .reason-card {
+    flex: 0 0 auto;
+    max-height: 86px;
+  }
+
+  .right-column .empty-info-placeholder {
+    height: 100%;
+  }
+
+  .panel-card ::v-deep .el-card__header {
+    min-height: 34px;
+    padding: 6px 10px;
+  }
+
+  .panel-card ::v-deep .el-card__body {
+    min-height: 0;
+    padding: 6px 10px;
+    overflow: hidden;
+  }
+
+  .prob-list {
+    gap: 3px;
+  }
+
+  .prob-row {
+    min-height: 20px;
+    padding: 1px 0;
+    gap: 6px;
+  }
+
+  .prob-class {
+    width: 78px;
+    font-size: 12px;
+  }
+
+  .prob-track {
+    height: 10px;
+  }
+
+  .prob-pct {
+    width: 42px;
+    font-size: 11px;
+  }
+
+  .evidence-scroll {
+    gap: 4px;
+  }
+
+  .evidence-row {
+    min-height: 32px;
+    padding: 5px 8px;
+  }
+
+  .ev-title {
+    font-size: 12px;
+  }
+
+  .ev-desc {
+    font-size: 11px;
+  }
+
+  .reason-text {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .history-card {
+    min-height: 0;
+    max-height: 118px;
+    overflow: hidden;
+  }
+
+  .history-card ::v-deep .el-card__header {
+    min-height: 32px;
+    padding: 6px 10px;
+  }
+
+  .history-card ::v-deep .el-card__body {
+    padding: 0;
+  }
+
+  .compact-table ::v-deep .el-table th {
+    padding: 3px 0;
+  }
+
+  .compact-table ::v-deep .el-table td {
+    padding: 2px 0;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 760px) {
+  .diagnosis-page {
+    min-height: 0;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .top-bar {
+    min-height: 40px;
+    padding: 6px 10px;
+  }
+
+  .main-area,
+  .left-column,
+  .center-column,
+  .right-column {
+    gap: 8px;
+  }
+
+  .center-column {
+    padding: 8px;
+  }
+
+  .center-hero {
+    min-height: 84px;
+    padding: 6px 8px;
+  }
+
+  .gauge-ring {
+    width: 68px;
+    height: 68px;
+  }
+
+  .diag-label {
+    font-size: 22px;
+  }
+
+  .confidence-strip {
+    min-height: 36px;
+    padding: 5px 8px;
+  }
+
+  .center-metrics {
+    gap: 5px;
+  }
+
+  .cm-cell {
+    min-height: 42px !important;
+    padding: 5px 7px;
+  }
+
+  .cm-val {
+    font-size: 15px;
+  }
+
+  .trend-header {
+    min-height: 30px;
+    padding: 5px 8px;
+  }
+
+  .trend-chart {
+    min-height: 58px;
+    height: calc(100% - 31px) !important;
+  }
+
+  .history-card {
+    max-height: 96px;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1280px) {
+  .main-area {
+    grid-template-columns: minmax(220px, 0.95fr) minmax(380px, 1.5fr) minmax(220px, 0.95fr);
+  }
+
+  .center-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 </style>
 
 <style>
@@ -2598,4 +3819,142 @@ export default {
 }
 
 /* 深色主题：诊断页弹窗与浮层（append-to-body 元素，需全局样式覆盖） */
+.dark-dialog {
+  background: #111c30 !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 8px !important;
+  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.52) !important;
+}
+
+.dark-dialog .el-dialog__header {
+  border-bottom: 1px solid #1e293b !important;
+  background: #0f172a;
+}
+
+.dark-dialog .el-dialog__title {
+  color: #f8fafc !important;
+  font-weight: 800;
+}
+
+.dark-dialog .el-dialog__body,
+.dark-dialog .el-dialog__footer {
+  background: #111c30;
+  color: #94a3b8 !important;
+}
+
+.dark-dialog .el-dialog__footer {
+  border-top: 1px solid #1e293b !important;
+}
+
+.dark-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: #94a3b8 !important;
+}
+
+.dark-dialog .el-dialog__headerbtn .el-dialog__close:hover {
+  color: #22d3ee !important;
+}
+
+.dark-dialog .el-input__inner,
+.dark-dialog .el-date-editor .el-range-input {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+.dark-dialog .el-input__inner:hover,
+.dark-dialog .el-input__inner:focus {
+  border-color: rgba(34, 211, 238, 0.45) !important;
+}
+
+.dark-dialog .el-input__inner::placeholder,
+.dark-dialog .el-range-separator,
+.dark-dialog .el-date-editor .el-range__icon,
+.dark-dialog .el-date-editor .el-range__close-icon {
+  color: #94a3b8 !important;
+}
+
+.dark-dialog .el-button {
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.dark-dialog .el-button--default {
+  background: rgba(15, 23, 42, 0.86) !important;
+  border-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.dark-dialog .el-button--primary {
+  background: rgba(34, 211, 238, 0.12) !important;
+  border-color: rgba(34, 211, 238, 0.45) !important;
+  color: #22d3ee !important;
+}
+
+.dark-select-dropdown.el-select-dropdown,
+.dark-date-picker {
+  background: #111c30 !important;
+  border: 1px solid #1e293b !important;
+  border-radius: 8px !important;
+  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.52) !important;
+  color: #94a3b8 !important;
+}
+
+.dark-select-dropdown .el-select-dropdown__item {
+  color: #cbd5e1 !important;
+}
+
+.dark-select-dropdown .el-select-dropdown__item.hover,
+.dark-select-dropdown .el-select-dropdown__item:hover {
+  background: rgba(34, 211, 238, 0.1) !important;
+}
+
+.dark-select-dropdown .el-select-dropdown__item.selected {
+  color: #22d3ee !important;
+}
+
+.dark-date-picker .el-picker-panel__body-wrapper,
+.dark-date-picker .el-picker-panel__content,
+.dark-date-picker .el-picker-panel__footer,
+.dark-date-picker .el-time-panel {
+  background: #111c30 !important;
+}
+
+.dark-date-picker .el-date-range-picker__header,
+.dark-date-picker .el-date-range-picker__header button,
+.dark-date-picker .el-time-spinner__item {
+  color: #94a3b8 !important;
+}
+
+.dark-date-picker .el-date-table th {
+  color: #94a3b8 !important;
+  border-bottom-color: #1e293b !important;
+}
+
+.dark-date-picker .el-date-table td {
+  color: #cbd5e1 !important;
+}
+
+.dark-date-picker .el-date-table td.available:hover,
+.dark-date-picker .el-date-table td.today span,
+.dark-date-picker .el-time-spinner__item.active:not(.disabled) {
+  color: #22d3ee !important;
+}
+
+.dark-date-picker .el-date-table td.in-range div {
+  background: rgba(34, 211, 238, 0.08) !important;
+}
+
+.dark-date-picker .el-date-table td.current:not(.disabled) span,
+.dark-date-picker .el-date-table td.start-date span,
+.dark-date-picker .el-date-table td.end-date span {
+  background: #22d3ee !important;
+  color: #06121f !important;
+}
+
+.dark-date-picker .el-date-table td.disabled div,
+.dark-date-picker .el-date-table td.next-month,
+.dark-date-picker .el-date-table td.prev-month {
+  background: transparent !important;
+  color: #475569 !important;
+}
 </style>

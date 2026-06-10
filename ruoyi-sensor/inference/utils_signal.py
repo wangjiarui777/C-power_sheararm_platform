@@ -4,22 +4,109 @@ import numpy as np
 import scipy.io
 
 
-def _extract_signal_from_dict(payload, source_name="<memory>"):
-    """Extract 1-D float32 signal from a dict of arrays."""
+def _is_numeric_array(value):
+    try:
+        arr = np.asarray(value)
+    except Exception:
+        return False
+    return np.issubdtype(arr.dtype, np.number) and arr.size > 0
+
+
+def _find_signal_key(payload, keys, preferred):
+    """Pick the most likely signal array key from a MAT/NPZ dictionary."""
+    key_map = {str(k).lower(): k for k in keys}
+
+    for name in preferred:
+        lowered = str(name).lower()
+        if lowered in key_map and _is_numeric_array(payload[key_map[lowered]]):
+            return key_map[lowered]
+
+    for name in preferred:
+        lowered = str(name).lower()
+        for key in keys:
+            key_lower = str(key).lower()
+            if not (key_lower.endswith(lowered) or lowered in key_lower):
+                continue
+            if _is_numeric_array(payload[key]) and np.asarray(payload[key]).size >= 16:
+                return key
+
+    numeric_keys = [key for key in keys if _is_numeric_array(payload[key])]
+    if numeric_keys:
+        return max(numeric_keys, key=lambda key: np.asarray(payload[key]).size)
+
+    return keys[0]
+
+
+def _select_signal_key(payload, source_name="<memory>", preferred_signal_key=None):
+    """Return the selected signal key without loading/converting the signal."""
     keys = [k for k in payload if not str(k).startswith("__")]
     if not keys:
         raise KeyError(f"No valid data variables found in {source_name}")
+
     preferred = [
         "sig_acc_5120", "raw", "data", "signal", "vibration",
         "x", "X", "voltage", "DE_time", "wave", "values",
     ]
-    selected = next((k for k in preferred if k in payload), keys[0])
+    if preferred_signal_key:
+        preferred = [str(preferred_signal_key)] + [
+            name for name in preferred if name != str(preferred_signal_key)
+        ]
+
+    return _find_signal_key(payload, keys, preferred)
+
+
+def _extract_signal_from_dict(payload, source_name="<memory>", preferred_signal_key=None):
+    """Extract 1-D float32 signal from a dict of arrays.
+
+    Parameters
+    ----------
+    payload : dict
+        Dictionary loaded from .mat or .npz file.
+    source_name : str
+        Identifier used in error messages.
+    preferred_signal_key : str or None
+        If set, this key is tried **first** before the built-in preferred list.
+    """
+    selected = _select_signal_key(payload, source_name, preferred_signal_key)
     sig = np.asarray(payload[selected], dtype=np.float32).squeeze()
     if sig.size == 0:
         raise ValueError(f"Variable '{selected}' contains no samples.")
     if sig.ndim != 1:
         sig = sig.reshape(-1)
     return np.nan_to_num(sig, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _extract_mat_metadata(payload):
+    """
+    Extract sample rate and RPM metadata from a .mat file dictionary.
+
+    Returns
+    -------
+    dict with keys: sample_rate (float or None), rpm (float or None)
+    """
+    meta = {"sample_rate": None, "rpm": None}
+
+    for key in ("sample_rate", "sr", "fs", "Fs", "sampling_rate"):
+        if key in payload:
+            try:
+                val = float(np.asarray(payload[key]).reshape(-1)[0])
+                if val > 0:
+                    meta["sample_rate"] = val
+                    break
+            except Exception:
+                continue
+
+    for key in ("rpm", "speed", "rotating_speed"):
+        if key in payload:
+            try:
+                val = float(np.asarray(payload[key]).reshape(-1)[0])
+                if val > 0:
+                    meta["rpm"] = val
+                    break
+            except Exception:
+                continue
+
+    return meta
 
 
 def load_signal(path, signal_key="sig_acc_5120"):
@@ -29,7 +116,7 @@ def load_signal(path, signal_key="sig_acc_5120"):
 
     if suffix == ".mat":
         mat = scipy.io.loadmat(str(path))
-        return _extract_signal_from_dict(mat, source_name=path.name)
+        return _extract_signal_from_dict(mat, source_name=path.name, preferred_signal_key=signal_key)
 
     return load_npy_signal(path, signal_key=signal_key)
 
@@ -40,14 +127,11 @@ def load_npy_signal(path, signal_key="sig_acc_5120"):
 
     if isinstance(payload, np.lib.npyio.NpzFile):
         try:
-            if signal_key in payload:
-                sig = np.asarray(payload[signal_key], dtype=np.float32).reshape(-1)
-                return sig
             keys = [k for k in payload.files if not str(k).startswith("__")]
             if not keys:
                 raise KeyError(f"No valid arrays found in: {path}")
-            sig = np.asarray(payload[keys[0]], dtype=np.float32).reshape(-1)
-            return sig
+            arrays = {key: payload[key] for key in keys}
+            return _extract_signal_from_dict(arrays, source_name=path.name, preferred_signal_key=signal_key)
         finally:
             payload.close()
 
@@ -56,11 +140,7 @@ def load_npy_signal(path, signal_key="sig_acc_5120"):
             if payload.size == 1:
                 item = payload.reshape(-1)[0]
                 if isinstance(item, dict):
-                    if signal_key in item:
-                        return np.asarray(item[signal_key], dtype=np.float32).reshape(-1)
-                    keys = [k for k in item if not str(k).startswith("__")]
-                    if keys:
-                        return np.asarray(item[keys[0]], dtype=np.float32).reshape(-1)
+                    return _extract_signal_from_dict(item, source_name=path.name, preferred_signal_key=signal_key)
             pieces = [np.asarray(item, dtype=np.float32).reshape(-1) for item in payload.flat]
             if pieces:
                 return np.concatenate(pieces)

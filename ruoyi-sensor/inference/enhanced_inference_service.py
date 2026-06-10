@@ -28,7 +28,7 @@ import numpy as np                          # 数值计算
 import scipy.io                             # 读取 .mat 文件
 import torch                                # PyTorch 深度学习框架
 import uvicorn                              # ASGI 服务器
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from pydantic import BaseModel
@@ -789,16 +789,33 @@ def mat_files() -> JSONResponse:
 
 # ---- 分析接口（GET） ----
 @app.get("/analyze", response_model=AnalyzeResponse)
-def analyze(file_name: Optional[str] = Query(default=None, min_length=1)) -> Dict[str, Any]:
+def analyze(
+    file_name: Optional[str] = Query(default=None, min_length=1),
+    model_type: str = Query(default="gear"),
+) -> Dict[str, Any]:
     """
-    GET /analyze?file_name=xxx.mat
-    分析指定的数据文件或最新的数据文件
-    支持基于文件 mtime 的响应缓存
+    GET /analyze?file_name=xxx.mat[&model_type=gear]
 
-    参数:
-        file_name: 可选，指定要分析的文件名（支持 .mat 和 .npy）
-                   不指定则分析 DATA_DIR 中最新的文件
+    Analyze a specific data file or the latest file.
+    Supports response caching based on file mtime.
+
+    Parameters
+    ----------
+    file_name : str, optional
+        File name to analyze (.mat or .npy). If not specified,
+        the latest file in DATA_DIR is used.
+    model_type : str, default 'gear'
+        Diagnosis model type. This service only supports 'gear'.
+        For bearing diagnosis, use inference_service.py instead.
     """
+    model_type = str(model_type or "gear").strip().lower()
+    if model_type not in ("gear",):
+        raise HTTPException(
+            status_code=400,
+            detail=f"This service only supports model_type='gear', got '{model_type}'."
+                   f" For bearing diagnosis, use inference_service.py.",
+        )
+
     if MODEL is None:
         raise HTTPException(status_code=500, detail="Model is not loaded.")
 
@@ -846,7 +863,10 @@ def analyze(file_name: Optional[str] = Query(default=None, min_length=1)) -> Dic
 
 # ---- 文件上传分析接口（POST） ----
 @app.post("/analyze/upload", response_model=AnalyzeResponse)
-async def analyze_upload(file: UploadFile = File(...)) -> Dict[str, Any]:
+async def analyze_upload(
+    file: UploadFile = File(...),
+    model_type: str = Form(default="gear"),
+) -> Dict[str, Any]:
     """
     POST /analyze/upload
     上传 .mat 或 .npy 文件进行在线诊断分析
@@ -856,7 +876,18 @@ async def analyze_upload(file: UploadFile = File(...)) -> Dict[str, Any]:
     - .npy: 通过 numpy.load 解析（也支持 .npz 压缩格式）
 
     数据会自动识别信号变量名并提取一维振动信号
+
+    Note: This service only supports gear model. For bearing diagnosis,
+    use inference_service.py instead.
     """
+    model_type = str(model_type or "gear").strip().lower()
+    if model_type not in ("gear",):
+        raise HTTPException(
+            status_code=400,
+            detail=f"This service only supports model_type='gear', got '{model_type}'."
+                   f" For bearing diagnosis, use inference_service.py.",
+        )
+
     if MODEL is None:
         raise HTTPException(status_code=500, detail="Model is not loaded.")
 
@@ -930,9 +961,22 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
         "deviceCode": "设备A",
         "batchId": "批次001",
         "sampleTime": "2024-01-01 12:00:00",
-        "analysisMode": "v6_infer"
+        "analysisMode": "v6_infer",
+        "modelType": "gear"
     }
+
+    Note: This service only supports gear model. For bearing diagnosis,
+    use inference_service.py instead.
     """
+    # Validate model type -- this service only supports gear
+    model_type = str(payload.get("modelType") or payload.get("model_type") or "gear").strip().lower()
+    if model_type not in ("gear",):
+        raise HTTPException(
+            status_code=400,
+            detail=f"This service only supports model_type='gear', got '{model_type}'."
+                   f" For bearing diagnosis, use inference_service.py.",
+        )
+
     if MODEL is None:
         raise HTTPException(status_code=500, detail="Model is not loaded.")
 

@@ -1,29 +1,29 @@
 /* Dark Industrial global theme */
 :root {
-  --industrial-bg: #121212;
-  --industrial-bg-deep: #0f0f0f;
-  --industrial-panel: #1a1a1a;
-  --industrial-panel-2: #171717;
-  --industrial-panel-3: #262626;
-  --industrial-border: #333333;
-  --industrial-text: #ffffff;
-  --industrial-muted: #f2f2f2;
-  --industrial-amber: #ffb300;
-  --industrial-orange: #ff5722;
+  --industrial-bg: #0b1426;
+  --industrial-bg-deep: #07101f;
+  --industrial-panel: #111c30;
+  --industrial-panel-2: #0f172a;
+  --industrial-panel-3: #16243a;
+  --industrial-border: #1e293b;
+  --industrial-text: #f8fafc;
+  --industrial-muted: #94a3b8;
+  --industrial-amber: #22d3ee;
+  --industrial-orange: #38bdf8;
 
   /* === 语义化文本颜色 === */
-  --text-heading:  #ffffff;
-  --text-body:     #ffffff;
-  --text-label:    #ffffff;
-  --text-value:    #fbbf24;
+  --text-heading:  #f8fafc;
+  --text-body:     #cbd5e1;
+  --text-label:    #94a3b8;
+  --text-value:    #22d3ee;
   --text-link:     #38bdf8;
-  --text-success:  #4ade80;
-  --text-warning:  #fbbf24;
-  --text-danger:   #f87171;
-  --text-info:     #60a5fa;
-  --text-muted:    #e2e8f0;
+  --text-success:  #10b981;
+  --text-warning:  #f59e0b;
+  --text-danger:   #ef4444;
+  --text-info:     #38bdf8;
+  --text-muted:    #94a3b8;
   --text-code:     #5eead4;
-  --text-accent:   #fbbf24;
+  --text-accent:   #22d3ee;
 }
 
 html,
@@ -31,8 +31,8 @@ body,
 #app {
   background-color: var(--industrial-bg) !important;
   background-image:
-    linear-gradient(to right, rgba(255, 179, 0, 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 179, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(to right, rgba(34, 211, 238, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 211, 238, 0.03) 1px, transparent 1px),
     linear-gradient(180deg, #1a1a1a 0%, #121212 100%) !important;
   background-size: 48px 48px, 48px 48px, 100% 100% !important;
   color: var(--text-body) !important;
@@ -860,7 +860,7 @@ html body #app .tree-node:hover {
   background: var(--industrial-panel-3) !important;
   border-color: var(--industrial-amber) !important;
   color: var(--text-accent) !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.22) !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.22) !important;
 }
 
 html body #app .brand-icon,
@@ -875,8 +875,8 @@ html body #app .menu-icon {
 
 html body #app .brand-icon,
 html body #app .evidence-index {
-  background: rgba(255, 179, 0, 0.14) !important;
-  border: 1px solid rgba(255, 179, 0, 0.28) !important;
+  background: rgba(34, 211, 238, 0.14) !important;
+  border: 1px solid rgba(34, 211, 238, 0.28) !important;
   border-radius: 3px !important;
   box-shadow: none !important;
 }
@@ -957,7 +957,7 @@ html body #app .el-input__inner:focus,
 html body #app .el-textarea__inner:focus,
 html body #app .el-select .el-input.is-focus .el-input__inner {
   border-color: var(--industrial-amber) !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.18) !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.18) !important;
 }
 
 html body #app .el-button,
@@ -985,8 +985,8 @@ html body #app .el-tag,
 html body #app .status-tag,
 html body #app .state-tag,
 html body #app .badge {
-  background: rgba(255, 179, 0, 0.12) !important;
-  border-color: rgba(255, 179, 0, 0.3) !important;
+  background: rgba(34, 211, 238, 0.12) !important;
+  border-color: rgba(34, 211, 238, 0.3) !important;
   border-radius: 3px !important;
   color: var(--text-accent) !important;
 }
@@ -1024,7 +1024,7 @@ html body #app .el-menu-item {
 html body #app .el-menu-item.is-active,
 html body #app .el-submenu__title:hover,
 html body #app .el-menu-item:hover {
-  background: rgba(255, 179, 0, 0.14) !important;
+  background: rgba(34, 211, 238, 0.14) !important;
   color: var(--text-accent) !important;
 }
 
@@ -1250,15 +1250,15 @@ html body #app .el-textarea__inner:focus,
 html body #app .el-select .el-input.is-focus .el-input__inner,
 html body #app button:focus-visible,
 html body #app [tabindex]:focus-visible {
-  outline: 2px solid rgba(255, 179, 0, 0.8) !important;
+  outline: 2px solid rgba(34, 211, 238, 0.8) !important;
   outline-offset: 2px !important;
 }
 
 html body #app .el-button--primary,
 html body #app .el-button--success,
 html body #app .el-button--warning {
-  background: #ff5722 !important;
-  border-color: #ffb300 !important;
+  background: #38bdf8 !important;
+  border-color: #22d3ee !important;
   box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35) !important;
 }
 
@@ -1287,7 +1287,7 @@ html body #app .status-danger,
 html body #app .is-alarm,
 html body #app .tag-danger {
   background: #3a1710 !important;
-  border-color: #ff5722 !important;
+  border-color: #38bdf8 !important;
 }
 
 html body #app .el-tag--warning,
@@ -1295,7 +1295,7 @@ html body #app .status-warning,
 html body #app .is-warning,
 html body #app .tag-warning {
   background: #342711 !important;
-  border-color: #ffb300 !important;
+  border-color: #22d3ee !important;
 }
 
 html body #app .el-tag--success,
@@ -1303,7 +1303,7 @@ html body #app .status-success,
 html body #app .is-done,
 html body #app .tag-success {
   background: #1f2b16 !important;
-  border-color: #ffb300 !important;
+  border-color: #22d3ee !important;
 }
 
 html body #app .result-card,
@@ -1311,7 +1311,7 @@ html body #app .alarm-banner,
 html body #app .super-ego-alert {
   border-width: 2px !important;
   box-shadow:
-    inset 4px 0 0 #ff5722,
+    inset 4px 0 0 #38bdf8,
     inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
 }
 
@@ -1329,19 +1329,19 @@ html body #app .model-result-item {
 html body #app .channel-tile.active,
 html body #app .channel-card.active,
 html body #app .device-item.active {
-  border-left-color: #ffb300 !important;
+  border-left-color: #22d3ee !important;
   background: #211a0d !important;
 }
 
 html body #app .channel-tile.danger,
 html body #app .channel-card.abnormal,
 html body #app .channel-card.danger {
-  border-left-color: #ff5722 !important;
+  border-left-color: #38bdf8 !important;
 }
 
 html body #app .channel-tile.warning,
 html body #app .channel-card.warning {
-  border-left-color: #ffb300 !important;
+  border-left-color: #22d3ee !important;
 }
 
 html body #app .el-table th.el-table__cell,
@@ -1358,15 +1358,15 @@ html body #app .el-table__body tr:hover > td {
 
 html body #app .empty-overlay,
 html body #app .el-empty__description {
-  border: 1px dashed rgba(255, 179, 0, 0.45) !important;
-  background: rgba(255, 179, 0, 0.08) !important;
+  border: 1px dashed rgba(34, 211, 238, 0.45) !important;
+  background: rgba(34, 211, 238, 0.08) !important;
   padding: 10px 14px !important;
   border-radius: 3px !important;
 }
 
 html body #app .workflow-strip {
   grid-auto-rows: minmax(44px, auto) !important;
-  border-left: 3px solid #ffb300 !important;
+  border-left: 3px solid #22d3ee !important;
 }
 
 html body #app .workflow-step {
@@ -1378,7 +1378,7 @@ html body #app .workflow-step {
 
 html body #app .workflow-step.active {
   background: #211a0d !important;
-  border-color: #ffb300 !important;
+  border-color: #22d3ee !important;
 }
 
 html body #app .workflow-step span {
@@ -1387,8 +1387,8 @@ html body #app .workflow-step span {
 }
 
 html body #app .workflow-step.active span {
-  background: #ff5722 !important;
-  border-color: #ffb300 !important;
+  background: #38bdf8 !important;
+  border-color: #22d3ee !important;
 }
 
 html body #app .channel-tile,
@@ -1412,7 +1412,7 @@ html body #app .device-item.active::after {
   right: 8px;
   width: 8px;
   height: 8px;
-  background: #ffb300;
+  background: #22d3ee;
   border-radius: 50%;
 }
 
@@ -1430,12 +1430,817 @@ html body #app .metric-cell {
 html body #app .alarm-panel,
 html body #app .log-zone,
 html body #app .drawer-log-zone {
-  border-left: 3px solid #ff5722 !important;
+  border-left: 3px solid #38bdf8 !important;
 }
 
 html body #app .primary-chart,
 html body #app .wave-chart,
 html body #app .chart-box {
   border-color: #333333 !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.08) !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.08) !important;
+}
+
+/* =====================================================================
+   IIoT cyan global override
+   全站最终主题层：用于压住页面局部样式中的旧黑灰/琥珀工业风。
+   ===================================================================== */
+:root {
+  --iiot-bg: #0b1426;
+  --iiot-bg-deep: #07101f;
+  --iiot-shell: #08111f;
+  --iiot-panel: rgba(17, 28, 48, 0.94);
+  --iiot-panel-solid: #111c30;
+  --iiot-panel-soft: rgba(15, 23, 42, 0.78);
+  --iiot-panel-hover: rgba(34, 211, 238, 0.08);
+  --iiot-border: #1e293b;
+  --iiot-border-active: rgba(34, 211, 238, 0.42);
+  --iiot-text: #cbd5e1;
+  --iiot-muted: #94a3b8;
+  --iiot-heading: #f8fafc;
+  --iiot-cyan: #22d3ee;
+  --iiot-blue: #38bdf8;
+  --iiot-success: #10b981;
+  --iiot-warning: #f59e0b;
+  --iiot-danger: #ef4444;
+}
+
+html,
+body,
+#app,
+html body #app .app-wrapper,
+html body #app .main-container,
+html body #app .app-main,
+html body #app .app-container,
+html body #app [class$="-page"],
+html body #app [class*="-page "] {
+  background:
+    radial-gradient(circle at 16% 8%, rgba(34, 211, 238, 0.08), transparent 28%),
+    linear-gradient(to right, rgba(34, 211, 238, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 211, 238, 0.028) 1px, transparent 1px),
+    linear-gradient(180deg, var(--iiot-bg) 0%, var(--iiot-bg-deep) 100%) !important;
+  background-size: auto, 48px 48px, 48px 48px, auto !important;
+  color: var(--iiot-text) !important;
+}
+
+html body #app .app-container {
+  padding: 16px !important;
+}
+
+html body #app p,
+html body #app span,
+html body #app label,
+html body #app .el-form-item__label,
+html body #app .el-radio__label,
+html body #app .el-checkbox__label,
+html body #app .el-table,
+html body #app .el-table .cell,
+html body #app .el-dialog__body,
+html body #app .el-message-box__content,
+body .el-popper,
+body .el-popper span {
+  color: var(--iiot-text) !important;
+}
+
+html body #app h1,
+html body #app h2,
+html body #app h3,
+html body #app h4,
+html body #app h5,
+html body #app h6,
+html body #app .page-title,
+html body #app .card-title,
+html body #app .panel-title,
+html body #app .section-title,
+html body #app .drawer-title,
+html body #app .detail-card-title,
+html body #app .el-card__header,
+html body #app .el-dialog__title,
+body .el-message-box__title {
+  color: var(--iiot-heading) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+}
+
+html body #app small,
+html body #app .desc,
+html body #app .tip,
+html body #app .help,
+html body #app .meta,
+html body #app .sub-title,
+html body #app .page-subtitle,
+html body #app .drawer-subtitle,
+html body #app .card-foot,
+html body #app .top-time,
+html body #app .status-time,
+html body #app .evidence-desc,
+html body #app .el-pagination__total,
+html body #app .el-pagination__jump,
+html body #app .el-pagination__sizes {
+  color: var(--iiot-muted) !important;
+}
+
+html body #app a,
+html body #app .el-link,
+html body #app .link-type,
+html body #app .el-button--text,
+html body #app .el-breadcrumb__inner,
+html body #app .el-breadcrumb__inner a {
+  color: var(--iiot-cyan) !important;
+}
+
+html body #app .navbar,
+html body #app .fixed-header,
+html body #app .tags-view-container,
+html body #app .tags-view-wrapper,
+html body #app .breadcrumb-container,
+html body #app .top-bar,
+html body #app .topbar,
+html body #app .page-toolbar,
+html body #app .query-form,
+html body #app .filter-container,
+html body #app .toolbar,
+html body #app .operation-bar,
+html body #app aside {
+  background: var(--iiot-panel) !important;
+  border: 1px solid var(--iiot-border) !important;
+  color: var(--iiot-text) !important;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04) !important;
+}
+
+html body #app .navbar,
+html body #app .fixed-header,
+html body #app .tags-view-container {
+  border-width: 0 0 1px 0 !important;
+}
+
+html body #app .sidebar-container,
+html body #app .sidebar-container.theme-dark,
+html body #app .sidebar-container.theme-light,
+html body #app .sidebar-logo-container,
+html body #app .sidebar-logo-container .sidebar-title,
+html body #app .el-menu,
+body .el-menu--popup,
+body .el-menu--vertical > .el-menu--popup {
+  background: var(--iiot-shell) !important;
+  border-color: var(--iiot-border) !important;
+  color: var(--iiot-text) !important;
+  box-shadow: inset -1px 0 0 var(--iiot-border) !important;
+}
+
+html body #app .sidebar-container .el-menu-item,
+html body #app .sidebar-container .el-submenu__title,
+body .el-menu--popup .el-menu-item,
+body .el-menu--popup .el-submenu__title {
+  background: transparent !important;
+  color: var(--iiot-text) !important;
+}
+
+html body #app .sidebar-container .el-menu-item:hover,
+html body #app .sidebar-container .el-submenu__title:hover,
+html body #app .sidebar-container .el-menu-item.is-active,
+html body #app .sidebar-container .el-submenu.is-active > .el-submenu__title,
+body .el-menu--popup .el-menu-item:hover,
+body .el-menu--popup .el-menu-item.is-active {
+  background: rgba(34, 211, 238, 0.1) !important;
+  color: var(--iiot-cyan) !important;
+  border-right-color: var(--iiot-cyan) !important;
+}
+
+html body #app .tags-view-item {
+  background: var(--iiot-panel-soft) !important;
+  border-color: var(--iiot-border) !important;
+  color: var(--iiot-muted) !important;
+}
+
+html body #app .tags-view-item.active,
+html body #app .tags-view-item:hover {
+  background: rgba(34, 211, 238, 0.1) !important;
+  border-color: var(--iiot-border-active) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+html body #app .el-card,
+html body #app .box-card,
+html body #app .card,
+html body #app .panel,
+html body #app .box,
+html body #app .container-card,
+html body #app .panel-card,
+html body #app .dashboard-card,
+html body #app .metric-card,
+html body #app .chart-card,
+html body #app .result-card,
+html body #app .control-card,
+html body #app .debug-card,
+html body #app .monitor-card,
+html body #app .status-card,
+html body #app .data-card,
+html body #app .info-card,
+html body #app .channel-card,
+html body #app .channel-tile,
+html body #app .trend-panel,
+html body #app .alarm-panel,
+html body #app .main-metric,
+html body #app .mini-stat,
+html body #app .model-result-item,
+html body #app .evidence-item,
+html body #app .device-item,
+html body #app .detail-card,
+html body #app .tree-panel,
+html body #app .tree-border,
+html body #app .el-collapse,
+html body #app .el-tabs__content,
+html body #app .el-drawer,
+html body #app .el-drawer__body,
+html body #app .drawer-shell,
+html body #app .drawer-body,
+html body #app .drawer-footer {
+  background: var(--iiot-panel) !important;
+  border: 1px solid var(--iiot-border) !important;
+  border-radius: 8px !important;
+  color: var(--iiot-text) !important;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04) !important;
+}
+
+html body #app .el-card__header,
+html body #app .el-card__body,
+html body #app .panel-card .el-card__header,
+html body #app .panel-card .el-card__body,
+html body #app .detail-card-title,
+html body #app .el-collapse-item__header,
+html body #app .el-collapse-item__wrap,
+html body #app .el-drawer__header {
+  background: transparent !important;
+  border-color: var(--iiot-border) !important;
+}
+
+html body #app .card-title,
+html body #app .panel-title,
+html body #app .section-title,
+html body #app .trend-title,
+html body #app .alarm-panel__head,
+html body #app .zone-header > span:first-child {
+  position: relative !important;
+  padding-left: 12px !important;
+}
+
+html body #app .card-title::before,
+html body #app .panel-title::before,
+html body #app .section-title::before,
+html body #app .trend-title::before,
+html body #app .alarm-panel__head::before,
+html body #app .zone-header > span:first-child::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 2px !important;
+  bottom: 2px !important;
+  width: 3px !important;
+  border-radius: 999px !important;
+  background: var(--iiot-cyan) !important;
+}
+
+html body #app .metric-value,
+html body #app .metric-val,
+html body #app .detail-value,
+html body #app .info-value,
+html body #app .card-panel-num,
+html body #app .kpi-item strong,
+html body #app .value,
+html body #app .health-header strong,
+html body #app .ring-num,
+html body #app .g-num,
+html body #app .stat-num {
+  color: var(--iiot-cyan) !important;
+  font-weight: 900 !important;
+  font-variant-numeric: tabular-nums !important;
+  text-shadow: 0 0 14px rgba(34, 211, 238, 0.16) !important;
+}
+
+html body #app .metric-label,
+html body #app .field-label,
+html body #app .detail-label,
+html body #app .info-label,
+html body #app .label,
+html body #app .card-label,
+html body #app .metric-name {
+  color: var(--iiot-muted) !important;
+}
+
+html body #app .el-table,
+html body #app .el-table__expanded-cell,
+html body #app .el-table__body-wrapper,
+html body #app .el-table th,
+html body #app .el-table tr,
+html body #app .el-table td,
+html body #app .el-table--border,
+html body #app .el-table--group {
+  background: transparent !important;
+  border-color: var(--iiot-border) !important;
+  color: var(--iiot-text) !important;
+}
+
+html body #app .el-table .el-table__header-wrapper th,
+html body #app .el-table .el-table__fixed-header-wrapper th,
+html body #app .el-table th.el-table__cell {
+  background: #0f172a !important;
+  border-color: var(--iiot-border) !important;
+  color: #cbd5e1 !important;
+}
+
+html body #app .el-table td.el-table__cell,
+html body #app .el-table th.el-table__cell.is-leaf,
+html body #app .el-table--border .el-table__cell,
+html body #app .el-table--border th.el-table__cell {
+  border-color: rgba(30, 41, 59, 0.86) !important;
+}
+
+html body #app .el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: rgba(15, 23, 42, 0.5) !important;
+}
+
+html body #app .el-table--enable-row-hover .el-table__body tr:hover > td,
+html body #app .el-table__body tr.current-row > td {
+  background: rgba(34, 211, 238, 0.08) !important;
+}
+
+html body #app .el-table::before,
+html body #app .el-table::after,
+html body #app .el-table--group::after,
+html body #app .el-table--border::after {
+  background: var(--iiot-border) !important;
+}
+
+html body #app .el-input__inner,
+html body #app .el-textarea__inner,
+html body #app .el-select .el-input__inner,
+html body #app .el-input-number .el-input__inner,
+html body #app .el-date-editor.el-input__inner,
+html body #app .el-date-editor .el-range-input,
+html body #app .el-date-editor .el-range-separator,
+html body #app .el-cascader .el-input__inner,
+body .el-popper .el-input__inner,
+body .el-popper .el-textarea__inner {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border-color: var(--iiot-border) !important;
+  border-radius: 6px !important;
+  color: var(--iiot-heading) !important;
+  box-shadow: none !important;
+}
+
+html body #app .el-input__inner::placeholder,
+html body #app .el-textarea__inner::placeholder,
+body .el-popper input::placeholder,
+body .el-popper textarea::placeholder {
+  color: var(--iiot-muted) !important;
+  opacity: 1 !important;
+}
+
+html body #app .el-input__inner:hover,
+html body #app .el-input__inner:focus,
+html body #app .el-textarea__inner:hover,
+html body #app .el-textarea__inner:focus,
+html body #app .el-select .el-input.is-focus .el-input__inner,
+body .el-popper .el-input__inner:hover,
+body .el-popper .el-input__inner:focus {
+  border-color: var(--iiot-border-active) !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.12) !important;
+}
+
+html body #app .el-input__prefix,
+html body #app .el-input__suffix,
+html body #app .el-select__caret,
+html body #app .el-date-editor .el-range__icon,
+html body #app .el-date-editor .el-range__close-icon {
+  color: var(--iiot-muted) !important;
+}
+
+html body #app .el-radio__inner,
+html body #app .el-checkbox__inner,
+html body #app .el-switch__core {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border-color: var(--iiot-border) !important;
+}
+
+html body #app .el-radio__input.is-checked .el-radio__inner,
+html body #app .el-checkbox__input.is-checked .el-checkbox__inner,
+html body #app .el-switch.is-checked .el-switch__core,
+html body #app .el-slider__bar,
+html body #app .el-slider__button {
+  background: var(--iiot-cyan) !important;
+  border-color: var(--iiot-cyan) !important;
+}
+
+html body #app .el-radio__input.is-checked + .el-radio__label,
+html body #app .el-checkbox__input.is-checked + .el-checkbox__label {
+  color: var(--iiot-cyan) !important;
+}
+
+html body #app .el-button,
+body .el-message-box .el-button {
+  background: rgba(15, 23, 42, 0.86) !important;
+  border-color: var(--iiot-border) !important;
+  border-radius: 6px !important;
+  color: var(--iiot-text) !important;
+  box-shadow: none !important;
+  font-weight: 700 !important;
+}
+
+html body #app .el-button:hover,
+html body #app .el-button:focus,
+body .el-message-box .el-button:hover,
+body .el-message-box .el-button:focus {
+  background: rgba(34, 211, 238, 0.1) !important;
+  border-color: var(--iiot-border-active) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+html body #app .el-button--primary,
+html body #app .el-button--primary.is-plain,
+body .el-message-box .el-button--primary {
+  background: rgba(34, 211, 238, 0.14) !important;
+  border-color: rgba(34, 211, 238, 0.48) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+html body #app .el-button--success,
+html body #app .el-button--success.is-plain {
+  background: rgba(16, 185, 129, 0.14) !important;
+  border-color: rgba(16, 185, 129, 0.48) !important;
+  color: var(--iiot-success) !important;
+}
+
+html body #app .el-button--warning,
+html body #app .el-button--warning.is-plain {
+  background: rgba(245, 158, 11, 0.14) !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  color: var(--iiot-warning) !important;
+}
+
+html body #app .el-button--danger,
+html body #app .el-button--danger.is-plain {
+  background: rgba(239, 68, 68, 0.14) !important;
+  border-color: rgba(239, 68, 68, 0.52) !important;
+  color: var(--iiot-danger) !important;
+}
+
+html body #app .el-button.is-disabled,
+html body #app .el-button.is-disabled:hover,
+html body #app .el-button.is-disabled:focus {
+  background: rgba(15, 23, 42, 0.52) !important;
+  border-color: rgba(30, 41, 59, 0.6) !important;
+  color: #64748b !important;
+}
+
+body .el-dialog,
+body .el-message-box,
+body .el-popover,
+body .el-dropdown-menu,
+body .el-select-dropdown,
+body .el-cascader__dropdown,
+body .el-tooltip__popper,
+body .el-picker-panel,
+body .el-color-dropdown,
+html body #app .el-dialog,
+html body #app .el-message-box,
+html body #app .el-popover {
+  background: var(--iiot-panel-solid) !important;
+  border: 1px solid var(--iiot-border) !important;
+  border-radius: 8px !important;
+  color: var(--iiot-text) !important;
+  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.52) !important;
+}
+
+body .el-dialog__header,
+body .el-dialog__footer,
+body .el-message-box__header,
+body .el-message-box__btns,
+body .el-picker-panel__footer,
+html body #app .el-dialog__header,
+html body #app .el-dialog__footer {
+  background: #0f172a !important;
+  border-color: var(--iiot-border) !important;
+}
+
+body .el-dialog__title,
+body .el-message-box__title,
+body .el-notification__title,
+body .el-message__content {
+  color: var(--iiot-heading) !important;
+}
+
+body .el-dialog__body,
+body .el-message-box__content,
+body .el-popover,
+body .el-picker-panel,
+body .el-dropdown-menu__item,
+body .el-select-dropdown__item,
+body .el-cascader-node,
+body .el-date-table td,
+body .el-date-range-picker__header,
+body .el-date-range-picker__header button,
+body .el-time-spinner__item {
+  color: var(--iiot-text) !important;
+}
+
+body .el-dropdown-menu__item:hover,
+body .el-select-dropdown__item.hover,
+body .el-select-dropdown__item:hover,
+body .el-cascader-node:not(.is-disabled):focus,
+body .el-cascader-node:not(.is-disabled):hover {
+  background: rgba(34, 211, 238, 0.1) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+body .el-select-dropdown__item.selected,
+body .el-cascader-node.in-active-path,
+body .el-cascader-node.is-active,
+body .el-date-table td.today span {
+  color: var(--iiot-cyan) !important;
+}
+
+body .el-date-table td.current:not(.disabled) span,
+body .el-date-table td.start-date span,
+body .el-date-table td.end-date span {
+  background: var(--iiot-cyan) !important;
+  color: #06121f !important;
+}
+
+body .el-date-table td.in-range div {
+  background: rgba(34, 211, 238, 0.08) !important;
+}
+
+body .el-message,
+body .el-notification,
+html body #app .el-message,
+html body #app .el-notification {
+  background: var(--iiot-panel-solid) !important;
+  border: 1px solid var(--iiot-border) !important;
+  border-radius: 8px !important;
+  color: var(--iiot-text) !important;
+  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.44) !important;
+}
+
+html body #app .el-tag,
+html body #app .status-tag,
+html body #app .state-tag,
+html body #app .badge,
+body .el-tag {
+  background: rgba(34, 211, 238, 0.1) !important;
+  border-color: rgba(34, 211, 238, 0.36) !important;
+  border-radius: 999px !important;
+  color: var(--iiot-cyan) !important;
+  font-weight: 800 !important;
+}
+
+html body #app .el-tag--success,
+html body #app .status-success,
+html body #app .is-done,
+html body #app .is-success,
+html body #app .tag-success,
+html body #app .normal,
+body .el-tag--success {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.42) !important;
+  color: var(--iiot-success) !important;
+}
+
+html body #app .el-tag--warning,
+html body #app .status-warning,
+html body #app .is-warning,
+html body #app .tag-warning,
+html body #app .warning,
+body .el-tag--warning {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  color: var(--iiot-warning) !important;
+}
+
+html body #app .el-tag--danger,
+html body #app .status-danger,
+html body #app .is-alarm,
+html body #app .is-danger,
+html body #app .tag-danger,
+html body #app .danger,
+html body #app .error,
+html body #app .failed,
+body .el-tag--danger {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.48) !important;
+  color: var(--iiot-danger) !important;
+}
+
+html body #app .text-success { color: var(--iiot-success) !important; }
+html body #app .text-warning { color: var(--iiot-warning) !important; }
+html body #app .text-danger { color: var(--iiot-danger) !important; }
+html body #app .text-info { color: var(--iiot-blue) !important; }
+html body #app .text-primary { color: var(--iiot-cyan) !important; }
+html body #app .text-muted { color: var(--iiot-muted) !important; }
+
+html body #app .el-alert {
+  background: rgba(15, 23, 42, 0.82) !important;
+  border: 1px solid var(--iiot-border) !important;
+  border-radius: 8px !important;
+}
+
+html body #app .el-alert--success .el-alert__title,
+body .el-message--success .el-message__content {
+  color: var(--iiot-success) !important;
+}
+
+html body #app .el-alert--warning .el-alert__title,
+body .el-message--warning .el-message__content {
+  color: var(--iiot-warning) !important;
+}
+
+html body #app .el-alert--error .el-alert__title,
+body .el-message--error .el-message__content {
+  color: var(--iiot-danger) !important;
+}
+
+html body #app .el-alert--info .el-alert__title,
+body .el-message--info .el-message__content {
+  color: var(--iiot-cyan) !important;
+}
+
+html body #app .el-pagination button,
+html body #app .el-pagination .el-pager li {
+  background: rgba(15, 23, 42, 0.86) !important;
+  border: 1px solid var(--iiot-border) !important;
+  color: var(--iiot-text) !important;
+}
+
+html body #app .el-pagination .el-pager li.active,
+html body #app .el-pagination .el-pager li:hover,
+html body #app .el-pagination button:hover {
+  border-color: var(--iiot-border-active) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+html body #app .el-tabs__nav-wrap::after {
+  background: var(--iiot-border) !important;
+}
+
+html body #app .el-tabs__item {
+  color: var(--iiot-muted) !important;
+}
+
+html body #app .el-tabs__item.is-active,
+html body #app .el-tabs__item:hover {
+  color: var(--iiot-cyan) !important;
+}
+
+html body #app .el-tabs__active-bar {
+  background: var(--iiot-cyan) !important;
+}
+
+html body #app .el-tree,
+html body #app .el-tree-node__content,
+html body #app .el-transfer-panel,
+html body #app .infinite-list,
+html body #app .list-group-item {
+  background: var(--iiot-panel) !important;
+  border-color: var(--iiot-border) !important;
+  color: var(--iiot-text) !important;
+}
+
+html body #app .el-tree-node__content:hover,
+html body #app .el-tree-node:focus > .el-tree-node__content {
+  background: rgba(34, 211, 238, 0.08) !important;
+}
+
+html body #app .el-upload-dragger,
+html body #app .upload-dropzone,
+html body #app .editor,
+html body #app .ql-toolbar,
+html body #app .ql-container,
+html body #app pre,
+html body #app code,
+html body #app .code-pre,
+html body #app .code-wrap {
+  background: rgba(15, 23, 42, 0.86) !important;
+  border-color: var(--iiot-border) !important;
+  border-radius: 8px !important;
+  color: #5eead4 !important;
+}
+
+html body #app .el-upload-dragger:hover,
+html body #app .upload-dropzone:hover {
+  border-color: var(--iiot-border-active) !important;
+}
+
+html body #app .chart-wrapper,
+html body #app .chart-container,
+html body #app .chart-box,
+html body #app .echarts,
+html body #app canvas,
+html body #app .wave-chart,
+html body #app .primary-chart {
+  background-color: rgba(15, 23, 42, 0.52) !important;
+  border-color: var(--iiot-border) !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.06) !important;
+}
+
+html body #app .brand-icon,
+html body #app .evidence-index,
+html body #app .svg-icon,
+html body #app .el-icon,
+html body #app .menu-icon {
+  color: var(--iiot-cyan) !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+html body #app .brand-icon,
+html body #app .evidence-index,
+html body #app .workflow-step.active span {
+  background: rgba(34, 211, 238, 0.12) !important;
+  border: 1px solid rgba(34, 211, 238, 0.32) !important;
+  color: var(--iiot-cyan) !important;
+  box-shadow: none !important;
+}
+
+html body #app .channel-card:hover,
+html body #app .channel-tile:hover,
+html body #app .device-item:hover,
+html body #app .metric-card:hover,
+html body #app .metric-cell:hover,
+html body #app .evidence-row:hover,
+html body #app .model-result-item:hover {
+  background: rgba(34, 211, 238, 0.08) !important;
+  border-color: var(--iiot-border-active) !important;
+  transform: translateY(-1px) !important;
+}
+
+html body #app .channel-tile,
+html body #app .channel-card,
+html body #app .metric-card,
+html body #app .kpi-item,
+html body #app .metric-cell,
+html body #app .mini-stat,
+html body #app .model-result-item,
+html body #app .workflow-strip {
+  border-left: 3px solid var(--iiot-border) !important;
+}
+
+html body #app .channel-tile.active,
+html body #app .channel-card.active,
+html body #app .device-item.active,
+html body #app .workflow-step.active {
+  background: rgba(34, 211, 238, 0.1) !important;
+  border-color: var(--iiot-border-active) !important;
+  border-left-color: var(--iiot-cyan) !important;
+}
+
+html body #app .channel-tile.danger,
+html body #app .channel-card.abnormal,
+html body #app .channel-card.danger,
+html body #app .alarm-panel,
+html body #app .alarm-banner,
+html body #app .super-ego-alert {
+  border-left-color: var(--iiot-danger) !important;
+}
+
+html body #app .channel-tile.warning,
+html body #app .channel-card.warning {
+  border-left-color: var(--iiot-warning) !important;
+}
+
+html body #app .result-card,
+html body #app .super-ego-alert {
+  border-color: rgba(34, 211, 238, 0.32) !important;
+  box-shadow:
+    inset 4px 0 0 var(--iiot-cyan),
+    inset 0 1px 0 rgba(148, 163, 184, 0.05) !important;
+}
+
+html body #app .empty-overlay,
+html body #app .el-empty__description {
+  background: rgba(34, 211, 238, 0.07) !important;
+  border: 1px dashed rgba(34, 211, 238, 0.36) !important;
+  border-radius: 8px !important;
+  color: var(--iiot-muted) !important;
+}
+
+html body #app .el-button:focus,
+html body #app .el-input__inner:focus,
+html body #app .el-textarea__inner:focus,
+html body #app .el-select .el-input.is-focus .el-input__inner,
+html body #app button:focus-visible,
+html body #app [tabindex]:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.72) !important;
+  outline-offset: 2px !important;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--iiot-bg-deep) !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b !important;
+  border-radius: 999px !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 211, 238, 0.5) !important;
 }
