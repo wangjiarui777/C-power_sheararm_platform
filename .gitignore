@@ -94,7 +94,6 @@ Thumbs.db
 
 *.mat
 **/*.mat
-*.pth
 *.ckpt
 models/
 outputs/
