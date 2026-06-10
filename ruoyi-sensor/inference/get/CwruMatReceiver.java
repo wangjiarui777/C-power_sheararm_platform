@@ -65,7 +65,7 @@ public class CwruMatReceiver {
     private static final int MAX_HEADER_LEN = 1024 * 1024;
 
     /** Python 推理服务基础地址 */
-    private static final String DIAGNOSIS_API_BASE = "http://127.0.0.1:5001";
+    private static final String DIAGNOSIS_API_BASE = "http://127.0.0.1:5000";
 
     /** 推理接口路径（对应 Python 服务的 POST /infer） */
     private static final String ANALYSIS_CALLBACK_PATH = "/infer";
