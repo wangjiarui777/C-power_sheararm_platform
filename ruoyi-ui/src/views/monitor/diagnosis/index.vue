@@ -289,7 +289,7 @@
 
 <script>
 import * as echarts from 'echarts'
-import { getInferenceHealth, inferWithFilePath, listMatFiles, uploadDiagnosisToInferenceService, analyzeLatestFile, fetchHistory } from '@/api/system/bearingDiagnosis'
+import { getInferenceHealth, inferWithFilePath, listMatFiles, uploadDiagnosisToInferenceService, analyzeLatestFile, fetchHistory, getServiceURL } from '@/api/system/bearingDiagnosis'
 import inferenceWebSocket from '@/utils/inference-websocket'
 import { translateDiagnosisLabel, translateAlarmLevel, translateRiskLevel, translateAll } from '@/utils/diagnosis-translations'
 
@@ -318,6 +318,11 @@ export default {
       filename: '',           // 当前分析文件名
       filePath: '',           // 文件完整路径
       deviceCode: '',         // 设备编码（从分析结果回传）
+      phmContext: {
+        deviceCode: '',
+        channelId: '',
+        pointId: ''
+      },
 
       // ---- 诊断核心结果 ----
       diagnosisName: '',      // 诊断结果名称（如 healthy, single_pitting 等）
@@ -389,6 +394,10 @@ export default {
       if (this.selectedModelType === 'gear') return '齿轮诊断模型'
       if (this.selectedModelType === 'bearing') return '轴承诊断模型'
       return '齿轮诊断模型'
+    },
+    /** 根据当前模型类型返回对应的后端服务 URL */
+    currentServiceBaseURL() {
+      return getServiceURL(this.selectedModelType)
     },
     /** 置信度文本（百分比，取整） */
     confidenceText() {
@@ -490,19 +499,17 @@ export default {
   // 生命周期
   // =========================================================================
   mounted() {
-    this.$nextTick(() => {
-      // 使用 requestAnimationFrame 确保 DOM 完全渲染后再初始化图表
+    this.$nextTick(async () => {
       requestAnimationFrame(() => {
         this.initCharts()
       })
-      // 监听浏览器窗口大小变化，自动缩放图表
       window.addEventListener('resize', this.handleResize)
-      // 首次加载：检查服务健康 + 获取文件列表 + 获取最新分析结果
-      this.checkHealth()
-      this.fetchMatFiles()
-      this.fetchLatestAnalysis()
-      // 连接推理服务 WebSocket，替代 HTTP 轮询
+      // 先建立连接 + 获取文件列表，再触发分析（避免目录空时无意义 404）
       this.connectInferenceWs()
+      await this.checkHealth()
+      await this.fetchMatFiles()
+      // 文件列表已就绪，仅在目录有文件时才发起分析
+      await this.fetchLatestAnalysis()
     })
   },
 
@@ -520,6 +527,15 @@ export default {
   // 方法
   // =========================================================================
   methods: {
+    phmRequestPayload() {
+      const payload = {}
+      const deviceCode = this.deviceCode || this.phmContext.deviceCode
+      if (deviceCode) payload.deviceCode = deviceCode
+      if (this.phmContext.channelId) payload.channelId = this.phmContext.channelId
+      if (this.phmContext.pointId) payload.pointId = this.phmContext.pointId
+      return payload
+    },
+
     /** 从对象中按顺序取第一个非空字段 */
     pickFirst(source, keys) {
       if (!source || !Array.isArray(keys)) return undefined
@@ -1120,7 +1136,8 @@ export default {
         if (event !== 'message' || !payload) return
         this.handleInferenceWsMessage(payload)
       })
-      inferenceWebSocket.connect()
+      // 根据当前模型类型连接对应服务的 WebSocket
+      inferenceWebSocket.connect(this.currentServiceBaseURL)
     },
 
     closeInferenceWs() {
@@ -1153,7 +1170,7 @@ export default {
      */
     async checkHealth() {
       try {
-        const res = await getInferenceHealth()
+        const res = await getInferenceHealth(this.currentServiceBaseURL)
         const data = this.normalizeAnalyzeResponse(res)
         this.serviceHealthy = data.status === 'ok' || data.model_loaded !== false
         this.healthApiLabel = this.serviceHealthy ? '正常' : '异常'
@@ -1173,7 +1190,7 @@ export default {
      */
     async fetchMatFiles() {
       try {
-        const res = await listMatFiles()
+        const res = await listMatFiles(this.currentServiceBaseURL)
         const data = this.normalizeAnalyzeResponse(res)
         this.matFileList = Array.isArray(data) ? data : []
         // 自动选中最新文件（列表已按 mtime 降序排列）
@@ -1194,12 +1211,20 @@ export default {
      * GET /analyze（无参数时自动分析最新文件）
      */
     async fetchLatestAnalysis() {
+      // 防并发：如果已有请求在进行中，直接返回
+      if (this.polling) return
+      // 如果文件列表为空，说明数据目录无文件，跳过分析避免无意义的 404
+      if (!this.matFileList || this.matFileList.length === 0) {
+        this.clearDiagnosis()
+        return
+      }
+      this.polling = true
+      this.resultState = 'running'
       try {
-        const res = await analyzeLatestFile(null, this.selectedModelType)
+        const res = await analyzeLatestFile(null, this.phmRequestPayload(), this.currentServiceBaseURL)
         const data = this.normalizeAnalyzeResponse(res)
         if (!data || !Object.keys(data).length) return
         this.applyDiagnosis(data)
-        this.lastAnalyzeResultText = data.diagnosisResult || data.label || ''
         this.appendLocalHistory(data)
         if (data.sourceName) this.selectedMatFile = data.sourceName
         else if (data.filename) this.selectedMatFile = data.filename
@@ -1207,6 +1232,9 @@ export default {
         if (error && error.response && error.response.status !== 500) {
           console.error('获取最新分析结果失败', error)
         }
+        this.clearDiagnosis()
+      } finally {
+        this.polling = false
       }
     },
 
@@ -1225,12 +1253,11 @@ export default {
       this.polling = true
       try {
         const res = await inferWithFilePath({
+          ...this.phmRequestPayload(),
           filePath: targetPath,
           analysisMode: 'latest',
-          filename: targetPath.split(/[\\/]/).pop(),  // 从路径中提取纯文件名
-          deviceCode: this.deviceCode,
-          modelType: this.selectedModelType
-        })
+          filename: targetPath.split(/[\\/]/).pop()
+        }, this.currentServiceBaseURL)
         const data = this.normalizeAnalyzeResponse(res)
         if (!data || !Object.keys(data).length) {
           this.clearDiagnosis()
@@ -1267,12 +1294,19 @@ export default {
       this.fetchLatest(selected)
     },
 
-    handleModelTypeChange() {
-      if (this.selectedMatFile || this.localFilePath) {
-        this.fetchLatest(this.selectedMatFile || this.localFilePath)
-      } else {
-        this.fetchLatestAnalysis()
-      }
+    async handleModelTypeChange() {
+      this.resultState = 'running'
+      // 清空旧模型文件选择，不同服务数据目录不同
+      this.selectedMatFile = ''
+      this.localFilePath = ''
+      this.userManualMode = false
+      this.matFileList = []
+      // 断开旧 WS，连接新服务
+      this.closeInferenceWs()
+      this.connectInferenceWs()
+      // 等待新服务文件列表就绪后再分析
+      await this.fetchMatFiles()
+      await this.fetchLatestAnalysis()
     },
 
     // -----------------------------------------------------------------------
@@ -1317,11 +1351,16 @@ export default {
       }
       this.userManualMode = true
       this.uploading = true
+      this.polling = true
+      this.resultState = 'running'
       try {
         const formData = new FormData()
         formData.append('file', file)
-        formData.append('model_type', this.selectedModelType)
-        const response = await uploadDiagnosisToInferenceService(formData)
+        const phmPayload = this.phmRequestPayload()
+        if (phmPayload.deviceCode) formData.append('device_code', phmPayload.deviceCode)
+        if (phmPayload.channelId) formData.append('channel_id', phmPayload.channelId)
+        if (phmPayload.pointId) formData.append('point_id', phmPayload.pointId)
+        const response = await uploadDiagnosisToInferenceService(formData, this.currentServiceBaseURL)
         const data = this.normalizeAnalyzeResponse(response)
         this.applyDiagnosis(data)
         this.selectedMatFile = file.name
@@ -1336,6 +1375,7 @@ export default {
         this.$message.error('上传失败，请检查后端服务或文件格式')
       } finally {
         this.uploading = false
+        this.polling = false
       }
     },
 
@@ -1348,14 +1388,15 @@ export default {
       if (!normalizedPath) return
       this.userManualMode = true
       this.uploading = true
+      this.polling = true
+      this.resultState = 'running'
       try {
         const response = await inferWithFilePath({
-          deviceCode: this.deviceCode,
+          ...this.phmRequestPayload(),
           filePath: normalizedPath,
           analysisMode: 'upload',
-          filename: normalizedPath.split(/[\\/]/).pop(),
-          modelType: this.selectedModelType
-        })
+          filename: normalizedPath.split(/[\\/]/).pop()
+        }, this.currentServiceBaseURL)
         const data = this.normalizeAnalyzeResponse(response)
         this.applyDiagnosis(data)
         this.selectedMatFile = normalizedPath.split(/[\\/]/).pop()
@@ -1370,6 +1411,7 @@ export default {
         this.$message.error('提交失败，请检查文件路径或后端服务')
       } finally {
         this.uploading = false
+        this.polling = false
       }
     },
 

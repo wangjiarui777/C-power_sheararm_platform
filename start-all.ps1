@@ -76,6 +76,7 @@ function Ensure-PortFree {
 # =============================================================================
 Ensure-PortFree -Port 8080
 Ensure-PortFree -Port 9528
+Ensure-PortFree -Port 5000
 Ensure-PortFree -Port 5001
 Ensure-PortFree -Port 8888
 Ensure-PortFree -Port 8890
@@ -113,9 +114,23 @@ npm run dev
 Start-Sleep -Seconds 1
 
 # =============================================================================
-# 3. 推理服务与 CwruMatReceiver
+# 3. Python 推理服务（齿轮 5000 + 轴承 5001）
 # =============================================================================
-# 已加入后端启动项，由 ruoyi-admin 启动时自动拉起。
+Start-InNewWindow `
+    -Title 'Gear Diagnosis (齿轮推理 :5000)' `
+    -WorkingDir "$projectRoot\ruoyi-sensor\inference" `
+    -Command @'
+Write-Host 'Starting Gear Diagnosis Service on port 5000...' -ForegroundColor Cyan
+python gear_service.py
+'@
+
+Start-InNewWindow `
+    -Title 'Bearing Diagnosis (轴承推理 :5001)' `
+    -WorkingDir "$projectRoot\ruoyi-sensor\inference" `
+    -Command @'
+Write-Host 'Starting Bearing Diagnosis Service on port 5001...' -ForegroundColor Cyan
+python bearing_service.py
+'@
 
 Write-Host ''
 Write-Host '========================================' -ForegroundColor Green
@@ -124,8 +139,8 @@ Write-Host '========================================' -ForegroundColor Green
 Write-Host ''
 Write-Host '  后端:        http://localhost:8080' -ForegroundColor White
 Write-Host '  前端:        http://localhost:80'   -ForegroundColor White
-Write-Host '  数据接收:    :8888（后端自动启动）'   -ForegroundColor White
-Write-Host '  推理服务:    http://localhost:5001（后端自动启动）'  -ForegroundColor White
+Write-Host '  齿轮推理:    http://localhost:5000 (齿轮诊断)' -ForegroundColor Cyan
+Write-Host '  轴承推理:    http://localhost:5001 (轴承诊断)' -ForegroundColor Cyan
 Write-Host ''
 
 Read-Host '按 Enter 键退出此启动器窗口（不影响其他服务）'

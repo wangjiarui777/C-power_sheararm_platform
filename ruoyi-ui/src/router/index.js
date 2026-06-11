@@ -128,6 +128,53 @@ export const constantRoutes = [
     ]
   },
   {
+    path: '/phm',
+    component: Layout,
+    redirect: '/phm/cluster',
+    name: 'PhmCenter',
+    alwaysShow: true,
+    meta: { title: 'PHM中心', icon: 'monitor' },
+    children: [
+      {
+        path: 'cluster',
+        component: () => import('@/views/phm/cluster/index'),
+        name: 'PhmCluster',
+        meta: { title: '设备集群', icon: 'dashboard' }
+      },
+      {
+        path: 'brain/:deviceId',
+        component: () => import('@/views/phm/brain/index'),
+        name: 'PhmBrain',
+        hidden: true,
+        meta: { title: '机器大脑', icon: 'chart', activeMenu: '/phm/cluster' }
+      },
+      {
+        path: 'alarms',
+        component: () => import('@/views/phm/alarms/index'),
+        name: 'PhmAlarms',
+        meta: { title: '告警中心', icon: 'message' }
+      },
+      {
+        path: 'events',
+        component: () => import('@/views/phm/events/index'),
+        name: 'PhmEvents',
+        meta: { title: '设备大事记', icon: 'time' }
+      },
+      {
+        path: 'reports',
+        component: () => import('@/views/phm/reports/index'),
+        name: 'PhmReports',
+        meta: { title: '报表中心', icon: 'documentation' }
+      },
+      {
+        path: 'config',
+        component: () => import('@/views/phm/config/index'),
+        name: 'PhmConfig',
+        meta: { title: '配置管理', icon: 'edit' }
+      }
+    ]
+  },
+  {
     path: '/monitor/diagnosis',
     component: Layout,
     redirect: '/analysis-toolkit/bearing-diagnosis',

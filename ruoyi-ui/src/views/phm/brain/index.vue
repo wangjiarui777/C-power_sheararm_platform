@@ -1,0 +1,354 @@
+<template>
+  <div class="app-container brain-page" v-loading="loading">
+    <section class="brain-hero">
+      <div>
+        <el-button type="text" icon="el-icon-arrow-left" @click="$router.push('/phm/cluster')">返回设备集群</el-button>
+        <h2>{{ device.deviceName || '机器大脑' }}</h2>
+        <p>{{ device.deviceCode }} · {{ device.deviceType }} · {{ device.orgName }}</p>
+      </div>
+      <div class="brain-status">
+        <el-tag :type="statusTag(device.status)">{{ statusText(device.status) }}</el-tag>
+        <strong>{{ device.healthIndex || 0 }}%</strong>
+        <span>健康指数</span>
+      </div>
+    </section>
+
+    <section class="brain-grid">
+      <aside class="brain-panel nameplate">
+        <h3>电子铭牌</h3>
+        <el-descriptions :column="1" size="small" border>
+          <el-descriptions-item label="型号">{{ device.modelName || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="制造商">{{ device.manufacturer || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="安装位置">{{ device.location || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="累计运行">{{ device.runHours || 0 }} h</el-descriptions-item>
+          <el-descriptions-item label="当前故障">{{ device.faultType || '无' }}</el-descriptions-item>
+        </el-descriptions>
+        <h3>工况参数</h3>
+        <pre>{{ prettyJson(device.processJson) }}</pre>
+      </aside>
+
+      <main class="brain-panel">
+        <div class="panel-head">
+          <h3>测点特征值</h3>
+          <div class="head-actions">
+            <el-button size="mini" type="primary" plain @click="openDiagnosis">诊断分析</el-button>
+            <el-button size="mini" plain @click="openVibrationAnalysis">波形/频谱</el-button>
+          </div>
+        </div>
+        <div class="morphology-box">
+          <img v-if="device.morphologyUrl" :src="device.morphologyUrl" alt="设备形貌图">
+          <div v-else class="morphology-empty">暂无形貌图，请在配置管理中上传</div>
+          <button
+            v-for="item in points"
+            :key="`point-${item.point.id}`"
+            class="point-marker"
+            :style="pointMarkerStyle(item.point)"
+            @click="selectPoint(item)"
+          >
+            {{ item.point.channelId || '?' }}
+          </button>
+          <article
+            v-for="item in points"
+            :key="`card-${item.point.id}`"
+            class="morph-card"
+            :style="pointCardStyle(item.point)"
+            @click="selectPoint(item)"
+          >
+            <strong>{{ item.point.pointName }}</strong>
+            <span>振动 {{ item.latestVibration || '--' }}</span>
+            <span>温度 {{ item.latestTemperature || '--' }}</span>
+          </article>
+        </div>
+        <div class="point-grid">
+          <article v-for="item in points" :key="item.point.id" class="point-card" @click="selectPoint(item)">
+            <div class="point-title">{{ item.point.pointName }}</div>
+            <div class="point-sub">通道 {{ item.point.channelId || '--' }} · {{ item.point.signalType }}</div>
+            <div class="point-values">
+              <span>振动 <b>{{ item.latestVibration || '--' }}</b></span>
+              <span>温度 <b>{{ item.latestTemperature || '--' }}</b></span>
+            </div>
+          </article>
+        </div>
+        <div class="trend-box">
+          <div class="panel-head">
+            <h3>{{ activePointName }} 趋势</h3>
+            <div class="head-actions">
+              <el-tag size="mini">最近 100 条</el-tag>
+              <el-button size="mini" type="text" @click="exportTrendCsv">导出CSV</el-button>
+              <el-button size="mini" type="text" @click="saveTrendImage">保存图片</el-button>
+            </div>
+          </div>
+          <div ref="trendChart" class="trend-chart"></div>
+        </div>
+      </main>
+
+      <aside class="brain-panel">
+        <div class="diagnosis-card">
+          <span>最新诊断</span>
+          <strong>{{ latestDiagnosis.diagnosisResult || device.faultType || '暂无异常诊断' }}</strong>
+          <p>{{ latestDiagnosis.diagnosisDetail || latestDiagnosis.decisionReason || '可进入诊断分析查看波形、频谱和模型证据。' }}</p>
+          <div class="diagnosis-actions">
+            <el-button size="mini" type="primary" plain @click="openDiagnosis">查看模型证据</el-button>
+            <el-button size="mini" plain @click="$router.push('/phm/events?deviceId=' + device.id)">设备大事记</el-button>
+          </div>
+        </div>
+
+        <div class="panel-head">
+          <h3>告警摘要</h3>
+          <el-button type="text" @click="$router.push('/phm/alarms')">全部</el-button>
+        </div>
+        <el-table :data="alarms" height="220" size="mini">
+          <el-table-column prop="alarmLevel" label="等级" width="64" />
+          <el-table-column prop="pointName" label="测点" />
+          <el-table-column prop="status" label="状态" width="88" />
+        </el-table>
+
+        <div class="panel-head event-head">
+          <h3>设备大事记</h3>
+          <el-button type="text" @click="eventVisible = true">新增</el-button>
+        </div>
+        <el-timeline class="event-list">
+          <el-timeline-item v-for="event in events" :key="event.id" :timestamp="parseTime(event.eventTime)" placement="top">
+            <strong>{{ eventTypeText(event.eventType) }}</strong>
+            <p>{{ event.eventContent }}</p>
+          </el-timeline-item>
+        </el-timeline>
+      </aside>
+    </section>
+
+    <el-dialog title="新增大事记" :visible.sync="eventVisible" width="520px">
+      <el-form :model="eventForm" label-width="90px">
+        <el-form-item label="事件时间">
+          <el-date-picker v-model="eventForm.eventTime" type="datetime" value-format="yyyy-MM-dd HH:mm:ss" />
+        </el-form-item>
+        <el-form-item label="事件类型">
+          <el-select v-model="eventForm.eventType">
+            <el-option label="维修" value="repair" />
+            <el-option label="保养" value="maintenance" />
+            <el-option label="其他" value="other" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="事件记录">
+          <el-input v-model="eventForm.eventContent" type="textarea" :rows="4" maxlength="300" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <div slot="footer">
+        <el-button @click="eventVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveEvent">保存</el-button>
+      </div>
+    </el-dialog>
+  </div>
+</template>
+
+<script>
+import * as echarts from 'echarts'
+import { getDeviceBrain, saveDeviceEvent } from '@/api/phm'
+
+export default {
+  name: 'PhmBrain',
+  data() {
+    return {
+      loading: false,
+      chart: null,
+      device: {},
+      points: [],
+      alarms: [],
+      events: [],
+      latestDiagnosis: {},
+      activePoint: null,
+      eventVisible: false,
+      eventForm: {
+        eventType: 'maintenance',
+        eventTime: '',
+        eventContent: ''
+      }
+    }
+  },
+  computed: {
+    activePointName() {
+      return this.activePoint && this.activePoint.point ? this.activePoint.point.pointName : '测点'
+    }
+  },
+  mounted() {
+    this.loadBrain()
+  },
+  beforeDestroy() {
+    if (this.chart) this.chart.dispose()
+  },
+  methods: {
+    async loadBrain() {
+      this.loading = true
+      try {
+        const res = await getDeviceBrain(this.$route.params.deviceId)
+        const data = res.data || {}
+        this.device = data.device || {}
+        this.points = data.points || []
+        this.alarms = data.alarms || []
+        this.events = data.events || []
+        this.latestDiagnosis = data.latestDiagnosis || {}
+        this.activePoint = this.points[0] || null
+        this.$nextTick(this.renderChart)
+      } finally {
+        this.loading = false
+      }
+    },
+    selectPoint(item) {
+      this.activePoint = item
+      this.renderChart()
+    },
+    pointMarkerStyle(point) {
+      return {
+        left: `${point.pointX == null ? 50 : point.pointX}%`,
+        top: `${point.pointY == null ? 50 : point.pointY}%`
+      }
+    },
+    pointCardStyle(point) {
+      return {
+        left: `${point.cardX == null ? 8 : point.cardX}%`,
+        top: `${point.cardY == null ? 8 : point.cardY}%`
+      }
+    },
+    renderChart() {
+      if (!this.$refs.trendChart) return
+      if (!this.chart) this.chart = echarts.init(this.$refs.trendChart)
+      const trend = (this.activePoint && this.activePoint.trend) || []
+      this.chart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 42, right: 18, top: 28, bottom: 32 },
+        xAxis: { type: 'category', data: trend.map(item => this.parseTime(item.sampleTime, '{h}:{i}:{s}')) },
+        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#e5e7eb' } } },
+        series: [{ type: 'line', smooth: true, showSymbol: false, data: trend.map(item => item.value), lineStyle: { color: '#2563eb', width: 2 }, areaStyle: { color: 'rgba(37,99,235,.12)' } }]
+      })
+    },
+    openDiagnosis() {
+      this.$router.push({
+        path: '/analysis-toolkit/bearing-diagnosis',
+        query: {
+          deviceCode: this.device.deviceCode,
+          pointId: this.activePoint && this.activePoint.point ? this.activePoint.point.id : undefined,
+          channelId: this.activePoint && this.activePoint.point ? this.activePoint.point.channelId : undefined
+        }
+      })
+    },
+    openVibrationAnalysis() {
+      this.$router.push({
+        path: '/monitoring-center/vibration',
+        query: {
+          deviceCode: this.device.deviceCode,
+          channelId: this.activePoint && this.activePoint.point ? this.activePoint.point.channelId : undefined
+        }
+      })
+    },
+    exportTrendCsv() {
+      const point = this.activePoint && this.activePoint.point
+      const trend = (this.activePoint && this.activePoint.trend) || []
+      if (!trend.length) {
+        this.$message.warning('当前测点暂无趋势数据')
+        return
+      }
+      const rows = [['sampleTime', 'featureCode', 'value', 'deviceCode', 'pointName']]
+      trend.forEach(item => {
+        rows.push([
+          this.parseTime(item.sampleTime),
+          item.featureCode || 'vibration',
+          item.value,
+          this.device.deviceCode || '',
+          point ? point.pointName : ''
+        ])
+      })
+      const csv = rows.map(row => row.map(value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${this.device.deviceCode || 'device'}-${point ? point.pointName : 'point'}-trend.csv`
+      link.click()
+      window.URL.revokeObjectURL(url)
+    },
+    saveTrendImage() {
+      if (!this.chart) {
+        this.$message.warning('趋势图尚未渲染')
+        return
+      }
+      const point = this.activePoint && this.activePoint.point
+      const url = this.chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' })
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${this.device.deviceCode || 'device'}-${point ? point.pointName : 'point'}-trend.png`
+      link.click()
+    },
+    async saveEvent() {
+      await saveDeviceEvent(Object.assign({}, this.eventForm, {
+        deviceId: this.device.id,
+        deviceCode: this.device.deviceCode
+      }))
+      this.$message.success('大事记已保存')
+      this.eventVisible = false
+      this.loadBrain()
+    },
+    prettyJson(text) {
+      if (!text) return '--'
+      try {
+        return JSON.stringify(JSON.parse(text), null, 2)
+      } catch (e) {
+        return text
+      }
+    },
+    statusText(status) {
+      const map = { normal: '正常', stopped: '停机', level1: '1级告警', level2: '2级告警', level3: '3级告警', level4: '4级告警', level5: '5级告警' }
+      return map[status] || status || '--'
+    },
+    statusTag(status) {
+      if (status === 'normal') return 'success'
+      if (status === 'stopped') return 'info'
+      if (status === 'level1' || status === 'level2') return 'warning'
+      return 'danger'
+    },
+    eventTypeText(type) {
+      return { access: '设备接入', repair: '维修', maintenance: '保养', diagnosis: '智能诊断', alarm_handle: '告警处置', other: '其他' }[type] || type
+    }
+  }
+}
+</script>
+
+<style scoped>
+.brain-page { background: #f6f8fb; min-height: calc(100vh - 84px); }
+.brain-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.brain-hero h2 { margin: 6px 0; color: #0f172a; }
+.brain-hero p { margin: 0; color: #64748b; }
+.brain-status { min-width: 160px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; text-align: right; }
+.brain-status strong { display: block; margin-top: 8px; font-size: 28px; color: #0f172a; }
+.brain-status span { color: #64748b; font-size: 12px; }
+.brain-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr) 360px; gap: 14px; }
+.brain-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; min-height: 200px; }
+.brain-panel h3 { margin: 0 0 12px; color: #0f172a; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.diagnosis-card { margin-bottom: 14px; padding: 12px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; }
+.diagnosis-card span { color: #2563eb; font-size: 12px; }
+.diagnosis-card strong { display: block; margin-top: 6px; color: #0f172a; }
+.diagnosis-card p { margin: 6px 0 0; color: #475569; line-height: 1.5; }
+.diagnosis-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.nameplate pre { margin: 0; padding: 10px; background: #f8fafc; border-radius: 6px; color: #475569; white-space: pre-wrap; }
+.morphology-box { position: relative; min-height: 260px; margin-bottom: 14px; overflow: hidden; border: 1px solid #dbe3ef; border-radius: 8px; background: #f8fafc; }
+.morphology-box img { display: block; width: 100%; height: 300px; object-fit: contain; background: #fff; }
+.morphology-empty { display: flex; align-items: center; justify-content: center; height: 260px; color: #94a3b8; }
+.point-marker { position: absolute; width: 28px; height: 28px; transform: translate(-50%, -50%); border: 2px solid #fff; border-radius: 50%; background: #2563eb; color: #fff; box-shadow: 0 6px 16px rgba(37,99,235,.28); cursor: pointer; }
+.morph-card { position: absolute; min-width: 118px; transform: translate(-10%, -10%); border: 1px solid rgba(37,99,235,.25); border-radius: 8px; padding: 8px; background: rgba(255,255,255,.92); box-shadow: 0 8px 22px rgba(15,23,42,.12); cursor: pointer; }
+.morph-card strong { display: block; color: #0f172a; font-size: 12px; }
+.morph-card span { display: block; margin-top: 3px; color: #475569; font-size: 12px; }
+.point-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.point-card { border: 1px solid #dbe3ef; border-radius: 8px; padding: 12px; cursor: pointer; }
+.point-card:hover { border-color: #2563eb; box-shadow: 0 6px 18px rgba(37,99,235,.08); }
+.point-title { font-weight: 700; color: #0f172a; }
+.point-sub { margin-top: 4px; color: #64748b; font-size: 12px; }
+.point-values { display: flex; justify-content: space-between; margin-top: 10px; color: #475569; }
+.trend-chart { height: 300px; }
+.event-head { margin-top: 18px; }
+.event-list { max-height: 260px; overflow: auto; padding-right: 8px; }
+.event-list p { margin: 4px 0 0; color: #64748b; }
+@media (max-width: 1200px) {
+  .brain-grid { grid-template-columns: 1fr; }
+  .brain-hero { align-items: stretch; flex-direction: column; }
+}
+</style>

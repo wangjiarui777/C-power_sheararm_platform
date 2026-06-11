@@ -10,7 +10,8 @@
  *   const unsub = inferenceWs.subscribe((event, payload) => {
  *     if (event === 'message') handleMessage(payload)
  *   })
- *   inferenceWs.connect()
+ *   inferenceWs.connect()                    // default gear service (port 5000)
+ *   inferenceWs.connect('http://127.0.0.1:5001')  // bearing service (port 5001)
  *
  *   // on destroy:
  *   unsub()
@@ -22,9 +23,10 @@ let reconnectTimer = null
 let manualClose = false
 let reconnectDelay = 3000
 let listeners = []
+let currentBaseUrl = null
 
 function getWsUrl() {
-  const base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
+  const base = currentBaseUrl || process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
   return base.replace(/^http/, 'ws') + '/ws'
 }
 
@@ -55,9 +57,17 @@ function scheduleReconnect() {
   }, reconnectDelay)
 }
 
-function connect() {
+/**
+ * @param {string} [customUrl] - Optional base URL (e.g. 'http://127.0.0.1:5001').
+ *   If omitted, uses VUE_APP_INFERENCE_SERVICE_URL default (port 5000).
+ */
+function connect(customUrl) {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return socket
+  }
+
+  if (customUrl) {
+    currentBaseUrl = customUrl
   }
 
   manualClose = false
@@ -95,6 +105,7 @@ function connect() {
 
 function close() {
   manualClose = true
+  currentBaseUrl = null
   clearReconnectTimer()
   if (socket) {
     socket.close()

@@ -62,6 +62,7 @@ public class DeviceVibrationDataController extends BaseController
             eventPublisher.publishEvent(new DataUploadEvent(
                     deviceVibrationData.getDeviceCode(),
                     "vibration",
+                    deviceVibrationData.getChannelId(),
                     deviceVibrationData.getVibrationValue() != null
                             ? deviceVibrationData.getVibrationValue().doubleValue()
                             : null,

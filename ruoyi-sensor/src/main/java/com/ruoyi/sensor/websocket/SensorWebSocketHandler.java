@@ -9,6 +9,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.ruoyi.common.utils.spring.SpringUtils;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
+import com.ruoyi.sensor.domain.entity.PhmAlarmEventEntity;
 import com.ruoyi.sensor.domain.vo.SensorWebSocketMessageVo;
 import com.ruoyi.sensor.domain.vo.MonitoringOverviewVo;
 import com.ruoyi.sensor.service.IMonitoringService;
@@ -130,6 +131,38 @@ public class SensorWebSocketHandler
             message.setType("diagnosis");
         }
         send(message);
+    }
+
+    public static void broadcastPhmAlarm(PhmAlarmEventEntity alarm)
+    {
+        broadcastPhmAlarm(alarm, "created");
+    }
+
+    public static void broadcastPhmAlarmChanged(PhmAlarmEventEntity alarm)
+    {
+        broadcastPhmAlarm(alarm, "changed");
+    }
+
+    private static void broadcastPhmAlarm(PhmAlarmEventEntity alarm, String event)
+    {
+        if (alarm == null)
+        {
+            return;
+        }
+        SensorWebSocketMessageVo msg = new SensorWebSocketMessageVo();
+        msg.setType("phm_alarm");
+        msg.setEvent(event);
+        msg.setDeviceCode(alarm.getDeviceCode());
+        msg.setDiagnosisResult(alarm.getDiagnosisResult());
+        msg.setDiagnosisDetail(alarm.getRemark());
+        msg.setRiskLevel(alarm.getAlarmLevel() == null ? null : String.valueOf(alarm.getAlarmLevel()));
+        msg.setMessage(JSON.toJSONString(alarm));
+        if (alarm.getAlarmTime() != null)
+        {
+            msg.setSampleTime(new java.sql.Timestamp(alarm.getAlarmTime().getTime()).toLocalDateTime());
+        }
+        sendToSubscribed("phm_alarm", msg);
+        sendToSubscribed("overview", msg);
     }
 
     // ======================== overview push (new) ========================

@@ -1,20 +1,26 @@
 """
-MySQL database writer for enhanced inference results.
+MySQL database writer for inference results — with connection pooling.
 
-Writes the output of map_result_to_frontend() into the
-enhanced_inference_record table in the ry-yue database.
+Uses a simple thread-safe connection pool to avoid creating a new TCP
+connection for every inference result (saves ~20-50 ms per request).
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
+import threading
+from queue import Queue, Empty
 from typing import Any, Dict, Optional
+from contextlib import contextmanager
 
 import pymysql
 
 logger = logging.getLogger("db_writer")
 
+# =============================================================================
+# Connection pool
+# =============================================================================
 DB_CONFIG = {
     "host": os.environ.get("DB_HOST", "localhost"),
     "port": int(os.environ.get("DB_PORT", "3306")),
@@ -22,22 +28,135 @@ DB_CONFIG = {
     "password": os.environ.get("DB_PASSWORD", "admin123"),
     "database": os.environ.get("DB_NAME", "ry-yue"),
     "charset": "utf8mb4",
+    "autocommit": False,
 }
+POOL_MIN_SIZE = int(os.environ.get("DB_POOL_MIN", "2"))
+POOL_MAX_SIZE = int(os.environ.get("DB_POOL_MAX", "8"))
+
+_pool: Queue[pymysql.Connection] = Queue(maxsize=POOL_MAX_SIZE)
+_pool_lock = threading.Lock()
+_pool_count = 0  # how many connections currently exist (in pool + checked out)
 
 
-def get_connection() -> pymysql.Connection:
-    """Create a new MySQL connection using DB_CONFIG."""
-    return pymysql.connect(**DB_CONFIG)  # type: ignore[arg-type]
+def _create_conn() -> pymysql.Connection:
+    """Create a new MySQL connection."""
+    conn = pymysql.connect(**DB_CONFIG)  # type: ignore[arg-type]
+    conn.ping(reconnect=True)
+    return conn
+
+
+def _fill_pool() -> None:
+    """Fill pool to minimum size (called under _pool_lock)."""
+    global _pool_count
+    # 确保至少有 POOL_MIN_SIZE 个连接存在（含池内 + 已检出）
+    needed = max(0, POOL_MIN_SIZE - _pool_count)
+    for _ in range(needed):
+        if _pool_count >= POOL_MAX_SIZE:
+            break
+        try:
+            conn = _create_conn()
+            _pool.put_nowait(conn)
+            _pool_count += 1
+        except Exception:
+            logger.exception("Failed to create DB connection for pool")
+            break
+
+
+# Pre-fill pool on import
+with _pool_lock:
+    _fill_pool()
+
+
+@contextmanager
+def get_connection():
+    """Context manager that yields a pymysql.Connection from the pool.
+
+    Creates a new connection if pool is empty but under max size.
+    Blocks (with timeout) if at max size.
+    """
+    global _pool_count
+    conn = None
+    try:
+        conn = _pool.get_nowait()
+    except Empty:
+        with _pool_lock:
+            if _pool_count < POOL_MAX_SIZE:
+                try:
+                    conn = _create_conn()
+                    _pool_count += 1
+                except Exception:
+                    logger.exception("Failed to create DB connection")
+                    raise
+            else:
+                # Pool exhausted — block until one is returned
+                conn = _pool.get(timeout=5.0)
+
+    # Verify connection is still alive
+    try:
+        conn.ping(reconnect=True)
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        conn = _create_conn()
+
+    try:
+        yield conn
+    finally:
+        try:
+            _pool.put_nowait(conn)
+        except Exception:
+            # Pool full (shouldn't happen), close the connection
+            try:
+                conn.close()
+            except Exception:
+                pass
+            with _pool_lock:
+                _pool_count -= 1
+
+
+def _close_pool() -> None:
+    """Close all connections in the pool (called on shutdown)."""
+    global _pool_count
+    while True:
+        try:
+            conn = _pool.get_nowait()
+            try:
+                conn.close()
+            except Exception:
+                pass
+            _pool_count -= 1
+        except Empty:
+            break
+    logger.info("DB connection pool closed, %d connections freed", _pool_count)
+
+
+# =============================================================================
+# CRUD operations
+# =============================================================================
+
+def _execute_save(conn: pymysql.Connection, sql: str, params: Dict[str, Any]) -> int:
+    """Execute the INSERT and return lastrowid. Rolls back on failure."""
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(sql, params)
+            row_id = cursor.lastrowid
+        conn.commit()
+        logger.debug("Saved inference result id=%s for %s", row_id, params["source_file"])
+        return row_id
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def save_inference_result(data: Dict[str, Any], conn: Optional[pymysql.Connection] = None) -> int:
-    """
-    Insert a single inference result into enhanced_inference_record.
+    """Insert a single inference result into enhanced_inference_record.
 
     Args:
         data: The full result dict from map_result_to_frontend().
-        conn: Optional existing connection. If None, a new connection is created
-              and closed automatically.
+        conn: Optional existing connection. If None, a connection is obtained
+              from the pool and returned automatically.
 
     Returns:
         The auto-generated id of the inserted row.
@@ -100,25 +219,11 @@ def save_inference_result(data: Dict[str, Any], conn: Optional[pymysql.Connectio
         "sample_time": data.get("sampleTime"),
     }
 
-    own_conn = conn is None
-    if own_conn:
-        conn = get_connection()
+    if conn is not None:
+        return _execute_save(conn, sql, params)
 
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(sql, params)
-            row_id = cursor.lastrowid
-        if own_conn:
-            conn.commit()
-        logger.info("Saved inference result id=%s for %s", row_id, params["source_file"])
-        return row_id
-    except Exception:
-        if own_conn:
-            conn.rollback()
-        raise
-    finally:
-        if own_conn and conn:
-            conn.close()
+    with get_connection() as pooled_conn:
+        return _execute_save(pooled_conn, sql, params)
 
 
 def query_history(
@@ -127,18 +232,7 @@ def query_history(
     device_code: Optional[str] = None,
     limit: int = 10000,
 ) -> list:
-    """
-    Query historical inference records within a time range.
-
-    Args:
-        start_time: Start of the time range (inclusive), format 'YYYY-MM-DD HH:MM:SS'.
-        end_time: End of the time range (inclusive), format 'YYYY-MM-DD HH:MM:SS'.
-        device_code: Optional device code filter.
-        limit: Maximum number of records to return (default 10000).
-
-    Returns:
-        List of dicts, each representing one row.
-    """
+    """Query historical inference records within a time range."""
     sql = """
         SELECT
             id, batch_id, device_code, source_file, analysis_mode, sample_rate,
@@ -161,12 +255,9 @@ def query_history(
     sql += " ORDER BY create_time DESC LIMIT %(limit)s"
     params["limit"] = limit
 
-    conn = get_connection()
-    try:
+    with get_connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(sql, params)
             rows = cursor.fetchall()
             cols = [d[0] for d in cursor.description]
         return [dict(zip(cols, row)) for row in rows]
-    finally:
-        conn.close()

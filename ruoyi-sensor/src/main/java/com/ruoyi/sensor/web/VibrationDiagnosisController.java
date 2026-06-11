@@ -21,6 +21,7 @@ import com.ruoyi.sensor.domain.entity.VibrationAnalysisRecordEntity;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
 import com.ruoyi.sensor.domain.vo.SensorWebSocketMessageVo;
 import com.ruoyi.sensor.service.SensorWebSocketPushService;
+import com.ruoyi.sensor.service.PhmService;
 import com.ruoyi.sensor.service.VibrationAnalysisBatchService;
 import com.ruoyi.sensor.service.VibrationAnalysisPersistenceService;
 import com.ruoyi.sensor.tdengine.TdengineQueryService;
@@ -35,7 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/sensor/vibration")
 public class VibrationDiagnosisController
 {
-    private static final String PYTHON_INFER_URL = "http://127.0.0.1:5000/infer";
+    private static final String PYTHON_GEAR_INFER_URL = "http://127.0.0.1:5000/infer";
+    private static final String PYTHON_BEARING_INFER_URL = "http://127.0.0.1:5001/infer";
     private static final String WS_EVENT_ANALYSIS = "analysis";
     private static final String WS_EVENT_REALTIME = "realtime";
 
@@ -43,16 +45,19 @@ public class VibrationDiagnosisController
     private final VibrationAnalysisBatchService batchService;
     private final VibrationAnalysisPersistenceService persistenceService;
     private final SensorWebSocketPushService webSocketPushService;
+    private final PhmService phmService;
 
     public VibrationDiagnosisController(TdengineQueryService tdengineQueryService,
         VibrationAnalysisBatchService batchService,
         VibrationAnalysisPersistenceService persistenceService,
-        SensorWebSocketPushService webSocketPushService)
+        SensorWebSocketPushService webSocketPushService,
+        PhmService phmService)
     {
         this.tdengineQueryService = tdengineQueryService;
         this.batchService = batchService;
         this.persistenceService = persistenceService;
         this.webSocketPushService = webSocketPushService;
+        this.phmService = phmService;
     }
 
     @PostMapping("/receiver/callback")
@@ -62,6 +67,7 @@ public class VibrationDiagnosisController
         String filename = payload == null ? null : String.valueOf(payload.get("filename"));
         Map<String, Object> latest = new LinkedHashMap<>();
         latest.put("deviceCode", payload == null ? "BEARING-001" : String.valueOf(payload.getOrDefault("deviceCode", "BEARING-001")));
+        latest.put("channelId", payload == null ? 1 : toNumber(payload.get("channelId"), 1));
         latest.put("sampleTime", new Date());
         latest.put("modelVersion", "best_model_classwise_maha.pth");
         latest.put("diagnosisResult", "在线诊断任务已接收");
@@ -96,11 +102,13 @@ public class VibrationDiagnosisController
             Map<String, Object> pythonResult = callPythonInfer(payload);
             Map<String, Object> normalized = normalizePythonResult(pythonResult, deviceCode, filePath, payload);
             persistDiagnosis(normalized);
+            phmService.syncDiagnosisResult(normalized);
             pushDiagnosis(normalized);
             return AjaxResult.success(normalized);
         } catch (Exception ex) {
             Map<String, Object> fallback = buildFallbackDiagnosis(deviceCode, filePath, ex.getMessage());
             persistDiagnosis(fallback);
+            phmService.syncDiagnosisResult(fallback);
             pushDiagnosis(fallback);
             return AjaxResult.error("推理失败: " + ex.getMessage()).put("data", fallback);
         }
@@ -117,11 +125,13 @@ public class VibrationDiagnosisController
     }
 
     @GetMapping("/diagnosis/latest")
-    public AjaxResult latest(@RequestParam(defaultValue = "BEARING-001") String deviceCode)
+    public AjaxResult latest(@RequestParam(defaultValue = "BEARING-001") String deviceCode,
+        @RequestParam(defaultValue = "1") Integer channelId)
     {
-        Map<String, Object> data = tdengineQueryService.loadDiagnosisData(deviceCode, 1, 120, 64);
+        Map<String, Object> data = tdengineQueryService.loadDiagnosisData(deviceCode, channelId, 120, 64);
         Map<String, Object> latest = new LinkedHashMap<>(data);
         latest.put("deviceCode", deviceCode);
+        latest.put("channelId", channelId);
         latest.put("sampleTime", new Date());
         latest.put("modelVersion", "best_model_classwise_maha.pth");
         latest.put("diagnosisResult", data.getOrDefault("diagnosis", "正常").toString());
@@ -192,7 +202,11 @@ public class VibrationDiagnosisController
 
     private Map<String, Object> callPythonInfer(Map<String, Object> payload) throws IOException
     {
-        HttpURLConnection conn = (HttpURLConnection) new URL(PYTHON_INFER_URL).openConnection();
+        // 根据模型类型路由到对应的推理服务端口
+        String modelType = payload != null ? String.valueOf(payload.getOrDefault("modelType",
+            payload.getOrDefault("model_type", "gear"))) : "gear";
+        String inferUrl = "bearing".equalsIgnoreCase(modelType) ? PYTHON_BEARING_INFER_URL : PYTHON_GEAR_INFER_URL;
+        HttpURLConnection conn = (HttpURLConnection) new URL(inferUrl).openConnection();
         conn.setRequestMethod("POST");
         conn.setConnectTimeout(5000);
         conn.setReadTimeout(120000);  // 推理耗时约 6-8s (CPU)，预留充足余量
