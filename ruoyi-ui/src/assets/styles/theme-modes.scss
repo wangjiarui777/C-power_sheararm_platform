@@ -1,0 +1,144 @@
+/*
+ * Theme boundary layer.
+ * Loaded after the legacy industrial stylesheet so light and dark modes can
+ * reliably restore RuoYi/Element UI surfaces without changing accent colour.
+ */
+
+html[data-theme='light'] {
+  --app-bg: #f0f2f5;
+  --app-panel: #ffffff;
+  --app-panel-alt: #f8fafc;
+  --app-border: #dcdfe6;
+  --app-text: #303133;
+  --app-muted: #606266;
+  --chart-bg: #ffffff;
+  --chart-panel: #f8fafc;
+  --chart-table: #ffffff;
+  --chart-text: #303133;
+  --chart-muted: #606266;
+  --chart-border: #dcdfe6;
+}
+
+html[data-theme='dark'] {
+  --app-bg: #101318;
+  --app-panel: #1b2028;
+  --app-panel-alt: #242b35;
+  --app-border: #384252;
+  --app-text: #e5e7eb;
+  --app-muted: #a7b0bf;
+  --chart-bg: #101318;
+  --chart-panel: #1b2028;
+  --chart-table: #171b22;
+  --chart-text: #e5e7eb;
+  --chart-muted: #a7b0bf;
+  --chart-border: #384252;
+}
+
+html[data-theme='industrial'] {
+  --app-bg: var(--industrial-bg, #0b1426);
+  --app-panel: var(--industrial-panel, #111c30);
+  --app-panel-alt: var(--industrial-panel-2, #0f172a);
+  --app-border: var(--industrial-border, #1e293b);
+  --app-text: var(--industrial-text, #f8fafc);
+  --app-muted: var(--industrial-muted, #94a3b8);
+  --chart-bg: #0f1720;
+  --chart-panel: #17212b;
+  --chart-table: #101820;
+  --chart-text: #e6edf3;
+  --chart-muted: #8ea0b5;
+  --chart-border: #263645;
+}
+
+html[data-theme='light'],
+html[data-theme='dark'] {
+  body,
+  #app,
+  .main-container,
+  .app-main,
+  .app-container {
+    background: var(--app-bg) !important;
+    background-image: none !important;
+    color: var(--app-text) !important;
+  }
+
+  .el-card,
+  .el-dialog,
+  .el-drawer,
+  .el-popover,
+  .el-dropdown-menu,
+  .el-select-dropdown,
+  .el-message-box,
+  .el-table,
+  .el-table th,
+  .el-table tr,
+  .el-table td,
+  .el-descriptions,
+  .el-descriptions__body,
+  .el-tabs__nav-wrap,
+  .el-collapse-item__header,
+  .el-collapse-item__wrap {
+    background: var(--app-panel) !important;
+    border-color: var(--app-border) !important;
+    color: var(--app-text) !important;
+    box-shadow: none;
+  }
+
+  .el-input__inner,
+  .el-textarea__inner,
+  .el-range-input,
+  .el-checkbox__inner,
+  .el-radio__inner {
+    background: var(--app-panel-alt) !important;
+    border-color: var(--app-border) !important;
+    color: var(--app-text) !important;
+  }
+
+  .el-form-item__label,
+  .el-table .cell,
+  .el-dialog__title,
+  .el-drawer__header,
+  .el-dropdown-menu__item,
+  .el-select-dropdown__item,
+  .el-pagination,
+  .el-pagination__total,
+  .el-pagination__jump,
+  .el-radio__label,
+  .el-checkbox__label,
+  label,
+  p,
+  span {
+    color: var(--app-text) !important;
+  }
+
+  .el-table--enable-row-hover .el-table__body tr:hover > td,
+  .el-select-dropdown__item.hover,
+  .el-select-dropdown__item:hover,
+  .el-dropdown-menu__item:focus,
+  .el-dropdown-menu__item:not(.is-disabled):hover {
+    background: var(--app-panel-alt) !important;
+  }
+}
+
+html[data-theme='light'] {
+  .navbar,
+  .tags-view-container,
+  .top-nav,
+  .topbar-container {
+    background: #ffffff !important;
+    color: #303133 !important;
+    border-color: #e4e7ed !important;
+  }
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  .navbar,
+  .tags-view-container,
+  .top-nav,
+  .topbar-container {
+    background: #171b22 !important;
+    color: #e5e7eb !important;
+    border-color: #384252 !important;
+  }
+}

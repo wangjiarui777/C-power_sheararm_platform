@@ -6,11 +6,12 @@ const payload = {
   collectionTime: new Date().toISOString().slice(0, 19).replace('T', ' '),
   remark: 'collector upload'
 }
+const collectorToken = process.env.SENSOR_COLLECTOR_TOKEN || 'dev-collector-token'
 
 async function uploadOnce() {
-  await fetch('http://localhost:80/system/vibration/upload', {
+  await fetch('http://localhost:80/sensor/vibration-data/upload', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Collector-Token': collectorToken },
     body: JSON.stringify({
       deviceCode: payload.deviceCode,
       vibrationValue: payload.vibrationValue,
@@ -19,9 +20,9 @@ async function uploadOnce() {
     })
   })
 
-  await fetch('http://localhost:80/system/temperature/upload', {
+  await fetch('http://localhost:80/sensor/temperature-data/upload', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Collector-Token': collectorToken },
     body: JSON.stringify({
       deviceCode: payload.deviceCode,
       temperatureValue: payload.temperatureValue,

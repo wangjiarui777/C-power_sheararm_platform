@@ -14,9 +14,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
-@RequestMapping("/sensor/vibration/batch")
+@RequestMapping("/sensor/diagnosis/batch")
 public class VibrationBatchController
 {
     private final VibrationAnalysisBatchService batchService;
@@ -26,6 +27,7 @@ public class VibrationBatchController
         this.batchService = batchService;
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
     @GetMapping("/list")
     public AjaxResult list(VibrationAnalysisBatchEntity query)
     {
@@ -33,12 +35,14 @@ public class VibrationBatchController
         return AjaxResult.success(list);
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
     @GetMapping("/detail/{batchId}")
     public AjaxResult detail(@PathVariable Long batchId)
     {
         return AjaxResult.success(batchService.getById(batchId));
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
     @GetMapping("/page")
     public AjaxResult page(VibrationAnalysisBatchEntity query,
                            @RequestParam(defaultValue = "1") int pageNum,
@@ -52,18 +56,21 @@ public class VibrationBatchController
         return AjaxResult.success(new PageResult(all.size(), pageNum, pageSize, page));
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @PostMapping
     public AjaxResult add(@RequestBody VibrationAnalysisBatchEntity entity)
     {
         return AjaxResult.success(batchService.insert(entity));
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @PutMapping
     public AjaxResult edit(@RequestBody VibrationAnalysisBatchEntity entity)
     {
         return AjaxResult.success(batchService.update(entity));
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @DeleteMapping("/{batchIds}")
     public AjaxResult remove(@PathVariable Long[] batchIds)
     {

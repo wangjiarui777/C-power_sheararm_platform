@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 
-const gearBaseURL = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
-const bearingBaseURL = process.env.VUE_APP_BEARING_SERVICE_URL || 'http://127.0.0.1:5001'
+const gearBaseURL = process.env.VUE_APP_INFERENCE_SERVICE_URL || ''
+const bearingBaseURL = process.env.VUE_APP_BEARING_SERVICE_URL || ''
 
 // 推理接口超时时间（毫秒）：模型推理 + 频谱计算 + 指标提取
 // GPU 上 <1s，CPU 上约 6-8s。设置 120s 以保证充裕余量。
@@ -17,9 +17,17 @@ export function getServiceURL(modelType) {
   return modelType === 'bearing' ? bearingBaseURL : gearBaseURL
 }
 
+function requireServiceURL(serviceBaseURL) {
+  const baseURL = serviceBaseURL || gearBaseURL
+  if (!baseURL) {
+    throw new Error('未配置推理服务地址，请设置 VUE_APP_INFERENCE_SERVICE_URL 或 VUE_APP_BEARING_SERVICE_URL')
+  }
+  return baseURL
+}
+
 export function getInferenceHealth(serviceBaseURL) {
   return request({
-    baseURL: serviceBaseURL || gearBaseURL,
+    baseURL: requireServiceURL(serviceBaseURL),
     url: '/health',
     method: 'get',
     timeout: 5000
@@ -28,7 +36,7 @@ export function getInferenceHealth(serviceBaseURL) {
 
 export function listMatFiles(serviceBaseURL) {
   return request({
-    baseURL: serviceBaseURL || gearBaseURL,
+    baseURL: requireServiceURL(serviceBaseURL),
     url: '/mat-files',
     method: 'get'
   })
@@ -48,7 +56,7 @@ export function analyzeLatestFile(fileName, context = {}, serviceBaseURL) {
     context.pointId ? { point_id: context.pointId } : {}
   )
   return request({
-    baseURL: serviceBaseURL || gearBaseURL,
+    baseURL: requireServiceURL(serviceBaseURL),
     url: '/analyze',
     method: 'get',
     timeout: INFER_TIMEOUT,
@@ -62,7 +70,7 @@ export function analyzeLatestFile(fileName, context = {}, serviceBaseURL) {
  */
 export function uploadDiagnosisToInferenceService(formData, serviceBaseURL) {
   return request({
-    baseURL: serviceBaseURL || gearBaseURL,
+    baseURL: requireServiceURL(serviceBaseURL),
     url: '/analyze/upload',
     method: 'post',
     timeout: UPLOAD_TIMEOUT,
@@ -81,7 +89,7 @@ export function uploadDiagnosisToInferenceService(formData, serviceBaseURL) {
  */
 export function inferWithFilePath(data, serviceBaseURL) {
   return request({
-    baseURL: serviceBaseURL || gearBaseURL,
+    baseURL: requireServiceURL(serviceBaseURL),
     url: '/infer',
     method: 'post',
     timeout: INFER_TIMEOUT,
@@ -91,7 +99,7 @@ export function inferWithFilePath(data, serviceBaseURL) {
 
 export function fetchHistory(params, serviceBaseURL) {
   return request({
-    baseURL: serviceBaseURL || gearBaseURL,
+    baseURL: requireServiceURL(serviceBaseURL),
     url: '/history',
     method: 'get',
     params

@@ -3,7 +3,7 @@ import request from '@/utils/request'
 // Query temperature data list
 export function listTemperature(query) {
   return request({
-    url: '/system/temperature/list',
+    url: '/sensor/temperature-data/list',
     method: 'get',
     params: query
   })
@@ -12,7 +12,7 @@ export function listTemperature(query) {
 // Query recent temperature data for chart
 export function getRecentTemperature() {
   return request({
-    url: '/system/temperature/recent',
+    url: '/sensor/temperature-data/recent',
     method: 'get'
   })
 }
@@ -20,7 +20,7 @@ export function getRecentTemperature() {
 // Query temperature data details
 export function getTemperature(dataId) {
   return request({
-    url: '/system/temperature/' + dataId,
+    url: '/sensor/temperature-data/' + dataId,
     method: 'get'
   })
 }
@@ -28,7 +28,7 @@ export function getTemperature(dataId) {
 // Add temperature data
 export function addTemperature(data) {
   return request({
-    url: '/system/temperature',
+    url: '/sensor/temperature-data',
     method: 'post',
     data: data
   })
@@ -37,7 +37,7 @@ export function addTemperature(data) {
 // Update temperature data
 export function updateTemperature(data) {
   return request({
-    url: '/system/temperature',
+    url: '/sensor/temperature-data',
     method: 'put',
     data: data
   })
@@ -46,7 +46,7 @@ export function updateTemperature(data) {
 // Delete temperature data
 export function delTemperature(dataId) {
   return request({
-    url: '/system/temperature/' + dataId,
+    url: '/sensor/temperature-data/' + dataId,
     method: 'delete'
   })
 }

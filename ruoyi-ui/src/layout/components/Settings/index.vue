@@ -27,6 +27,14 @@
           <div class="setting-drawer-title">
             <h3 class="drawer-title">主题风格设置</h3>
           </div>
+          <div class="drawer-item appearance-mode">
+            <span>全站外观</span>
+            <el-radio-group v-model="appearanceMode" size="mini" class="drawer-switch">
+              <el-radio-button label="light">浅色</el-radio-button>
+              <el-radio-button label="dark">暗色</el-radio-button>
+              <el-radio-button label="industrial">工业</el-radio-button>
+            </el-radio-group>
+          </div>
           <div class="setting-drawer-block-checbox">
             <div class="setting-drawer-block-checbox-item" @click="handleTheme('theme-dark')">
               <img src="@/assets/images/dark.svg" alt="dark">
@@ -53,6 +61,24 @@
           <div class="drawer-item">
             <span>主题颜色</span>
             <theme-picker style="float: right;height: 26px;margin: -3px 8px 0 0;" @change="themeChange" />
+          </div>
+
+          <div class="drawer-item">
+            <span>工业主题预设</span>
+            <div class="setting-preset-grid">
+              <div
+                v-for="preset in themePresets"
+                :key="preset.value"
+                class="setting-preset"
+                :class="{ active: theme === preset.value }"
+                :style="{ '--preset-color': preset.value }"
+                @click="applyPreset(preset)"
+              >
+                <div class="setting-preset-chip"></div>
+                <div class="setting-preset-title">{{ preset.label }}</div>
+                <div class="setting-preset-desc">{{ preset.description }}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -121,9 +147,16 @@ export default {
   data() {
     return {
       theme: this.$store.state.settings.theme,
+      appearanceMode: this.$store.state.settings.appearanceMode,
       sideTheme: this.$store.state.settings.sideTheme,
       navType: this.$store.state.settings.navType,
-      showSettings: false
+      showSettings: false,
+      themePresets: [
+        { label: '工业监测蓝', value: '#22D3EE', description: '默认推荐，适合监测总览、波形频谱与夜间值守。' },
+        { label: '控制室深蓝', value: '#3B82F6', description: '对比更稳，适合长时间运行台与报表页。' },
+        { label: '维保预警橙', value: '#F59E0B', description: '强调处置与预警，适合告警闭环高关注场景。' },
+        { label: '诊断紫', value: '#8B5CF6', description: '适合模型分析、证据对比和诊断专题页面。' }
+      ]
     }
   },
   computed: {
@@ -218,6 +251,13 @@ export default {
     }
   },
   watch: {
+    appearanceMode(val) {
+      this.$store.dispatch('settings/changeSetting', {
+        key: 'appearanceMode',
+        value: val
+      })
+      document.documentElement.setAttribute('data-theme', val)
+    },
     navType: {
       handler(val) {
         if (val == 1) {
@@ -258,6 +298,13 @@ export default {
       })
       this.navType = val
     },
+    applyPreset(preset) {
+      this.themeChange(preset.value)
+      this.appearanceMode = 'industrial'
+      if (this.sideTheme !== 'theme-dark') {
+        this.handleTheme('theme-dark')
+      }
+    },
     openSetting() {
       this.showSettings = true
     },
@@ -282,6 +329,7 @@ export default {
             "dynamicTitle":${this.dynamicTitle},
             "footerVisible":${this.footerVisible},
             "sideTheme":"${this.sideTheme}",
+            "appearanceMode":"${this.appearanceMode}",
             "theme":"${this.theme}"
           }`
       )

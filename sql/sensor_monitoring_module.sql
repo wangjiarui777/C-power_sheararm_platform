@@ -26,6 +26,5 @@ CREATE TABLE sensor_alarm (
     INDEX idx_alarm_device_time (device_code, sample_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='锟斤拷獗拷锟斤拷锟铰硷拷锟�';
 
--- TDengine 锟斤拷锟斤拷峁癸拷锟绞撅拷猓�
--- CREATE STABLE sensor_raw_wave (ts TIMESTAMP, value DOUBLE, point_index INT, sample_rate INT) TAGS (device_code NCHAR(64));
--- CREATE STABLE sensor_fft_point (ts TIMESTAMP, frequency DOUBLE, amplitude DOUBLE, point_index INT) TAGS (device_code NCHAR(64));
+-- Apache IoTDB 时序结构请参考:
+-- ruoyi-admin/src/main/resources/sql/iotdb-init.sql

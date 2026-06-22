@@ -1,8 +1,14 @@
 package com.ruoyi.sensor.service.support;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 public class PhmDiagnosisLinkagePolicyTest
 {
-    public static void main(String[] args)
+    @Test
+    void mapsDiagnosisRiskAndHealthWithoutFalseNormalisation()
     {
         assertFalse(PhmDiagnosisLinkagePolicy.isAbnormalDiagnosis("正常", "低", "normal"), "normal diagnosis should not alarm");
         assertTrue(PhmDiagnosisLinkagePolicy.isAbnormalDiagnosis("轴承外圈故障", "低", "normal"), "fault diagnosis should alarm");
@@ -19,27 +25,4 @@ public class PhmDiagnosisLinkagePolicyTest
         assertEquals(80, PhmDiagnosisLinkagePolicy.normalizeHealthIndex(null, 80), "health index fallback");
     }
 
-    private static void assertTrue(boolean value, String message)
-    {
-        if (!value)
-        {
-            throw new AssertionError(message);
-        }
-    }
-
-    private static void assertFalse(boolean value, String message)
-    {
-        if (value)
-        {
-            throw new AssertionError(message);
-        }
-    }
-
-    private static void assertEquals(int expected, int actual, String message)
-    {
-        if (expected != actual)
-        {
-            throw new AssertionError(message + ", expected=" + expected + ", actual=" + actual);
-        }
-    }
 }

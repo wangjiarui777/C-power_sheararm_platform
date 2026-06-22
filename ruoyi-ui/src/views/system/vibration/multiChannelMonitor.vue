@@ -1,834 +1,904 @@
 <template>
-  <div class="multi-channel-panel" :class="{ 'focus-mode': focusedChannel }">
-    <div class="radar-scan"></div>
-    <div class="toolbar">
-      <el-select v-model="selectedChannel" placeholder="选择通道" style="width: 220px" @change="renderCharts">
-        <el-option label="全部通道" :value="0" />
-        <el-option
-          v-for="item in channels"
-          :key="item.channelId"
-          :label="`通道 ${item.channelId}`"
-          :value="item.channelId"
-        />
-      </el-select>
-      <el-button v-if="focusedChannel" type="primary" size="mini" @click="exitFocusMode">退出聚焦</el-button>
-    </div>
-
-    <div class="sparkline-strip">
-      <div v-for="item in channels" :key="`spark-${item.channelId}`" class="spark-card" @click="toggleFocus(item.channelId)">
-        <div class="spark-card__head">
-          <span>{{ item.channelId === 1 && inferenceData ? (inferenceData.label || inferenceData.diagnosisResult || item.title) : item.title }}</span>
-          <span :class="['spark-state', getHealthClass(item.channelId)]">{{ getHealthText(item.channelId) }}</span>
-        </div>
-        <div class="spark-card__value">{{ getLatestValue(item.channelId) }}</div>
-        <div :ref="el => setSparkRef(el, item.channelId)" class="sparkline"></div>
-      </div>
-    </div>
-
-    <div class="dashboard-grid">
-      <div class="center-slot">
-        <div class="center-core">
-          <div class="center-core__title">主扇风机核心态势</div>
-          <div class="center-core__value">8 通道实时监控</div>
-          <div class="center-core__meta">点击任意通道进入聚焦模式</div>
+  <div class="vibration-console">
+    <section class="command-bar">
+      <div class="asset-title">
+        <div class="eyebrow">八通道振动分析工作台</div>
+        <h2>{{ device.deviceName || '主扇风机' }}</h2>
+        <div class="asset-meta">
+          <span>{{ device.deviceCode || deviceCode }}</span>
+          <span>{{ device.deviceType || 'Rotating machinery' }}</span>
+          <span>最近采样 {{ formatTime(summary.latestSampleTime) }}</span>
         </div>
       </div>
+      <div class="command-actions">
+        <el-input v-model="deviceCode" size="small" class="device-input" placeholder="设备编码" @keyup.enter.native="reloadAll" />
+        <el-select v-model="windowMinutes" size="small" class="window-select" @change="reloadAll">
+          <el-option label="近 10 分钟" :value="10" />
+          <el-option label="近 30 分钟" :value="30" />
+          <el-option label="近 60 分钟" :value="60" />
+        </el-select>
+        <el-button size="small" type="primary" icon="el-icon-refresh" @click="reloadAll">刷新</el-button>
+      </div>
+    </section>
 
-      <div
-        v-for="item in visibleChannels"
-        :key="item.channelId"
-        class="chart-card"
-        :class="{
-          'is-left': item.channelId <= 4,
-          'is-right': item.channelId > 4,
-          'is-focused': focusedChannel === item.channelId,
-          'is-faded': focusedChannel && focusedChannel !== item.channelId
-        }"
-        @click="toggleFocus(item.channelId)"
-      >
-        <div class="card-title">
-          <span>{{ item.channelId === 1 && inferenceData ? (inferenceData.label || inferenceData.diagnosisResult || item.title) + ' · 推理诊断' : item.title }}</span>
-          <span class="card-title__hint">点击聚焦</span>
-        </div>
+    <section class="status-ribbon">
+      <div class="status-tile">
+        <span>连接状态</span>
+        <strong :class="['state-text', connectionState]">{{ connectionText }}</strong>
+      </div>
+      <div class="status-tile">
+        <span>在线通道</span>
+        <strong>{{ summary.onlineCount || 0 }}/{{ summary.channelCount || 8 }}</strong>
+      </div>
+      <div class="status-tile">
+        <span>最高风险</span>
+        <strong :class="riskClass(summary.maxAlarmLevel)">{{ alarmText(summary.maxAlarmLevel) }}</strong>
+      </div>
+      <div class="status-tile">
+        <span>重点通道</span>
+        <strong>CH{{ summary.highestRiskChannel || activeChannelId }}</strong>
+      </div>
+    </section>
 
-        <div class="card-body">
-          <div class="metric-zone">
-            <div class="metric-main">
-              <div class="metric-label">RMS</div>
-              <div class="metric-value">{{ formatMetric(getChannelMetrics(item.channelId).rms) }}</div>
-              <div class="metric-unit">mm/s</div>
-            </div>
-            <div class="metric-sub">
-              <div class="metric-sub__item" v-if="item.channelId === 1 && inferenceData">
-                <span class="metric-sub__label">置信度</span>
-                <span class="metric-sub__value">{{ inferenceData.confidence != null ? Number(inferenceData.confidence).toFixed(1) + '%' : '--' }}</span>
-              </div>
-              <div class="metric-sub__item" v-else>
-                <span class="metric-sub__label">Temp</span>
-                <span class="metric-sub__value">{{ formatMetric(getChannelMetrics(item.channelId).temp) }} <small>°C</small></span>
-              </div>
-              <div class="metric-sub__item">
-                <span class="metric-sub__label">健康度</span>
-                <span class="metric-sub__value">{{ getHealthPercent(item.channelId) }}%</span>
-              </div>
-            </div>
+    <main class="console-layout">
+      <aside class="channel-panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">测点矩阵</div>
+            <div class="panel-subtitle">按物理位置和风险定位异常</div>
           </div>
+          <el-select v-model="sortMode" size="mini" class="sort-select">
+            <el-option label="物理顺序" value="physical" />
+            <el-option label="告警优先" value="risk" />
+            <el-option label="RMS 降序" value="rms" />
+          </el-select>
+        </div>
 
-          <div class="detail-zone">
-            <div class="detail-table">
-              <div class="detail-row">
-                <span>Peak-Peak</span>
-                <strong>{{ formatMetric(getChannelMetrics(item.channelId).peakToPeak) }}</strong>
-              </div>
-              <div class="detail-row">
-                <span>Peak</span>
-                <strong>{{ formatMetric(getChannelMetrics(item.channelId).peak) }}</strong>
-              </div>
-              <div class="detail-row" v-if="item.channelId === 1 && inferenceData">
-                <span>告警等级</span>
-                <strong>{{ inferenceData.alarmLevel || inferenceData.riskLevel || '--' }}</strong>
-              </div>
-              <div class="detail-row" v-else>
-                <span>频率峰值</span>
-                <strong>{{ formatMetric(getChannelMetrics(item.channelId).freqPeak) }}</strong>
-              </div>
+        <div class="channel-grid">
+          <button
+            v-for="item in sortedChannels"
+            :key="item.channelId"
+            type="button"
+            :class="['channel-card', statusClass(item), { active: item.channelId === activeChannelId }]"
+            @click="selectChannel(item.channelId)"
+          >
+            <div class="channel-card__top">
+              <span class="channel-code">CH{{ item.channelId }}</span>
+              <span class="channel-state">{{ statusText(item) }}</span>
             </div>
-            <div :ref="el => setGaugeRef(el, item.channelId)" class="health-gauge"></div>
+            <div class="channel-name">{{ item.channelName }}</div>
+            <div class="channel-value">
+              <strong>{{ formatMetric(item.rms) }}</strong>
+              <span>mm/s RMS</span>
+            </div>
+            <div class="channel-mini">
+              <span>Peak {{ formatMetric(item.peak) }}</span>
+              <span>{{ formatMetric(item.temperature) }} °C</span>
+            </div>
+            <div class="health-bar">
+              <i :style="{ width: healthWidth(item.health) }"></i>
+            </div>
+          </button>
+        </div>
+      </aside>
+
+      <section class="analysis-panel">
+        <div class="analysis-head">
+          <div>
+            <div class="panel-title">{{ activeChannel.channelName || '通道分析' }}</div>
+            <div class="panel-subtitle">CH{{ activeChannelId }} · {{ statusText(activeChannel) }} · {{ activeChannel.diagnosis || '暂无诊断' }}</div>
+          </div>
+          <div class="metric-strip">
+            <div><span>RMS</span><strong>{{ formatMetric(activeChannel.rms) }}</strong></div>
+            <div><span>Peak</span><strong>{{ formatMetric(activeChannel.peak) }}</strong></div>
+            <div><span>健康度</span><strong>{{ activeChannel.health || 0 }}%</strong></div>
           </div>
         </div>
 
-        <div :ref="el => setChartRef(el, item.channelId)" class="chart-container"></div>
-      </div>
-    </div>
+        <el-tabs v-model="analysisTab" class="analysis-tabs" @tab-click="renderAnalysisCharts">
+          <el-tab-pane label="趋势" name="trend">
+            <div ref="trendChart" class="analysis-chart"></div>
+          </el-tab-pane>
+          <el-tab-pane label="波形" name="waveform">
+            <div v-if="hasSeries(analysis.waveform)" ref="waveformChart" class="analysis-chart"></div>
+            <div v-else class="empty-chart">当前通道暂无高频波形数据。完成采样帧入库后将在此展示。</div>
+          </el-tab-pane>
+          <el-tab-pane label="频谱" name="spectrum">
+            <div v-if="hasSeries(analysis.spectrum)" ref="spectrumChart" class="analysis-chart"></div>
+            <div v-else class="empty-chart">当前通道暂无 FFT 频谱数据。完成采样帧解析后将在此展示特征频率。</div>
+          </el-tab-pane>
+          <el-tab-pane label="瀑布图" name="waterfall">
+            <div v-if="hasSeries(analysis.waterfall)" ref="waterfallChart" class="analysis-chart"></div>
+            <div v-else class="empty-chart">当前通道暂无瀑布图数据。连续频谱归档后将在此追踪频带演化。</div>
+          </el-tab-pane>
+        </el-tabs>
+      </section>
+
+      <aside class="insight-panel">
+        <div class="panel-title">诊断与处置</div>
+        <div class="diagnosis-card" :class="statusClass(activeChannel)">
+          <span>当前结论</span>
+          <strong>{{ activeChannel.diagnosis || analysis.message || '暂无诊断结论' }}</strong>
+        </div>
+
+        <div class="side-section">
+          <div class="side-title">阈值规则</div>
+          <div class="kv-row"><span>规则</span><strong>{{ thresholds.ruleName || '--' }}</strong></div>
+          <div class="kv-row"><span>高报</span><strong>{{ formatMetric(thresholds.highLimit) }} mm/s</strong></div>
+          <div class="kv-row"><span>高高报</span><strong>{{ formatMetric(thresholds.highHighLimit) }} mm/s</strong></div>
+        </div>
+
+        <div class="side-section">
+          <div class="side-title">处置建议</div>
+          <p class="advice">{{ thresholds.actionAdvice || defaultAdvice }}</p>
+        </div>
+
+        <div class="side-section">
+          <div class="side-title">最近事件</div>
+          <div v-if="analysis.events && analysis.events.length" class="event-list">
+            <div v-for="event in analysis.events" :key="event.alarmNo" class="event-item">
+              <b>{{ event.alarmNo }}</b>
+              <span>{{ event.diagnosisResult || '告警事件' }}</span>
+              <small>{{ formatTime(event.alarmTime) }}</small>
+            </div>
+          </div>
+          <div v-else class="muted">暂无未闭环事件。</div>
+        </div>
+      </aside>
+    </main>
   </div>
 </template>
 
 <script>
-import * as echarts from 'echarts'
+import echarts from '@/utils/echarts'
+import { getMultiChannelOverview, getChannelAnalysis } from '@/api/system/vibration'
+import { industrialChartTheme } from '@/utils/industrialTheme'
+import sensorWebSocket from '@/utils/sensor-websocket'
+
+const DEFAULT_CHANNELS = [
+  '驱动端水平振动',
+  '驱动端垂直振动',
+  '驱动端轴向振动',
+  '非驱动端水平振动',
+  '非驱动端垂直振动',
+  '非驱动端轴向振动',
+  '减速机输入端',
+  '减速机输出端'
+]
 
 export default {
   name: 'MultiChannelMonitor',
   props: {
-    vibrationData: { type: Array, default: () => [] },
-    temperatureData: { type: Array, default: () => [] },
     wsUrl: { type: String, default: '/ws/sensor' }
   },
   data() {
     return {
-      selectedChannel: 0,
-      focusedChannel: null,
-      channels: Array.from({ length: 8 }, (_, i) => ({ channelId: i + 1, title: `通道 ${i + 1}` })),
-      chartRefs: {},
-      sparkRefs: {},
-      gaugeRefs: {},
-      chartInstances: {},
-      sparkInstances: {},
-      gaugeInstances: {},
-      syncZooming: false,
-      ws: null,
-      realtimeBuffers: {},
-      maxRealtimePoints: 2000,
-      inferenceData: null,
-      inferenceWs: null
+      deviceCode: this.$route.query.deviceCode || '',
+      windowMinutes: 30,
+      sortMode: 'physical',
+      activeChannelId: 1,
+      analysisTab: 'trend',
+      device: {},
+      summary: {},
+      channels: DEFAULT_CHANNELS.map((name, index) => this.createEmptyChannel(index + 1, name)),
+      analysis: { trend: [], waveform: [], spectrum: [], waterfall: [], thresholds: {}, events: [] },
+      connectionState: 'disconnected',
+      unsubscribeWs: null,
+      trendChart: null,
+      waveformChart: null,
+      spectrumChart: null,
+      waterfallChart: null,
+      defaultAdvice: '保持趋势观察；若 RMS 连续升高，优先检查轴承润滑、地脚松动、联轴器不对中。'
     }
   },
   computed: {
-    visibleChannels() {
-      return this.selectedChannel === 0 ? this.channels : this.channels.filter(i => i.channelId === this.selectedChannel)
+    sortedChannels() {
+      const list = this.channels.slice()
+      if (this.sortMode === 'risk') {
+        return list.sort((a, b) => Number(b.alarmLevel || 0) - Number(a.alarmLevel || 0))
+      }
+      if (this.sortMode === 'rms') {
+        return list.sort((a, b) => Number(b.rms || 0) - Number(a.rms || 0))
+      }
+      return list.sort((a, b) => a.channelId - b.channelId)
     },
-    displayedChannels() {
-      return this.focusedChannel ? this.channels.filter(item => item.channelId === this.focusedChannel) : this.visibleChannels
+    activeChannel() {
+      return this.channels.find(item => item.channelId === this.activeChannelId) || this.createEmptyChannel(this.activeChannelId)
     },
-    channelStatusMap() {
-      const map = {}
-      this.channels.forEach(item => {
-        const buffer = this.realtimeBuffers[item.channelId]
-        const series = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, item.channelId)
-        const latest = series.length ? series[series.length - 1].value : null
-        map[item.channelId] = this.calcHealth(latest)
-      })
-      return map
+    thresholds() {
+      return this.analysis.thresholds || this.activeChannel.thresholds || {}
+    },
+    connectionText() {
+      const map = {
+        online: '实时在线',
+        connecting: '连接中',
+        reconnecting: '重连中',
+        disconnected: '未连接'
+      }
+      return map[this.connectionState] || '未知'
     }
   },
-  watch: {
-    vibrationData: { deep: true, handler() { this.renderCharts() } },
-    temperatureData: { deep: true, handler() { this.renderCharts() } }
-  },
   mounted() {
-    this.initRealtimeBuffers()
+    this.reloadAll()
     this.connectWebSocket()
-    this.connectInferenceWs()
-    this.$nextTick(() => {
-      this.initCharts()
-      this.renderCharts()
-      window.addEventListener('resize', this.resizeCharts)
-    })
+    window.addEventListener('resize', this.resizeCharts)
+    window.addEventListener('appearance-mode-change', this.renderAnalysisCharts)
   },
   beforeDestroy() {
     window.removeEventListener('resize', this.resizeCharts)
+    window.removeEventListener('appearance-mode-change', this.renderAnalysisCharts)
     this.closeWebSocket()
-    this.closeInferenceWs()
-    Object.values(this.chartInstances).forEach(chart => chart && chart.dispose())
+    this.disposeCharts()
   },
   methods: {
-    initRealtimeBuffers() {
-      this.channels.forEach(item => {
-        this.$set(this.realtimeBuffers, item.channelId, { vibration: [], temperature: [] })
-      })
-    },
-    calcHealth(value) {
-      if (value == null) return 'warning'
-      if (Number(value) >= 6) return 'danger'
-      if (Number(value) >= 4) return 'warning'
-      return 'success'
-    },
-    getHealthClass(channelId) {
-      if (channelId === 1 && this.inferenceData) {
-        const level = this.inferenceData.alarmLevel || ''
-        if (level === 'normal') return 'success'
-        if (level === 'alarm') return 'danger'
-        return 'warning'
-      }
-      return this.channelStatusMap[channelId] || 'warning'
-    },
-    getHealthText(channelId) {
-      if (channelId === 1 && this.inferenceData) {
-        const level = this.inferenceData.alarmLevel || ''
-        if (level === 'normal') return '正常'
-        if (level === 'alarm') return '告警'
-        return '预警'
-      }
-      const cls = this.getHealthClass(channelId)
-      return cls === 'success' ? '正常' : cls === 'warning' ? '预警' : '告警'
-    },
-    getLatestValue(channelId) {
-      if (channelId === 1 && this.inferenceData) {
-        const rms = this.inferenceData.rms == null ? this.inferenceData.latestRms : this.inferenceData.rms
-        return rms == null ? '--' : Number(rms).toFixed(2)
-      }
-      const buffer = this.realtimeBuffers[channelId]
-      const series = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, channelId)
-      const latest = series.length ? series[series.length - 1].value : null
-      return latest == null ? '--' : Number(latest).toFixed(2)
-    },
-    getChannelMetrics(channelId) {
-      if (channelId === 1 && this.inferenceData) {
-        const d = this.inferenceData
-        const rms = d.rms == null ? (d.latestRms == null ? null : d.latestRms) : d.rms
-        const peak = d.peak == null ? (d.latestPeak == null ? null : d.latestPeak) : d.peak
-        return {
-          rms,
-          temp: null,
-          peakToPeak: peak == null ? null : peak * 2,
-          peak,
-          freqPeak: null
-        }
-      }
-      const buffer = this.realtimeBuffers[channelId]
-      const vibSeries = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, channelId)
-      const tempSeries = (buffer && buffer.temperature) || this.getChannelSeries(this.temperatureData, channelId)
-      const latestVib = vibSeries.length ? Number(vibSeries[vibSeries.length - 1].value) : null
-      const latestTemp = tempSeries.length ? Number(tempSeries[tempSeries.length - 1].value) : null
+    createEmptyChannel(channelId, name) {
       return {
-        rms: latestVib,
-        temp: latestTemp,
-        peakToPeak: latestVib == null ? null : latestVib * 1.85,
-        peak: latestVib == null ? null : latestVib * 1.25,
-        freqPeak: latestVib == null ? null : Math.max(0.1, latestVib * 8.6)
+        channelId,
+        channelName: name || DEFAULT_CHANNELS[channelId - 1] || `通道 ${channelId}`,
+        rms: null,
+        peak: null,
+        peakToPeak: null,
+        temperature: null,
+        health: 0,
+        alarmLevel: 0,
+        status: 'offline',
+        freshness: 'offline',
+        trend: [],
+        thresholds: {},
+        diagnosis: '暂无最近采样'
       }
     },
-    getHealthPercent(channelId) {
-      if (channelId === 1 && this.inferenceData && this.inferenceData.healthIndex != null) {
-        return Math.round(Number(this.inferenceData.healthIndex))
-      }
-      const { rms, temp } = this.getChannelMetrics(channelId)
-      if (rms == null && temp == null) return 0
-      const rmsScore = rms == null ? 0.5 : Math.max(0, Math.min(1, 1 - rms / 8))
-      const tempScore = temp == null ? 0.5 : Math.max(0, Math.min(1, 1 - Math.max(0, temp - 60) / 70))
-      return Math.round((rmsScore * 0.6 + tempScore * 0.4) * 100)
+    async reloadAll() {
+      await this.loadOverview()
+      await this.loadAnalysis(this.activeChannelId)
     },
-    formatMetric(value) {
-      return value == null || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(2)
+    async loadOverview() {
+      const res = await getMultiChannelOverview({ deviceCode: this.deviceCode, windowMinutes: this.windowMinutes })
+      const data = res.data || {}
+      this.device = data.device || {}
+      this.summary = data.summary || {}
+      const incoming = Array.isArray(data.channels) ? data.channels : []
+      this.channels = DEFAULT_CHANNELS.map((name, index) => {
+        const channelId = index + 1
+        const found = incoming.find(item => Number(item.channelId) === channelId)
+        return Object.assign(this.createEmptyChannel(channelId, name), found || {})
+      })
+      this.$nextTick(this.renderAnalysisCharts)
+    },
+    async loadAnalysis(channelId) {
+      const res = await getChannelAnalysis(channelId, { deviceCode: this.deviceCode })
+      this.analysis = Object.assign({ trend: [], waveform: [], spectrum: [], waterfall: [], thresholds: {}, events: [] }, res.data || {})
+      this.$nextTick(this.renderAnalysisCharts)
+    },
+    selectChannel(channelId) {
+      this.activeChannelId = channelId
+      this.loadAnalysis(channelId)
     },
     connectWebSocket() {
       this.closeWebSocket()
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const base = this.wsUrl.startsWith('ws') ? this.wsUrl : `${protocol}//${window.location.host}${this.wsUrl}`
-      this.ws = new WebSocket(base)
-      this.ws.onopen = () => {
-        this.ws && this.ws.send(JSON.stringify({ type: 'subscribe', channels: this.channels.map(i => i.channelId) }))
-      }
-      this.ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data)
-          this.handleRealtimeMessage(msg)
-        } catch (e) {
-          console.warn('WebSocket 消息解析失败', e)
+      this.connectionState = 'connecting'
+      this.unsubscribeWs = sensorWebSocket.subscribe((event, payload) => {
+        if (event === 'open') {
+          this.connectionState = 'online'
+          sensorWebSocket.send({ type: 'subscribe', channel: 'overview' })
+          sensorWebSocket.send({ type: 'subscribe', channel: 'phm_alarm' })
+        } else if (event === 'message') {
+          this.handleRealtimePayload(payload)
+        } else if (event === 'error' || event === 'close') {
+          this.connectionState = 'reconnecting'
         }
-      }
-      this.ws.onerror = () => {}
-      this.ws.onclose = () => {}
+      })
+      sensorWebSocket.connect(this.wsUrl).catch(() => {})
     },
     closeWebSocket() {
-      if (this.ws) {
-        this.ws.close()
-        this.ws = null
+      if (this.unsubscribeWs) {
+        this.unsubscribeWs()
+        this.unsubscribeWs = null
       }
     },
-    getInferenceWsUrl() {
-      const base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
-      return base.replace(/^http/, 'ws') + '/ws'
-    },
-    connectInferenceWs() {
-      this.closeInferenceWs()
-      try {
-        const url = this.getInferenceWsUrl()
-        this.inferenceWs = new WebSocket(url)
-        this.inferenceWs.onopen = () => {}
-        this.inferenceWs.onmessage = (evt) => {
-          try {
-            const msg = JSON.parse(evt.data)
-            this.handleInferenceMessage(msg)
-          } catch (e) { /* ignore parse errors */ }
-        }
-        this.inferenceWs.onerror = () => {}
-        this.inferenceWs.onclose = () => {
-          this.inferenceWs = null
-          setTimeout(() => { this.connectInferenceWs() }, 5000)
-        }
-      } catch (e) { /* ws not available */ }
-    },
-    closeInferenceWs() {
-      if (this.inferenceWs) {
-        this.inferenceWs.onclose = null
-        this.inferenceWs.close()
-        this.inferenceWs = null
-      }
-    },
-    handleInferenceMessage(msg) {
-      if (!msg || msg.type !== 'auto_analysis' || !msg.success || !msg.data) return
-      const data = msg.data
-      this.inferenceData = data
-
-      const waveform = data.time_data || data.waveform || []
-      const timeAxis = data.time_axis || []
-      const sampleRate = data.sampleRate || data.sample_rate || 5120
-      if (waveform.length && !this.realtimeBuffers[1]) {
-        this.$set(this.realtimeBuffers, 1, { vibration: [], temperature: [] })
-      }
-      if (waveform.length) {
-        const points = []
-        const len = Math.min(timeAxis.length, waveform.length)
-        for (let i = 0; i < len; i++) {
-          points.push({
-            time: new Date(Date.now() - (len - i) * (1 / sampleRate) * 1000).toISOString(),
-            value: Number(waveform[i])
-          })
-        }
-        this.realtimeBuffers[1].vibration = this.lttbDownsample(points, this.maxRealtimePoints)
-      }
-      this.$nextTick(() => {
-        this.updateSparkline(1)
-        this.updateGauge(1)
-        if (this.visibleChannels.some(c => c.channelId === 1)) {
-          this.updateChart(1)
-        }
-      })
-    },
-    handleRealtimeMessage(msg) {
-      if (!msg || msg.channelId == null) return
-      const channelId = Number(msg.channelId)
-      if (!this.realtimeBuffers[channelId]) {
-        this.$set(this.realtimeBuffers, channelId, { vibration: [], temperature: [] })
-      }
-
-      const time = msg.sampleTime || new Date().toISOString()
-      const vibrationValue = msg.vibrationValue != null ? msg.vibrationValue : msg.rms
-      const temperatureValue = msg.temperatureValue
-
-      if (vibrationValue != null) {
-        this.appendSeriesPoint(channelId, 'vibration', { time, value: vibrationValue })
-      }
-      if (temperatureValue != null) {
-        this.appendSeriesPoint(channelId, 'temperature', { time, value: temperatureValue })
-      }
-      if (vibrationValue != null || temperatureValue != null) {
-        this.updateSparkline(channelId)
-        this.updateChart(channelId)
-        this.syncZoom(channelId)
-      }
-    },
-    appendSeriesPoint(channelId, type, point) {
-      const bucket = this.realtimeBuffers[channelId][type]
-      bucket.push(point)
-      if (bucket.length > this.maxRealtimePoints) {
-        bucket.splice(0, bucket.length - this.maxRealtimePoints)
-      }
-    },
-    setChartRef(el, channelId) {
-      if (el) this.chartRefs[channelId] = el
-    },
-    setSparkRef(el, channelId) {
-      if (el) this.sparkRefs[channelId] = el
-    },
-    setGaugeRef(el, channelId) {
-      if (el) this.gaugeRefs[channelId] = el
-    },
-    initCharts() {
-      this.visibleChannels.forEach(item => {
-        const el = this.chartRefs[item.channelId]
-        if (el && !this.chartInstances[item.channelId]) {
-          this.chartInstances[item.channelId] = echarts.init(el)
-        }
-        const gaugeEl = this.gaugeRefs[item.channelId]
-        if (gaugeEl && !this.gaugeInstances[item.channelId]) {
-          this.gaugeInstances[item.channelId] = echarts.init(gaugeEl)
-        }
-      })
-      this.channels.forEach(item => {
-        const el = this.sparkRefs[item.channelId]
-        if (el && !this.sparkInstances[item.channelId]) {
-          this.sparkInstances[item.channelId] = echarts.init(el)
-        }
-      })
-    },
-    renderCharts() {
-      this.$nextTick(() => {
-        this.initCharts()
-        this.channels.forEach(item => {
-          this.updateSparkline(item.channelId)
-          this.updateGauge(item.channelId)
-        })
-        this.visibleChannels.forEach(item => this.updateChart(item.channelId))
-      })
-    },
-    toggleFocus(channelId) {
-      if (this.focusedChannel === channelId) {
-        this.exitFocusMode()
+    handleRealtimePayload(payload) {
+      const records = this.normalizeRealtimePayload(payload)
+      if (!records.length) {
+        if (payload && payload.type === 'phm_alarm') this.loadOverview()
         return
       }
-      this.focusedChannel = channelId
-      this.$nextTick(() => {
-        this.resizeCharts()
-        this.updateChart(channelId)
-      })
+      records.forEach(record => this.applyRealtimeRecord(record))
+      this.$nextTick(this.renderAnalysisCharts)
     },
-    exitFocusMode() {
-      this.focusedChannel = null
-      this.$nextTick(() => {
-        this.renderCharts()
-        this.resizeCharts()
-      })
-    },
-    updateSparkline(channelId) {
-      const chart = this.sparkInstances[channelId]
-      if (!chart) return
-      const buffer = this.realtimeBuffers[channelId]
-      const vibSource = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, channelId)
-      const vib = this.lttbDownsample(vibSource, 36)
-      chart.setOption(this.buildSparklineOption(vib), true)
-    },
-    updateGauge(channelId) {
-      const chart = this.gaugeInstances[channelId]
-      if (!chart) return
-      const health = this.getHealthPercent(channelId)
-      chart.setOption(this.buildGaugeOption(health), true)
-    },
-    updateChart(channelId) {
-      this.$nextTick(() => {
-        this.initCharts()
-        const chart = this.chartInstances[channelId]
-        if (!chart) return
-        const buffer = this.realtimeBuffers[channelId]
-        const vibSource = (buffer && buffer.vibration) || this.getChannelSeries(this.vibrationData, channelId)
-        const tempSource = (buffer && buffer.temperature) || this.getChannelSeries(this.temperatureData, channelId)
-        const vib = this.lttbDownsample(vibSource, 1200)
-        const temp = this.lttbDownsample(tempSource, 1200)
-        chart.setOption(this.buildOption(channelId, vib, temp), true)
-      })
-    },
-    resizeCharts() {
-      Object.values(this.chartInstances).forEach(chart => chart && chart.resize())
-      Object.values(this.sparkInstances).forEach(chart => chart && chart.resize())
-    },
-    syncZoom(sourceChannelId) {
-      if (this.syncZooming) return
-      const source = this.chartInstances[sourceChannelId]
-      if (!source) return
-      const option = source.getOption()
-      const zoom = option.dataZoom && option.dataZoom[0]
-      if (!zoom) return
-      const startValue = zoom.startValue
-      const endValue = zoom.endValue
-      this.syncZooming = true
-      Object.entries(this.chartInstances).forEach(([id, chart]) => {
-        if (Number(id) !== Number(sourceChannelId) && chart) {
-          chart.dispatchAction({ type: 'dataZoom', startValue, endValue })
-        }
-      })
-      this.$nextTick(() => { this.syncZooming = false })
-    },
-    getChannelSeries(sourceList, channelId) {
-      return (sourceList || []).filter(x => x.channelId === channelId)
-    },
-    downsample(list, maxPoints) {
-      if (!Array.isArray(list) || list.length <= maxPoints) return list || []
-      const step = Math.ceil(list.length / maxPoints)
-      const result = []
-      for (let i = 0; i < list.length; i += step) result.push(list[i])
-      return result
-    },
-    lttbDownsample(data, threshold) {
-      if (!Array.isArray(data) || data.length <= threshold || threshold < 3) return data || []
-      const sampled = []
-      const bucketSize = (data.length - 2) / (threshold - 2)
-      let a = 0
-      sampled.push(data[a])
-      for (let i = 0; i < threshold - 2; i++) {
-        const rangeStart = Math.floor((i + 1) * bucketSize) + 1
-        const rangeEnd = Math.floor((i + 2) * bucketSize) + 1
-        const rangeEndLimited = Math.min(rangeEnd, data.length)
-        let avgX = 0
-        let avgY = 0
-        let avgCount = 0
-        for (let j = rangeStart; j < rangeEndLimited; j++) {
-          const point = data[j]
-          const x = point.time != null ? new Date(point.time).getTime() : j
-          const y = Number(point.value != null ? point.value : 0)
-          avgX += x
-          avgY += y
-          avgCount++
-        }
-        avgX = avgCount ? avgX / avgCount : 0
-        avgY = avgCount ? avgY / avgCount : 0
-        const rangeOffs = Math.floor(i * bucketSize) + 1
-        const rangeTo = Math.floor((i + 1) * bucketSize) + 1
-        let maxArea = -1
-        let nextA = rangeOffs
-        for (let j = rangeOffs; j < Math.min(rangeTo, data.length - 1); j++) {
-          const point = data[j]
-          const x = point.time != null ? new Date(point.time).getTime() : j
-          const y = Number(point.value != null ? point.value : 0)
-          const area = Math.abs((data[a].time != null ? new Date(data[a].time).getTime() : a - avgX) * (y - (data[a].value != null ? data[a].value : 0)) - (data[a].time != null ? new Date(data[a].time).getTime() : a - x) * (avgY - (data[a].value != null ? data[a].value : 0)))
-          if (area > maxArea) {
-            maxArea = area
-            nextA = j
-          }
-        }
-        sampled.push(data[nextA])
-        a = nextA
+    normalizeRealtimePayload(payload) {
+      if (!payload) return []
+      if (Array.isArray(payload)) return payload.flatMap(item => this.normalizeRealtimePayload(item))
+      let records = []
+      const nested = payload.data || payload.payload || payload.body
+      if (nested && typeof nested === 'object') records = records.concat(this.normalizeRealtimePayload(nested))
+      if (typeof payload.message === 'string' && /^[\[{]/.test(payload.message.trim())) {
+        try {
+          records = records.concat(this.normalizeRealtimePayload(JSON.parse(payload.message)))
+        } catch (e) {}
       }
-      sampled.push(data[data.length - 1])
-      return sampled
+      const record = this.normalizeRealtimeRecord(payload)
+      if (record) records.push(record)
+      return records
     },
-    buildSparklineOption(series) {
+    normalizeRealtimeRecord(msg) {
+      const channelId = Number(this.pickFirst(msg, ['channelId', 'channel_id', 'channelNo', 'channel', 'ch']))
+      if (!channelId || channelId < 1 || channelId > 8) return null
       return {
+        channelId,
+        time: this.pickFirst(msg, ['sampleTime', 'collectionTime', 'time', 'timestamp', 'ts']) || new Date().toISOString(),
+        rms: this.pickFirst(msg, ['vibrationValue', 'vibration_value', 'rms', 'value']),
+        temperature: this.pickFirst(msg, ['temperatureValue', 'temperature_value', 'temp']),
+        peak: this.pickFirst(msg, ['peak', 'peakValue'])
+      }
+    },
+    applyRealtimeRecord(record) {
+      const index = this.channels.findIndex(item => item.channelId === record.channelId)
+      if (index < 0) return
+      const old = this.channels[index]
+      const rms = record.rms == null ? old.rms : Number(record.rms)
+      const temperature = record.temperature == null ? old.temperature : Number(record.temperature)
+      const alarmLevel = rms >= 6 ? 3 : rms >= 4 ? 2 : Number(old.alarmLevel || 0)
+      const trend = (old.trend || []).slice()
+      if (rms != null) {
+        trend.push({ time: record.time, rms, temperature, peak: record.peak == null ? rms * 1.25 : Number(record.peak) })
+        if (trend.length > 120) trend.splice(0, trend.length - 120)
+      }
+      const next = Object.assign({}, old, {
+        rms,
+        temperature,
+        peak: record.peak == null ? (rms == null ? null : rms * 1.25) : Number(record.peak),
+        peakToPeak: rms == null ? null : rms * 1.85,
+        health: this.calcHealth(rms, temperature, alarmLevel),
+        alarmLevel,
+        status: alarmLevel >= 3 ? 'alarm' : alarmLevel >= 2 ? 'warning' : 'normal',
+        freshness: 'realtime',
+        sampleTime: record.time,
+        trend,
+        diagnosis: this.resolveDiagnosis(rms)
+      })
+      this.$set(this.channels, index, next)
+      if (record.channelId === this.activeChannelId) {
+        this.analysis.trend = trend
+      }
+    },
+    pickFirst(source, keys) {
+      for (const key of keys) {
+        if (source && source[key] !== undefined && source[key] !== null && source[key] !== '') return source[key]
+      }
+      return null
+    },
+    renderAnalysisCharts() {
+      if (this.analysisTab === 'trend') this.renderTrendChart()
+      if (this.analysisTab === 'waveform') this.renderSimpleLineChart('waveformChart', 'waveform', '波形幅值')
+      if (this.analysisTab === 'spectrum') this.renderSimpleLineChart('spectrumChart', 'spectrum', '频谱幅值')
+      if (this.analysisTab === 'waterfall') this.renderSimpleLineChart('waterfallChart', 'waterfall', '频带演化')
+    },
+    renderTrendChart() {
+      const el = this.$refs.trendChart
+      if (!el) return
+      if (!this.trendChart) this.trendChart = echarts.init(el)
+      const series = this.analysis.trend && this.analysis.trend.length ? this.analysis.trend : (this.activeChannel.trend || [])
+      const thresholds = this.thresholds
+      const theme = industrialChartTheme
+      this.trendChart.setOption({
         animation: false,
-        grid: { left: 0, right: 0, top: 0, bottom: 0 },
-        xAxis: { type: 'category', show: false, boundaryGap: false, data: series.map(i => i.time) },
-        yAxis: { type: 'value', show: false, scale: true },
-        tooltip: { show: false },
-        series: [{
-          type: 'line',
-          data: series.map(i => i.value),
-          showSymbol: false,
-          smooth: true,
-          lineStyle: { width: 1.5, color: '#00FFFF' },
-          areaStyle: {
-            color: {
-              type: 'linear',
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: 'rgba(0,255,255,0.38)' },
-                { offset: 1, color: 'rgba(0,255,255,0)' }
-              ]
-            }
-          }
-        }]
-      }
-    },
-    buildGaugeOption(health) {
-      return {
-        series: [{
-          type: 'gauge',
-          startAngle: 220,
-          endAngle: -40,
-          min: 0,
-          max: 100,
-          radius: '100%',
-          progress: { show: true, width: 10, itemStyle: { color: health >= 80 ? '#67c23a' : health >= 60 ? '#e6a23c' : '#f56c6c' } },
-          axisLine: { lineStyle: { width: 10, color: [[1, 'rgba(0,255,255,0.15)']] } },
-          axisTick: { show: false },
-          splitLine: { show: false },
-          axisLabel: { show: false },
-          pointer: { show: false },
-          anchor: { show: false },
-          title: { show: false },
-          detail: { valueAnimation: true, formatter: '{value}%', color: '#eaffff', fontSize: 14, offsetCenter: [0, '45%'] },
-          data: [{ value: health }]
-        }]
-      }
-    },
-    getIso10816Lines() {
-      return [
-        { yAxis: 2, label: { formatter: '优' } },
-        { yAxis: 4, label: { formatter: '良' } },
-        { yAxis: 6, label: { formatter: '限' } },
-        { yAxis: 8, label: { formatter: '强' } }
-      ]
-    },
-    buildOption(channelId, vibrationSeries, temperatureSeries) {
-      const vibX = vibrationSeries.map(i => i.time)
-      const vibY = vibrationSeries.map(i => i.value)
-      const tempX = temperatureSeries.map(i => i.time)
-      const tempY = temperatureSeries.map(i => i.value)
-      return {
-        animation: true,
-        animationDuration: 450,
-        animationDurationUpdate: 350,
-        animationEasing: 'cubicOut',
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis' },
-        legend: { data: ['振动', '温度'], top: 5, textStyle: { color: 'rgba(235,255,255,0.85)' } },
-        dataZoom: [
-          { type: 'inside', xAxisIndex: [0, 1], filterMode: 'none' },
-          { type: 'slider', xAxisIndex: [0, 1], bottom: 0, height: 18, textStyle: { color: 'rgba(235,255,255,0.7)' }, brushSelect: false }
-        ],
-        grid: [
-          { left: 45, right: 20, top: 40, height: '40%' },
-          { left: 45, right: 20, top: '62%', height: '28%' }
-        ],
-        xAxis: [
-          { type: 'category', data: vibX, boundaryGap: false, gridIndex: 0, axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, axisLabel: { color: 'rgba(235,255,255,0.72)' } },
-          { type: 'category', data: tempX, boundaryGap: false, gridIndex: 1, axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, axisLabel: { color: 'rgba(235,255,255,0.72)' } }
-        ],
+        color: [theme.vibration, theme.temperature],
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: theme.tooltipBg,
+          borderColor: theme.tooltipBorder,
+          textStyle: { color: theme.text }
+        },
+        legend: { top: 10, textStyle: { color: theme.text }, data: ['RMS', '温度'] },
+        grid: { left: 54, right: 42, top: 52, bottom: 38 },
+        xAxis: {
+          type: 'category',
+          boundaryGap: false,
+          data: series.map(item => this.formatTime(item.time)),
+          axisLabel: { color: theme.muted },
+          axisLine: { lineStyle: { color: theme.border } }
+        },
         yAxis: [
-          { type: 'value', name: `CH${channelId} 振动`, gridIndex: 0, splitLine: { show: false }, axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, axisLabel: { color: 'rgba(235,255,255,0.72)' } },
-          { type: 'value', name: `CH${channelId} 温度`, gridIndex: 1, splitLine: { show: false }, axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } }, axisLabel: { color: 'rgba(235,255,255,0.72)' } }
+          {
+            type: 'value',
+            name: 'mm/s',
+            scale: true,
+            splitLine: { lineStyle: { color: theme.grid } },
+            axisLabel: { color: theme.muted }
+          },
+          {
+            type: 'value',
+            name: '°C',
+            scale: true,
+            splitLine: { show: false },
+            axisLabel: { color: theme.muted }
+          }
         ],
         series: [
           {
-            name: '振动',
+            name: 'RMS',
             type: 'line',
-            xAxisIndex: 0,
-            yAxisIndex: 0,
-            showSymbol: false,
             smooth: true,
-            lineStyle: { width: 3, color: '#00FFFF' },
+            showSymbol: false,
+            data: series.map(item => this.toNumber(item.rms)),
+            lineStyle: { color: theme.vibration, width: 2.5 },
+            itemStyle: { color: theme.vibration },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(56, 189, 248, 0.26)' },
+                { offset: 1, color: 'rgba(56, 189, 248, 0.02)' }
+              ])
+            },
             markLine: {
               symbol: 'none',
-              label: { color: '#1a1a1a' },
-              lineStyle: { color: 'rgba(0,255,255,0.45)', type: 'dashed' },
-              data: this.getIso10816Lines()
-            },
-            areaStyle: {
-              color: {
-                type: 'linear',
-                x: 0,
-                y: 0,
-                x2: 0,
-                y2: 1,
-                colorStops: [
-                  { offset: 0, color: 'rgba(0,255,255,0.42)' },
-                  { offset: 1, color: 'rgba(0,255,255,0)' }
-                ]
-              }
-            },
-            data: vibY
+              data: [
+                { yAxis: thresholds.highLimit || 4, label: { formatter: '高报' } },
+                { yAxis: thresholds.highHighLimit || 6, label: { formatter: '高高报' } }
+              ],
+              lineStyle: { color: theme.warning, type: 'dashed' },
+              label: { color: theme.warning }
+            }
           },
           {
             name: '温度',
             type: 'line',
-            xAxisIndex: 1,
             yAxisIndex: 1,
-            showSymbol: false,
             smooth: true,
-            lineStyle: { width: 3, color: '#00FFFF' },
-            areaStyle: {
-              color: {
-                type: 'linear',
-                x: 0,
-                y: 0,
-                x2: 0,
-                y2: 1,
-                colorStops: [
-                  { offset: 0, color: 'rgba(0,255,255,0.42)' },
-                  { offset: 1, color: 'rgba(0,255,255,0)' }
-                ]
-              }
-            },
-            data: tempY
+            showSymbol: false,
+            data: series.map(item => this.toNumber(item.temperature)),
+            lineStyle: { color: theme.temperature, width: 2 },
+            itemStyle: { color: theme.temperature }
           }
         ]
-      }
+      }, true)
+    },
+    renderSimpleLineChart(refName, chartName, label) {
+      const el = this.$refs[refName]
+      const data = this.analysis[chartName] || []
+      if (!el || !data.length) return
+      if (!this[refName]) this[refName] = echarts.init(el)
+      const theme = industrialChartTheme
+      const isSpectrum = chartName === 'spectrum'
+      const primaryColor = isSpectrum ? theme.event : theme.vibration
+      this[refName].setOption({
+        animation: false,
+        backgroundColor: 'transparent',
+        color: [primaryColor],
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: theme.tooltipBg,
+          borderColor: theme.tooltipBorder,
+          textStyle: { color: theme.text }
+        },
+        grid: { left: 52, right: 24, top: 36, bottom: 34 },
+        xAxis: {
+          type: 'category',
+          data: data.map((item, index) => item.time || item.freq || index),
+          axisLabel: { color: theme.muted },
+          axisLine: { lineStyle: { color: theme.border } }
+        },
+        yAxis: {
+          type: 'value',
+          scale: true,
+          axisLabel: { color: theme.muted },
+          splitLine: { lineStyle: { color: theme.grid } }
+        },
+        series: [{
+          name: label,
+          type: isSpectrum ? 'bar' : 'line',
+          showSymbol: false,
+          smooth: !isSpectrum,
+          data: data.map(item => item.value || item.amplitude || 0),
+          itemStyle: { color: primaryColor },
+          lineStyle: { color: primaryColor, width: 2 },
+          areaStyle: isSpectrum ? undefined : {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: 'rgba(56, 189, 248, 0.24)' },
+              { offset: 1, color: 'rgba(56, 189, 248, 0.02)' }
+            ])
+          }
+        }]
+      }, true)
+    },
+    resizeCharts() {
+      ;[this.trendChart, this.waveformChart, this.spectrumChart, this.waterfallChart].forEach(chart => chart && chart.resize())
+    },
+    disposeCharts() {
+      ;['trendChart', 'waveformChart', 'spectrumChart', 'waterfallChart'].forEach(name => {
+        if (this[name]) {
+          this[name].dispose()
+          this[name] = null
+        }
+      })
+    },
+    hasSeries(list) {
+      return Array.isArray(list) && list.length > 0
+    },
+    statusClass(item) {
+      const status = item && item.status ? item.status : 'offline'
+      return `is-${status}`
+    },
+    statusText(item) {
+      const status = item && item.status ? item.status : 'offline'
+      const map = { normal: '正常', warning: '预警', alarm: '告警', offline: '离线' }
+      return map[status] || '未知'
+    },
+    alarmText(level) {
+      const value = Number(level || 0)
+      if (value >= 3) return '告警'
+      if (value >= 2) return '预警'
+      return '正常'
+    },
+    riskClass(level) {
+      const value = Number(level || 0)
+      return value >= 3 ? 'risk-danger' : value >= 2 ? 'risk-warning' : 'risk-normal'
+    },
+    healthWidth(value) {
+      return `${Math.max(0, Math.min(100, Number(value || 0)))}%`
+    },
+    calcHealth(rms, temp, alarmLevel) {
+      const rmsScore = rms == null ? 0.5 : Math.max(0, Math.min(1, 1 - Number(rms) / 8))
+      const tempScore = temp == null ? 0.5 : Math.max(0, Math.min(1, 1 - Math.max(0, Number(temp) - 60) / 70))
+      const score = Math.round((rmsScore * 0.65 + tempScore * 0.35) * 100)
+      if (alarmLevel >= 3) return Math.min(score, 45)
+      if (alarmLevel >= 2) return Math.min(score, 70)
+      return score
+    },
+    resolveDiagnosis(rms) {
+      if (rms == null) return '暂无最近采样'
+      if (Number(rms) >= 6) return '振动超过高高限，建议立即复核轴承、联轴器和基础松动。'
+      if (Number(rms) >= 4) return '振动接近告警区间，建议观察趋势并安排点检。'
+      return '振动处于可接受范围。'
+    },
+    formatMetric(value) {
+      return value === null || value === undefined || Number.isNaN(Number(value)) ? '--' : Number(value).toFixed(2)
+    },
+    toNumber(value) {
+      return value === null || value === undefined || Number.isNaN(Number(value)) ? null : Number(value)
+    },
+    formatTime(value) {
+      if (!value) return '--'
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return String(value)
+      const pad = n => String(n).padStart(2, '0')
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
     }
   }
 }
 </script>
 
 <style scoped>
-.multi-channel-panel {
-  position: relative;
-  padding: 12px;
-  overflow: hidden;
+.vibration-console {
+  --iiot-bg: linear-gradient(180deg, rgba(9, 17, 29, 0.98), rgba(6, 13, 24, 0.98));
+  --iiot-panel-solid: linear-gradient(180deg, rgba(20, 34, 55, 0.96), rgba(11, 21, 37, 0.98));
+  --iiot-border: var(--ops-border);
+  --iiot-border-active: var(--ops-accent);
+  --iiot-text: var(--ops-text);
+  --iiot-heading: var(--ops-heading);
+  --iiot-muted: var(--ops-muted);
+  --iiot-cyan: var(--ops-accent);
+  --iiot-success: var(--ops-success);
+  --iiot-warning: var(--ops-warning);
+  --iiot-danger: var(--ops-danger);
+  min-height: calc(100vh - 84px);
+  padding: 14px;
+  background: var(--iiot-bg);
+  color: var(--iiot-text);
 }
-.multi-channel-panel.focus-mode {
-  overflow: visible;
+.command-bar,
+.status-ribbon,
+.channel-panel,
+.analysis-panel,
+.insight-panel {
+  border: 1px solid var(--iiot-border);
+  background: var(--iiot-panel-solid);
+  box-shadow: var(--ops-shadow-soft), inset 0 1px 0 rgba(148, 163, 184, 0.04);
 }
-.multi-channel-panel::before {
-  content: '';
-  position: absolute;
-  inset: 50% auto auto 50%;
-  width: 900px;
-  height: 900px;
-  transform: translate(-50%, -50%);
-  border: 1px solid rgba(0, 255, 255, 0.16);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, rgba(0,255,255,0.12) 0 1px, transparent 1px 100%),
-    radial-gradient(circle, transparent 62%, rgba(0,255,255,0.12) 63%, transparent 64%);
-  background-size: 50px 50px, 100% 100%;
-  animation: radar-rotate 18s linear infinite;
-  pointer-events: none;
-  opacity: 0.55;
-}
-.toolbar {
-  position: relative;
-  z-index: 2;
+.command-bar {
   display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-bottom: 12px;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-radius: 16px;
 }
-.sparkline-strip {
-  position: relative;
-  z-index: 2;
+.eyebrow {
+  color: var(--iiot-cyan);
+  font-size: 12px;
+  font-weight: 700;
+}
+.asset-title h2 {
+  margin: 4px 0 8px;
+  font-size: 24px;
+  color: var(--iiot-heading);
+}
+.asset-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--iiot-muted);
+  font-size: 12px;
+}
+.asset-meta span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(8, 16, 28, 0.72);
+  border: 1px solid rgba(120, 153, 186, 0.18);
+}
+.command-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.device-input { width: 150px; }
+.window-select { width: 126px; }
+.status-ribbon {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 1px;
+  margin: 12px 0;
+  border-radius: 16px;
+  overflow: hidden;
 }
-.spark-card {
-  padding: 10px 12px;
-  background: rgba(1, 12, 28, 0.78);
-  border: 1px solid rgba(0, 255, 255, 0.22);
-  cursor: pointer;
+.status-tile {
+  padding: 12px 14px;
+  background: rgba(8, 16, 28, 0.78);
 }
-.spark-card__head { display: flex; justify-content: space-between; align-items: center; color: rgba(235,255,255,0.88); font-size: 12px; }
-.spark-state.success { color: #ffffff; }
-.spark-state.warning { color: #ffffff; }
-.spark-state.danger { color: #ffffff; }
-.spark-card__value { margin-top: 6px; font-size: 18px; font-weight: 700; font-family: 'Roboto Mono', 'Digital-7', 'Share Tech Mono', 'Courier New', monospace; color: #ffffff; }
-.sparkline { width: 100%; height: 42px; margin-top: 4px; }
-.dashboard-grid {
-  position: relative;
-  z-index: 2;
+.status-tile span {
+  display: block;
+  color: var(--iiot-muted);
+  font-size: 12px;
+}
+.status-tile strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+}
+.state-text.online,
+.risk-normal { color: var(--iiot-success); }
+.state-text.connecting,
+.state-text.reconnecting,
+.risk-warning { color: var(--iiot-warning); }
+.state-text.disconnected,
+.risk-danger { color: var(--iiot-danger); }
+.console-layout {
   display: grid;
-  grid-template-columns: 1fr 360px 1fr;
-  grid-template-rows: repeat(4, minmax(180px, auto));
+  grid-template-columns: 340px minmax(0, 1fr) 320px;
   gap: 12px;
   align-items: stretch;
 }
-.center-slot {
-  grid-column: 2;
-  grid-row: 1 / span 4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.channel-panel,
+.analysis-panel,
+.insight-panel {
+  border-radius: 16px;
+  padding: 14px;
+  min-height: 620px;
 }
-.center-core {
+.panel-head,
+.analysis-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.panel-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--iiot-heading);
+}
+.panel-subtitle {
+  margin-top: 3px;
+  color: var(--iiot-muted);
+  font-size: 12px;
+}
+.sort-select { width: 104px; }
+.channel-grid {
+  display: grid;
+  gap: 10px;
+}
+.channel-card {
   width: 100%;
-  height: 100%;
-  min-height: 760px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--iiot-border);
+  border-left-width: 5px;
+  border-radius: 12px;
+  background: var(--iiot-panel-solid);
+  cursor: pointer;
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.channel-card:hover,
+.channel-card.active {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px rgba(2, 8, 20, 0.28), 0 0 0 1px rgba(34, 211, 238, 0.12);
+  border-color: var(--iiot-border-active);
+}
+.channel-card.is-normal { border-left-color: var(--iiot-success); }
+.channel-card.is-warning { border-left-color: var(--iiot-warning); }
+.channel-card.is-alarm { border-left-color: var(--iiot-danger); }
+.channel-card.is-offline { border-left-color: var(--iiot-muted); }
+.channel-card__top,
+.channel-mini,
+.kv-row {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+}
+.channel-code {
+  font-weight: 800;
+  color: var(--iiot-heading);
+}
+.channel-state {
+  color: var(--iiot-muted);
+  font-size: 12px;
+}
+.channel-name {
+  margin-top: 8px;
+  color: var(--iiot-text);
+  font-size: 13px;
+}
+.channel-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+}
+.channel-value strong {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 24px;
+}
+.channel-value span,
+.channel-mini {
+  color: var(--iiot-muted);
+  font-size: 12px;
+}
+.health-bar {
+  height: 5px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: rgba(8, 16, 28, 0.76);
+  overflow: hidden;
+}
+.health-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--iiot-danger), var(--iiot-warning), var(--iiot-success));
+}
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 86px);
+  gap: 8px;
+}
+.metric-strip div {
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(8, 16, 28, 0.74);
+  border: 1px solid rgba(120, 153, 186, 0.16);
+}
+.metric-strip span {
+  display: block;
+  color: var(--iiot-muted);
+  font-size: 11px;
+}
+.metric-strip strong {
+  display: block;
+  margin-top: 2px;
+  font-family: Consolas, 'Courier New', monospace;
+  color: var(--iiot-heading);
+}
+.analysis-tabs ::v-deep .el-tabs__header {
+  margin-bottom: 10px;
+}
+.analysis-chart {
+  height: 470px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(8, 16, 28, 0.96), rgba(9, 18, 31, 0.86));
+  border: 1px solid rgba(120, 153, 186, 0.16);
+}
+.empty-chart {
+  height: 470px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(0, 255, 255, 0.25);
-  background: radial-gradient(circle, rgba(0,255,255,0.12), rgba(1,12,28,0.78) 70%);
-  box-shadow: 0 0 18px rgba(0, 255, 255, 0.08), inset 0 0 30px rgba(0, 255, 255, 0.04);
+  border: 1px dashed rgba(34, 211, 238, 0.36);
+  border-radius: 14px;
+  color: var(--iiot-muted);
+  background: rgba(8, 16, 28, 0.72);
+  text-align: center;
+  padding: 24px;
 }
-.center-core__title { font-size: 14px; color: rgba(0,255,255,0.72); letter-spacing: 2px; }
-.center-core__value { margin-top: 10px; font-size: 28px; font-weight: 700; color: rgba(235,255,255,0.94); }
-.center-core__meta { margin-top: 8px; font-size: 12px; color: rgba(235,255,255,0.65); }
-.chart-card {
-  position: relative;
-  overflow: hidden;
-  background: rgba(1, 12, 28, 0.78);
-  border: 1px solid rgba(0, 255, 255, 0.35);
-  border-radius: 0;
-  padding: 12px;
-  box-shadow: 0 0 12px rgba(0, 255, 255, 0.08), inset 0 0 18px rgba(0, 255, 255, 0.03);
-  transition: transform .45s ease, opacity .45s ease, box-shadow .45s ease, z-index .45s ease;
-  transform-origin: center center;
-  cursor: pointer;
+.diagnosis-card {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border-left: 5px solid var(--iiot-muted);
+  background: rgba(8, 16, 28, 0.72);
 }
-.chart-card.is-left { grid-column: 1; }
-.chart-card.is-right { grid-column: 3; }
-.chart-card.is-focused {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  width: min(94vw, 1400px);
-  height: min(86vh, 900px);
-  transform: translate(-50%, -50%) scale(1.04);
-  z-index: 9999;
-  opacity: 1 !important;
-  box-shadow: 0 0 24px rgba(0, 255, 255, 0.18), 0 0 48px rgba(0, 255, 255, 0.08);
+.diagnosis-card.is-normal { border-left-color: var(--iiot-success); }
+.diagnosis-card.is-warning { border-left-color: var(--iiot-warning); }
+.diagnosis-card.is-alarm { border-left-color: var(--iiot-danger); }
+.diagnosis-card span {
+  display: block;
+  color: var(--iiot-muted);
+  font-size: 12px;
 }
-
-.focus-mode .chart-card.is-faded {
-  z-index: 1;
+.diagnosis-card strong {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.5;
 }
-
-.focus-mode .center-slot,
-.focus-mode .sparkline-strip,
-.focus-mode .toolbar {
-  z-index: 1;
+.side-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--iiot-border);
 }
-.chart-card.is-faded {
-  opacity: 0.16;
-  transform: scale(0.96);
-  pointer-events: none;
+.side-title {
+  margin-bottom: 10px;
+  font-weight: 800;
+  color: var(--iiot-heading);
 }
-.card-title { display: flex; justify-content: space-between; align-items: center; font-weight: 600; margin-bottom: 8px; color: rgba(235, 255, 255, 0.92); }
-.card-title__hint { font-size: 11px; color: rgba(0,255,255,0.65); }
-.card-body { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 10px; align-items: stretch; }
-.metric-zone { display: grid; grid-template-columns: 1fr; gap: 8px; }
-.metric-main {
-  padding: 10px 12px;
-  border: 1px solid rgba(0, 255, 255, 0.18);
-  background: rgba(0, 255, 255, 0.05);
+.kv-row {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--iiot-border);
+  color: var(--iiot-muted);
+  font-size: 13px;
 }
-.metric-label { font-size: 12px; color: rgba(0,255,255,0.72); letter-spacing: 1px; }
-.metric-value { margin-top: 4px; font-size: 30px; font-weight: 800; font-family: 'Roboto Mono', 'Digital-7', 'Share Tech Mono', 'Courier New', monospace; color: #ffffff; }
-.metric-unit { margin-top: 2px; font-size: 12px; color: rgba(235,255,255,0.68); font-weight: 700; }
-.metric-sub { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.metric-sub__item { padding: 8px 10px; background: rgba(1, 12, 28, 0.58); border: 1px solid rgba(0,255,255,0.12); }
-.metric-sub__label { display: block; font-size: 12px; color: rgba(0,255,255,0.68); }
-.metric-sub__value { display: block; margin-top: 4px; font-size: 16px; font-weight: 700; color: #ffffff; font-family: 'Roboto Mono', 'Digital-7', 'Share Tech Mono', 'Courier New', monospace; }
-.metric-sub__value small { font-size: 12px; color: rgba(235,255,255,0.68); }
-.detail-zone { display: grid; grid-template-columns: 1fr 96px; gap: 8px; align-items: center; }
-.detail-table { display: grid; gap: 6px; }
-.detail-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; background: rgba(1, 12, 28, 0.58); border: 1px solid rgba(0,255,255,0.1); color: rgba(235,255,255,0.9); font-size: 12px; }
-.detail-row strong { color: #ffffff; font-family: 'Roboto Mono', 'Digital-7', 'Share Tech Mono', 'Courier New', monospace; }
-.health-gauge { width: 100%; height: 96px; }
-.chart-container { width: 100%; height: 180px; margin-top: 10px; }
-.chart-card.is-focused .chart-container { height: 280px; }
-@keyframes radar-rotate {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to { transform: translate(-50%, -50%) rotate(360deg); }
+.kv-row strong {
+  color: var(--iiot-heading);
+  text-align: right;
 }
-@media (max-width: 1400px) {
-  .sparkline-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dashboard-grid { grid-template-columns: 1fr; }
-  .center-slot { grid-column: auto; grid-row: auto; min-height: 240px; }
-  .chart-card.is-left,
-  .chart-card.is-right { grid-column: auto; }
-  .card-body { grid-template-columns: 1fr; }
-  .detail-zone { grid-template-columns: 1fr; }
+.advice {
+  margin: 0;
+  color: var(--iiot-text);
+  line-height: 1.6;
+}
+.event-list {
+  display: grid;
+  gap: 8px;
+}
+.event-item {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(8, 16, 28, 0.72);
+  border: 1px solid rgba(120, 153, 186, 0.14);
+}
+.event-item b,
+.event-item span,
+.event-item small {
+  display: block;
+}
+.event-item span {
+  margin-top: 4px;
+  color: var(--iiot-text);
+}
+.event-item small,
+.muted {
+  color: var(--iiot-muted);
+}
+@media (max-width: 1280px) {
+  .console-layout {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+  .insight-panel {
+    grid-column: 1 / -1;
+    min-height: auto;
+  }
+}
+@media (max-width: 900px) {
+  .command-bar,
+  .analysis-head {
+    flex-direction: column;
+  }
+  .status-ribbon,
+  .console-layout {
+    grid-template-columns: 1fr;
+  }
+  .channel-panel,
+  .analysis-panel {
+    min-height: auto;
+  }
 }
 </style>

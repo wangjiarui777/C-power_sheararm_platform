@@ -1,12 +1,19 @@
+import request from '@/utils/request'
+
 let socket = null
 let reconnectTimer = null
 let manualClose = false
 let reconnectDelay = 3000
 let listeners = []
+let currentPath = '/ws/sensor'
+let connectionPromise = null
 
-function getWsUrl(path = '/ws/sensor') {
+function getWsUrl(path = '/ws/sensor', ticket = '') {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}${path}`
+  const separator = path.includes('?') ? '&' : '?'
+  // 支持通过环境变量配置独立的 WebSocket 服务器地址
+  const wsHost = process.env.VUE_APP_WS_HOST || window.location.host
+  return `${protocol}//${wsHost}${path}${separator}ticket=${encodeURIComponent(ticket)}`
 }
 
 function notify(event, payload) {
@@ -32,46 +39,67 @@ function scheduleReconnect() {
   }
   clearReconnectTimer()
   reconnectTimer = setTimeout(() => {
-    connect()
+    connect(currentPath)
   }, reconnectDelay)
+}
+
+async function issueTicket() {
+  const response = await request({ url: '/sensor/ws-ticket', method: 'post' })
+  return response.data && response.data.ticket
 }
 
 function connect(path = '/ws/sensor') {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    return socket
+    return Promise.resolve(socket)
+  }
+  if (connectionPromise) {
+    return connectionPromise
   }
 
   manualClose = false
-  const url = getWsUrl(path)
-  socket = new WebSocket(url)
+  currentPath = path
+  connectionPromise = issueTicket().then(ticket => {
+    if (!ticket) throw new Error('WebSocket ticket was not issued')
+    const url = getWsUrl(path, ticket)
+    socket = new WebSocket(url)
 
-  socket.onopen = () => {
-    reconnectDelay = 3000
-    notify('open')
-  }
-
-  socket.onmessage = event => {
-    let data = event.data
-    try {
-      data = JSON.parse(event.data)
-    } catch (error) {
-      // keep original text payload
+    socket.onopen = () => {
+      reconnectDelay = 3000
+      connectionPromise = null
+      notify('open')
     }
-    notify('message', data)
-  }
 
-  socket.onerror = error => {
+    socket.onmessage = event => {
+      let data = event.data
+      try {
+        data = JSON.parse(event.data)
+      } catch (error) {
+        // keep original text payload
+      }
+      notify('message', data)
+    }
+
+    socket.onerror = error => {
+      connectionPromise = null
+      notify('error', error)
+    }
+
+    socket.onclose = () => {
+      notify('close')
+      socket = null
+      connectionPromise = null
+      reconnectDelay = Math.min(reconnectDelay * 2, 30000)
+      scheduleReconnect()
+    }
+
+    return socket
+  }).catch(error => {
+    connectionPromise = null
     notify('error', error)
-  }
-
-  socket.onclose = () => {
-    notify('close')
-    socket = null
-    reconnectDelay = Math.min(reconnectDelay * 2, 30000)
     scheduleReconnect()
-  }
-
-  return socket
+    throw error
+  })
+  return connectionPromise
 }
 
 function close() {
@@ -81,6 +109,7 @@ function close() {
     socket.close()
     socket = null
   }
+  connectionPromise = null
 }
 
 function subscribe(callback) {
@@ -89,6 +118,9 @@ function subscribe(callback) {
   }
   return () => {
     listeners = listeners.filter(item => item !== callback)
+    if (listeners.length === 0) {
+      close()
+    }
   }
 }
 

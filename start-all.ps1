@@ -71,6 +71,33 @@ function Ensure-PortFree {
     }
 }
 
+function Resolve-Python {
+    $pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
+    if (-not (Test-Path $pythonExe)) {
+        throw @"
+项目虚拟环境不存在: $pythonExe
+请先创建并安装依赖:
+  py -3.11 -m venv .venv
+  .\.venv\Scripts\python.exe -m pip install -r ruoyi-sensor\inference\requirements.txt
+"@
+    }
+
+    return (Resolve-Path $pythonExe).Path
+}
+
+function Test-PythonDeps {
+    param([Parameter(Mandatory = $true)][string]$PythonExe)
+
+    & $PythonExe -c "import torch" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw @"
+当前 .venv 缺少 torch，推理服务无法启动。
+请执行:
+  .\.venv\Scripts\python.exe -m pip install -r ruoyi-sensor\inference\requirements.txt
+"@
+    }
+}
+
 # =============================================================================
 # 1. Spring Boot 后端 (ruoyi-admin)
 # =============================================================================
@@ -81,6 +108,10 @@ Ensure-PortFree -Port 5001
 Ensure-PortFree -Port 8888
 Ensure-PortFree -Port 8890
 Ensure-PortFree -Port 8891
+
+$pythonExe = Resolve-Python
+Test-PythonDeps -PythonExe $pythonExe
+Write-Host "[OK] Using Python: $pythonExe" -ForegroundColor DarkCyan
 
 Start-InNewWindow `
     -Title 'Spring Boot Admin (后端)' `
@@ -119,18 +150,22 @@ Start-Sleep -Seconds 1
 Start-InNewWindow `
     -Title 'Gear Diagnosis (齿轮推理 :5000)' `
     -WorkingDir "$projectRoot\ruoyi-sensor\inference" `
-    -Command @'
+    -Command @"
+`$pythonExe = '$pythonExe'
 Write-Host 'Starting Gear Diagnosis Service on port 5000...' -ForegroundColor Cyan
-python gear_service.py
-'@
+Write-Host "Using Python: `$pythonExe" -ForegroundColor DarkCyan
+& `$pythonExe gear_service.py
+"@
 
 Start-InNewWindow `
     -Title 'Bearing Diagnosis (轴承推理 :5001)' `
     -WorkingDir "$projectRoot\ruoyi-sensor\inference" `
-    -Command @'
+    -Command @"
+`$pythonExe = '$pythonExe'
 Write-Host 'Starting Bearing Diagnosis Service on port 5001...' -ForegroundColor Cyan
-python bearing_service.py
-'@
+Write-Host "Using Python: `$pythonExe" -ForegroundColor DarkCyan
+& `$pythonExe bearing_service.py
+"@
 
 Write-Host ''
 Write-Host '========================================' -ForegroundColor Green

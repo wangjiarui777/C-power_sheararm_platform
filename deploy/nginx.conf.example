@@ -1,0 +1,60 @@
+# RuoYi-Vue PHM 监测平台 Nginx 部署配置示例
+# 使用前请替换所有 ${...} 占位符为实际值
+
+upstream backend {
+    server 127.0.0.1:8080;
+}
+
+server {
+    listen       80;
+    server_name  ${DOMAIN_NAME};
+
+    # 前端静态资源
+    root   /opt/ruoyi-ui/dist;
+    index  index.html index.htm;
+
+    # ============ API 反向代理 ============
+    # 将前端 /prod-api/ 前缀的请求转发到后端，并剥离前缀
+    location /prod-api/ {
+        proxy_pass http://backend/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 超时配置（推理接口可能耗时较长）
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+
+        # 文件上传大小限制
+        client_max_body_size 50m;
+    }
+
+    # ============ WebSocket 代理 ============
+    location /ws/ {
+        proxy_pass http://backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # ============ Swagger API 文档 (仅开发环境建议开启) ============
+    # location /v3/api-docs/ {
+    #     proxy_pass http://backend;
+    # }
+
+    # ============ 前端 SPA fallback ============
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # ============ 安全头 ============
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+}

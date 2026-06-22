@@ -68,6 +68,22 @@ export function ignoreAlarm(alarmId, data) {
   return request({ url: `/phm/alarms/${alarmId}/ignore`, method: 'post', data })
 }
 
+export function acknowledgeAlarm(alarmId, data) {
+  return request({ url: `/phm/alarms/${alarmId}/acknowledge`, method: 'post', data })
+}
+
+export function assignAlarm(alarmId, data) {
+  return request({ url: `/phm/alarms/${alarmId}/assign`, method: 'post', data })
+}
+
+export function closeAlarm(alarmId, data) {
+  return request({ url: `/phm/alarms/${alarmId}/close`, method: 'post', data })
+}
+
+export function getAlarmTimeline(alarmId) {
+  return request({ url: `/phm/alarms/${alarmId}/timeline`, method: 'get' })
+}
+
 export function listAlarmRules() {
   return request({ url: '/phm/alarm-rules', method: 'get' })
 }

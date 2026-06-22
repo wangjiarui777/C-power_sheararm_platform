@@ -236,16 +236,23 @@ VALUES
 (190000000000003002, '温度通用阈值', NULL, NULL, 'temperature', 'threshold', 65.0000, 75.0000, 5, 3.0000, 5.0000, 2, 1, '温度超过阈值触发告警', '检查润滑、负载和散热条件', 'Global demo rule');
 
 INSERT INTO phm_alarm_event
-(id, alarm_no, device_id, device_code, device_name, point_id, point_name, feature_code, alarm_scope, alarm_type, alarm_level, point_alarm_level, alarm_value, diagnosis_result, status, related_record_id, alarm_time, remark)
+(id, alarm_no, device_id, device_code, device_name, point_id, point_name, feature_code, alarm_scope, alarm_type, alarm_level, point_alarm_level, alarm_value, diagnosis_result, status, handler, handle_time, handle_remark, related_record_id, alarm_time, remark)
 VALUES
-(190000000000004001, 'ALM202605080001', 190000000000000001, 'DEV-001', '一号主轴承试验台', 190000000000002001, '驱动端轴承', 'vibration', 'point', 'threshold', 2, 'high', 0.2380, '轴承外圈故障趋势', 'unhandled', NULL, '2026-05-08 09:40:00', 'Seed alarm'),
-(190000000000004002, 'ALM202605090001', 190000000000000003, 'FAN-MAIN-001', '主排风机', 190000000000002003, '风机驱动端', 'rms', 'device', 'diagnosis', 3, 'high_high', 0.9156, '联轴器不平衡风险', 'unhandled', NULL, '2026-05-09 10:10:00', 'Seed alarm');
+(190000000000004001, 'ALM202605080001', 190000000000000001, 'DEV-001', '一号主轴承试验台', 190000000000002001, '驱动端轴承', 'vibration', 'point', 'threshold', 2, 'high', 0.2380, '轴承外圈故障趋势', 'unhandled', NULL, NULL, NULL, NULL, '2026-05-08 09:40:00', 'Seed alarm'),
+(190000000000004002, 'ALM202605090001', 190000000000000003, 'FAN-MAIN-001', '主排风机', 190000000000002003, '风机驱动端', 'rms', 'device', 'diagnosis', 3, 'high_high', 0.9156, '联轴器不平衡风险', 'unhandled', NULL, NULL, NULL, NULL, '2026-05-09 10:10:00', 'Seed alarm'),
+(190000000000004003, 'ALM202605100001', 190000000000000002, 'DEV-002', '二号齿轮箱综合台', NULL, NULL, 'temperature', 'device', 'threshold', 1, 'high', 68.5000, '齿轮箱温度偏高', 'handled', 'admin', '2026-05-10 15:05:00', '已检查润滑和散热状态，调整巡检频率并持续观察温度趋势。', NULL, '2026-05-10 14:20:00', 'Seed handled alarm');
+
+INSERT INTO phm_alarm_handle_record
+(id, alarm_id, action_type, operator_name, ignore_reason, before_status, after_status, remark, create_time)
+VALUES
+(190000000000004101, 190000000000004003, 'handle', 'admin', NULL, 'unhandled', 'handled', '已检查润滑和散热状态，调整巡检频率并持续观察温度趋势。', '2026-05-10 15:05:00');
 
 INSERT INTO phm_device_event
 (id, device_id, device_code, event_time, event_type, event_content, operator_name, remark)
 VALUES
 (190000000000005001, 190000000000000001, 'DEV-001', '2026-04-20 08:30:00', 'access', '设备接入 PHM 平台，完成测点和采集通道绑定。', 'system', 'Auto seed'),
-(190000000000005002, 190000000000000001, 'DEV-001', '2026-05-08 11:00:00', 'maintenance', '复核驱动端轴承振动升高，建议持续跟踪 RMS 与峰值因子。', 'admin', 'Demo event');
+(190000000000005002, 190000000000000001, 'DEV-001', '2026-05-08 11:00:00', 'maintenance', '复核驱动端轴承振动升高，建议持续跟踪 RMS 与峰值因子。', 'admin', 'Demo event'),
+(190000000000005003, 190000000000000002, 'DEV-002', '2026-05-10 15:05:00', 'alarm_handle', '处理告警 ALM202605100001：已检查润滑和散热状态，调整巡检频率并持续观察温度趋势。', 'admin', 'Demo handled alarm event');
 
 INSERT INTO phm_system_config
 (id, config_key, config_value, config_name, config_type, remark)

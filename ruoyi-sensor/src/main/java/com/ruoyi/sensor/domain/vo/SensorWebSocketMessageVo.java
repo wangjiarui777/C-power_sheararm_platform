@@ -9,7 +9,10 @@ public class SensorWebSocketMessageVo
     private String type;
     private String event;
     private String deviceCode;
+    private Long pointId;
     private Integer channelId;
+    private String metricCode;
+    private String quality;
     private String batchId;
     private String status;
     private String resultState;
@@ -20,9 +23,12 @@ public class SensorWebSocketMessageVo
     private Double confidence;
     private Double healthIndex;
     private String riskLevel;
+    private Double vibrationValue;
+    private Double temperatureValue;
     private Double rms;
     private Double peak;
     private LocalDateTime sampleTime;
+    private LocalDateTime receiveTime;
     private List<Double> waveform;
     private List<Double> frequencyAxis;
     private List<Double> spectrum;
@@ -35,8 +41,14 @@ public class SensorWebSocketMessageVo
     public void setEvent(String event) { this.event = event; }
     public String getDeviceCode() { return deviceCode; }
     public void setDeviceCode(String deviceCode) { this.deviceCode = deviceCode; }
+    public Long getPointId() { return pointId; }
+    public void setPointId(Long pointId) { this.pointId = pointId; }
     public Integer getChannelId() { return channelId; }
     public void setChannelId(Integer channelId) { this.channelId = channelId; }
+    public String getMetricCode() { return metricCode; }
+    public void setMetricCode(String metricCode) { this.metricCode = metricCode; }
+    public String getQuality() { return quality; }
+    public void setQuality(String quality) { this.quality = quality; }
     public String getBatchId() { return batchId; }
     public void setBatchId(String batchId) { this.batchId = batchId; }
     public String getStatus() { return status; }
@@ -57,12 +69,18 @@ public class SensorWebSocketMessageVo
     public void setHealthIndex(Double healthIndex) { this.healthIndex = healthIndex; }
     public String getRiskLevel() { return riskLevel; }
     public void setRiskLevel(String riskLevel) { this.riskLevel = riskLevel; }
+    public Double getVibrationValue() { return vibrationValue; }
+    public void setVibrationValue(Double vibrationValue) { this.vibrationValue = vibrationValue; }
+    public Double getTemperatureValue() { return temperatureValue; }
+    public void setTemperatureValue(Double temperatureValue) { this.temperatureValue = temperatureValue; }
     public Double getRms() { return rms; }
     public void setRms(Double rms) { this.rms = rms; }
     public Double getPeak() { return peak; }
     public void setPeak(Double peak) { this.peak = peak; }
     public LocalDateTime getSampleTime() { return sampleTime; }
     public void setSampleTime(LocalDateTime sampleTime) { this.sampleTime = sampleTime; }
+    public LocalDateTime getReceiveTime() { return receiveTime; }
+    public void setReceiveTime(LocalDateTime receiveTime) { this.receiveTime = receiveTime; }
     public List<Double> getWaveform() { return waveform; }
     public void setWaveform(List<Double> waveform) { this.waveform = waveform; }
     public List<Double> getFrequencyAxis() { return frequencyAxis; }

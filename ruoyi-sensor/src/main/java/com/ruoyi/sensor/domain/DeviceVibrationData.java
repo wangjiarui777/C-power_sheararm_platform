@@ -2,6 +2,7 @@ package com.ruoyi.sensor.domain;
 
 import java.math.BigDecimal;
 import java.util.Date;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import com.ruoyi.common.annotation.Excel;
@@ -24,6 +25,8 @@ public class DeviceVibrationData extends BaseEntity
     @Excel(name = "channelId")
     private Integer channelId;
 
+    private Long pointId;
+
     @Excel(name = "temperatureValue")
     private BigDecimal temperatureValue;
 
@@ -34,7 +37,13 @@ public class DeviceVibrationData extends BaseEntity
     private BigDecimal accelerationValue;
 
     @Excel(name = "sampleTime", width = 30, dateFormat = "yyyy-MM-dd HH:mm:ss")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private Date sampleTime;
+
+    private String quality;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private Date receiveTime;
 
     public Long getDataId() { return dataId; }
     public void setDataId(Long dataId) { this.dataId = dataId; }
@@ -42,6 +51,8 @@ public class DeviceVibrationData extends BaseEntity
     public void setDeviceCode(String deviceCode) { this.deviceCode = deviceCode; }
     public Integer getChannelId() { return channelId; }
     public void setChannelId(Integer channelId) { this.channelId = channelId; }
+    public Long getPointId() { return pointId; }
+    public void setPointId(Long pointId) { this.pointId = pointId; }
     public BigDecimal getTemperatureValue() { return temperatureValue; }
     public void setTemperatureValue(BigDecimal temperatureValue) { this.temperatureValue = temperatureValue; }
     public BigDecimal getVibrationValue() { return vibrationValue; }
@@ -50,6 +61,10 @@ public class DeviceVibrationData extends BaseEntity
     public void setAccelerationValue(BigDecimal accelerationValue) { this.accelerationValue = accelerationValue; }
     public Date getSampleTime() { return sampleTime; }
     public void setSampleTime(Date sampleTime) { this.sampleTime = sampleTime; }
+    public String getQuality() { return quality; }
+    public void setQuality(String quality) { this.quality = quality; }
+    public Date getReceiveTime() { return receiveTime; }
+    public void setReceiveTime(Date receiveTime) { this.receiveTime = receiveTime; }
 
     @Override
     public String toString()
@@ -58,10 +73,13 @@ public class DeviceVibrationData extends BaseEntity
             .append("dataId", getDataId())
             .append("deviceCode", getDeviceCode())
             .append("channelId", getChannelId())
+            .append("pointId", getPointId())
             .append("temperatureValue", getTemperatureValue())
             .append("vibrationValue", getVibrationValue())
             .append("accelerationValue", getAccelerationValue())
             .append("sampleTime", getSampleTime())
+            .append("quality", getQuality())
+            .append("receiveTime", getReceiveTime())
             .append("createBy", getCreateBy())
             .append("createTime", getCreateTime())
             .append("updateBy", getUpdateBy())

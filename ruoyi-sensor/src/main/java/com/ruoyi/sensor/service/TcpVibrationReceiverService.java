@@ -32,10 +32,12 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Service;
 
 import com.ruoyi.sensor.domain.dto.SensorSampleDto;
+import com.ruoyi.sensor.domain.dto.TelemetryEnvelope;
+import com.ruoyi.sensor.domain.dto.VibrationFrameEnvelope;
 import com.ruoyi.sensor.domain.dto.VibrationCsvRecord;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
-import com.ruoyi.sensor.tdengine.SensorTdengineWriter;
 import com.ruoyi.sensor.domain.DeviceVibrationData;
+import com.ruoyi.sensor.service.timeseries.TimeSeriesStore;
 
 /**
  * TCP 振动数据接收服务。
@@ -57,8 +59,8 @@ public class TcpVibrationReceiverService implements ApplicationRunner
 
     // 实时推送服务，用于把解析后的数据发给前端
     private final SensorWebSocketPushService pushService;
-    // TDengine 写入器：负责把分析后的原始波形、FFT 和诊断结果写入时序库
-    private final SensorTdengineWriter tdengineWriter;
+    // 时序库写入器：负责把分析后的原始波形、FFT 和诊断结果写入时序库
+    private final TimeSeriesStore timeSeriesStore;
     // 单线程执行器：用于后台启动 TCP 监听循环
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     // 标记服务是否已经启动，避免重复开启监听线程
@@ -77,10 +79,10 @@ public class TcpVibrationReceiverService implements ApplicationRunner
     private int sampleRate;
 
 
-    public TcpVibrationReceiverService(SensorWebSocketPushService pushService, SensorTdengineWriter tdengineWriter)
+    public TcpVibrationReceiverService(SensorWebSocketPushService pushService, TimeSeriesStore timeSeriesStore)
     {
         this.pushService = pushService;
-        this.tdengineWriter = tdengineWriter;
+        this.timeSeriesStore = timeSeriesStore;
     }
 
     /**
@@ -200,7 +202,7 @@ public class TcpVibrationReceiverService implements ApplicationRunner
         // 解析后的数据才是后续分析的输入，先提取加速度序列，再进行 RMS 和 FFT 计算
         if (!entities.isEmpty())
         {
-            processAndWriteTdengine(entities);
+            processAndWriteTimeSeries(entities);
         }
     }
 
@@ -233,12 +235,12 @@ public class TcpVibrationReceiverService implements ApplicationRunner
     }
 
     /**
-     * 解析批次后执行振动分析，并写入 TDengine 的三个目标表。
+     * 解析批次后执行振动分析，并写入统一时序存储。
      * <p>
      * 当前版本只保留单通道处理：整批数据只取第一条数据的通道信息和序列进行分析。
      * 这样可以避免多通道混批导致的子表错写问题，也便于先稳定验证链路。
      */
-    private void processAndWriteTdengine(List<DeviceVibrationData> entities)
+    private void processAndWriteTimeSeries(List<DeviceVibrationData> entities)
     {
         if (entities == null || entities.isEmpty())
         {
@@ -259,9 +261,8 @@ public class TcpVibrationReceiverService implements ApplicationRunner
             accelerationSeries[i] = acceleration == null ? 0D : acceleration.doubleValue();
         }
 
-        // 2. 构造原始波形对象并写入原始波形表
+        // 2. 构造原始波形对象
         SensorSampleDto sample = new SensorSampleDto(deviceCode, sampleTime, sampleRate, accelerationSeries);
-        tdengineWriter.writeRawWave(deviceCode, channelId, sample);
 
         // 3. 计算 RMS：表征这批振动的整体能量水平
         double rms = calculateRMS(accelerationSeries);
@@ -276,8 +277,6 @@ public class TcpVibrationReceiverService implements ApplicationRunner
         {
             amplitudes.add(fftResult[i].abs() / fftInput.length);
         }
-        tdengineWriter.writeFftPoints(deviceCode, channelId, amplitudes);
-
         // 5. 组织诊断信息：这里只保留 RMS 等摘要指标，rpm 不再参与写入
         VibrationCsvRecord record = new VibrationCsvRecord(
             new com.ruoyi.common.domain.dto.VibrationCsvProtocol(
@@ -290,7 +289,38 @@ public class TcpVibrationReceiverService implements ApplicationRunner
                 0D,
                 "normal",
                 0D));
-        tdengineWriter.writeCsvRecord(deviceCode, channelId, record, new Date(sampleTime));
+        VibrationFrameEnvelope envelope = new VibrationFrameEnvelope();
+        envelope.setDeviceCode(deviceCode);
+        envelope.setChannelId(channelId);
+        envelope.setSampleRate(sampleRate);
+        envelope.setSampleCount(accelerationSeries.length);
+        envelope.setWaveform(toList(sample.getWaveform()));
+        envelope.setSpectrum(amplitudes);
+        envelope.setFreqStep(amplitudes.isEmpty() ? null : sampleRate / (2D * amplitudes.size()));
+        envelope.setRpm(record.getRpm());
+        envelope.setLoad(record.getLoad());
+        envelope.setFaultType(record.getFaultType());
+        envelope.setFaultSize(record.getFaultSize());
+        envelope.setQuality("GOOD");
+        envelope.setAxis("radial");
+        envelope.setUnit("mm/s");
+        envelope.setSampleTime(new Date(sampleTime));
+        envelope.setReceiveTime(new Date());
+        timeSeriesStore.writeVibrationFrame(envelope);
+        TelemetryEnvelope telemetry = new TelemetryEnvelope();
+        telemetry.setDeviceCode(deviceCode);
+        telemetry.setChannelId(channelId);
+        telemetry.setMetricCode("vibration");
+        telemetry.setSignalType("vibration");
+        telemetry.setSource("tcp-vibration-receiver");
+        telemetry.setUnit("mm/s");
+        telemetry.setValue(rms);
+        telemetry.setQuality("GOOD");
+        telemetry.setSampleTime(new Date(sampleTime));
+        telemetry.setReceiveTime(new Date());
+        telemetry.setSequence(sampleTime);
+        telemetry.normalize();
+        timeSeriesStore.writeTelemetry(telemetry);
     }
 
     /**
@@ -327,6 +357,16 @@ public class TcpVibrationReceiverService implements ApplicationRunner
         double[] padded = new double[size];
         System.arraycopy(values, 0, padded, 0, values.length);
         return padded;
+    }
+
+    private List<Double> toList(double[] values)
+    {
+        List<Double> result = new ArrayList<>(values.length);
+        for (double value : values)
+        {
+            result.add(value);
+        }
+        return result;
     }
 
     /**

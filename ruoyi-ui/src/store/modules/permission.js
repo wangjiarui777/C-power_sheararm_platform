@@ -34,16 +34,15 @@ const permission = {
       return new Promise(resolve => {
         // 向后端请求路由数据
         getRouters().then(res => {
-          const sdata = deduplicateRoutes(JSON.parse(JSON.stringify(res.data)))
-          const rdata = deduplicateRoutes(JSON.parse(JSON.stringify(res.data)))
+          const sdata = JSON.parse(JSON.stringify(res.data))
+          const rdata = JSON.parse(JSON.stringify(res.data))
           const sidebarRoutes = filterAsyncRouter(sdata)
           const rewriteRoutes = filterAsyncRouter(rdata, false, true)
           const asyncRoutes = filterDynamicRoutes(dynamicRoutes)
           rewriteRoutes.push({ path: '*', redirect: '/404', hidden: true })
           router.addRoutes(asyncRoutes)
           commit('SET_ROUTES', rewriteRoutes)
-          const mergedSidebarRoutes = mergeUniqueRoutes(constantRoutes, sidebarRoutes)
-          commit('SET_SIDEBAR_ROUTERS', mergedSidebarRoutes)
+          commit('SET_SIDEBAR_ROUTERS', constantRoutes.concat(sidebarRoutes))
           commit('SET_DEFAULT_ROUTES', sidebarRoutes)
           commit('SET_TOPBAR_ROUTES', sidebarRoutes)
           resolve(rewriteRoutes)
@@ -79,55 +78,6 @@ function filterAsyncRouter(asyncRouterMap, lastRouter = false, type = false) {
     }
     return true
   })
-}
-
-function deduplicateRoutes(routes) {
-  if (!Array.isArray(routes) || routes.length === 0) {
-    return routes
-  }
-
-  const seen = new Set()
-  return routes.filter(route => {
-    const key = `${route.parentId || 0}-${route.path || ''}-${route.name || ''}`
-    if (seen.has(key)) {
-      return false
-    }
-    seen.add(key)
-    if (route.children && route.children.length) {
-      route.children = deduplicateRoutes(route.children)
-    }
-    return true
-  })
-}
-
-// 合并常量路由与后台路由，过滤掉后台路由中与常量路由重复的菜单项
-function mergeUniqueRoutes(constantRoutes, backendRoutes) {
-  const result = constantRoutes.map(route => ({ ...route }))
-  backendRoutes.forEach(route => mergeRoute(result, route, ''))
-  return result
-}
-
-function mergeRoute(targetRoutes, route, basePath) {
-  const routeKey = getRouteKey(route, basePath)
-  const existed = targetRoutes.find(item => getRouteKey(item, basePath) === routeKey || (route.name && item.name === route.name))
-  if (!existed) {
-    targetRoutes.push(route)
-    return
-  }
-  if (route.children && route.children.length) {
-    if (!existed.children) {
-      existed.children = []
-    }
-    route.children.forEach(child => mergeRoute(existed.children, child, routeKey))
-  }
-}
-
-function getRouteKey(route, basePath) {
-  const pathKey = route.path || ''
-  if (pathKey.startsWith('/')) {
-    return pathKey
-  }
-  return `${basePath.replace(/\/$/, '')}/${pathKey}`.replace(/\/+/g, '/')
 }
 
 function filterChildren(childrenMap, lastRouter = false) {

@@ -78,117 +78,6 @@ export const constantRoutes = [
     meta: { title: '锁定屏幕' }
   },
   {
-    path: '/monitoring-center',
-    component: Layout,
-    redirect: '/monitoring-center/index',
-    name: 'MonitoringCenter',
-    alwaysShow: true,
-    meta: { title: '监测与数据', icon: 'chart' },
-    children: [
-      {
-        path: 'index',
-        component: () => import('@/views/monitoring-center/index'),
-        name: 'MonitoringCenterIndex',
-        meta: { title: '实时监测', icon: 'dashboard', affix: true }
-      },
-      {
-        path: 'vibration',
-        component: () => import('@/views/system/vibration/index'),
-        name: 'VibrationData',
-        meta: { title: '振动分析', icon: 'chart' }
-      },
-      {
-        path: 'temperature',
-        component: () => import('@/views/system/temperature/index'),
-        name: 'TemperatureData',
-        meta: { title: '温度分析', icon: 'chart' }
-      },
-      {
-        path: 'multi-channel',
-        component: () => import('@/views/system/vibration/multiChannelIndex'),
-        name: 'MultiChannelMonitor',
-        hidden: true,
-        meta: { title: '8路实时监控', icon: 'chart' }
-      }
-    ]
-  },
-  {
-    path: '/analysis-toolkit',
-    component: Layout,
-    redirect: '/analysis-toolkit/bearing-diagnosis',
-    name: 'AnalysisToolkit',
-    meta: { title: '诊断分析', icon: 'chart' },
-    children: [
-      {
-        path: 'bearing-diagnosis',
-        component: () => import('@/views/monitor/diagnosis/index'),
-        name: 'BearingDiagnosis',
-        meta: { title: '诊断分析', icon: 'chart' }
-      }
-    ]
-  },
-  {
-    path: '/phm',
-    component: Layout,
-    redirect: '/phm/cluster',
-    name: 'PhmCenter',
-    alwaysShow: true,
-    meta: { title: 'PHM中心', icon: 'monitor' },
-    children: [
-      {
-        path: 'cluster',
-        component: () => import('@/views/phm/cluster/index'),
-        name: 'PhmCluster',
-        meta: { title: '设备集群', icon: 'dashboard' }
-      },
-      {
-        path: 'brain/:deviceId',
-        component: () => import('@/views/phm/brain/index'),
-        name: 'PhmBrain',
-        hidden: true,
-        meta: { title: '机器大脑', icon: 'chart', activeMenu: '/phm/cluster' }
-      },
-      {
-        path: 'alarms',
-        component: () => import('@/views/phm/alarms/index'),
-        name: 'PhmAlarms',
-        meta: { title: '告警中心', icon: 'message' }
-      },
-      {
-        path: 'events',
-        component: () => import('@/views/phm/events/index'),
-        name: 'PhmEvents',
-        meta: { title: '设备大事记', icon: 'time' }
-      },
-      {
-        path: 'reports',
-        component: () => import('@/views/phm/reports/index'),
-        name: 'PhmReports',
-        meta: { title: '报表中心', icon: 'documentation' }
-      },
-      {
-        path: 'config',
-        component: () => import('@/views/phm/config/index'),
-        name: 'PhmConfig',
-        meta: { title: '配置管理', icon: 'edit' }
-      }
-    ]
-  },
-  {
-    path: '/monitor/diagnosis',
-    component: Layout,
-    redirect: '/analysis-toolkit/bearing-diagnosis',
-    hidden: true,
-    children: [
-      {
-        path: 'index',
-        component: () => import('@/views/monitor/diagnosis/index'),
-        name: 'MonitorBearingDiagnosis',
-        meta: { title: '诊断分析', icon: 'chart' }
-      }
-    ]
-  },
-  {
     path: '/user',
     component: Layout,
     hidden: true,
@@ -206,6 +95,34 @@ export const constantRoutes = [
 
 // 动态路由，基于用户权限动态去加载
 export const dynamicRoutes = [
+  {
+    path: '/phm/brain',
+    component: Layout,
+    hidden: true,
+    permissions: ['phm:device:query'],
+    children: [
+      {
+        path: ':deviceId(\\d+)',
+        component: () => import('@/views/phm/brain/index'),
+        name: 'PhmBrain',
+        meta: { title: '机器大脑', activeMenu: '/phm/cluster' }
+      }
+    ]
+  },
+  {
+    path: '/monitoring-center/multi-channel',
+    component: Layout,
+    hidden: true,
+    permissions: ['sensor:monitoring:view'],
+    children: [
+      {
+        path: '',
+        component: () => import('@/views/system/vibration/multiChannelIndex'),
+        name: 'MultiChannelMonitor',
+        meta: { title: '8路实时监控', activeMenu: '/monitoring-center/index' }
+      }
+    ]
+  },
   {
     path: '/system/user-auth',
     component: Layout,

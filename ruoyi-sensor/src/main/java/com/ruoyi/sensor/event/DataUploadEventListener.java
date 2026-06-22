@@ -4,9 +4,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-import com.ruoyi.sensor.service.OverviewPushService;
 import com.ruoyi.sensor.event.DataUploadEvent;
-import com.ruoyi.sensor.service.PhmService;
+import com.ruoyi.sensor.service.TelemetryPipelineService;
 
 /**
  * Listens for {@code DataUploadEvent} (published by the sensor module after each
@@ -16,24 +15,16 @@ import com.ruoyi.sensor.service.PhmService;
 public class DataUploadEventListener
 {
     @Autowired
-    private OverviewPushService overviewPushService;
-
-    @Autowired
-    private PhmService phmService;
+    private TelemetryPipelineService telemetryPipelineService;
 
     @EventListener
     public void onDataUpload(DataUploadEvent event)
     {
-        overviewPushService.pushDataUpdate(
-                event.getDeviceCode(),
-                event.getDataType(),
-                event.getValue(),
-                event.getSampleTime());
-        phmService.evaluateUpload(
+        telemetryPipelineService.accept(TelemetryPipelineService.fromUpload(
                 event.getDeviceCode(),
                 event.getDataType(),
                 event.getChannelId(),
                 event.getValue(),
-                event.getSampleTime());
+                event.getSampleTime()));
     }
 }

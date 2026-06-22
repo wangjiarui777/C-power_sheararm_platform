@@ -1,6 +1,7 @@
 package com.ruoyi.common.core.redis;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ import org.springframework.data.redis.core.BoundSetOperations;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,6 +24,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class RedisCache
 {
+    private static final DefaultRedisScript<Object> GET_AND_DELETE_SCRIPT = new DefaultRedisScript<>(
+            "local value = redis.call('get', KEYS[1]); "
+            + "if value then redis.call('del', KEYS[1]); end; "
+            + "return value",
+            Object.class);
+
     @Autowired
     public RedisTemplate redisTemplate;
 
@@ -106,6 +114,14 @@ public class RedisCache
     {
         ValueOperations<String, T> operation = redisTemplate.opsForValue();
         return operation.get(key);
+    }
+
+    /**
+     * Atomically obtains and removes a cached value.
+     */
+    public <T> T getAndDeleteCacheObject(final String key)
+    {
+        return (T) redisTemplate.execute(GET_AND_DELETE_SCRIPT, Collections.singletonList(key));
     }
 
     /**

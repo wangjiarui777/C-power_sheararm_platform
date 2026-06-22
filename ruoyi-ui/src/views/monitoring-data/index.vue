@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container diagnosis-dashboard-page">
+  <div class="app-container diagnosis-dashboard-page monitoring-data-page">
     <div class="dashboard-shell">
       <aside class="dashboard-sidebar">
         <div class="sidebar-brand">
@@ -265,12 +265,7 @@ export default {
       alertVisible: false,
       alertMessage: '',
       alertDetail: '',
-      modelResults: [
-        { name: '轴承外圈故障', percent: 92, color: '#ff4d4f' },
-        { name: '不平衡', percent: 36, color: '#409eff' },
-        { name: '不对中', percent: 24, color: '#409eff' },
-        { name: '正常', percent: 4, color: '#67c23a' }
-      ],
+      modelResults: [],
       diagnosisEvidence: [],
       historyTable: []
     }
@@ -303,11 +298,11 @@ export default {
     },
     faultTypeText() {
       const raw = this.overview.faultType
-      return raw ? translateDiagnosisLabel(raw) : '轴承外圈故障'
+      return raw ? translateDiagnosisLabel(raw) : '暂无诊断'
     },
     confidenceDisplay() {
       const value = Number(this.overview.confidence)
-      return Number.isNaN(value) ? 92 : value
+      return Number.isNaN(value) ? '--' : value
     }
   },
   created() {
@@ -320,7 +315,6 @@ export default {
       this.unsubscribeWs()
       this.unsubscribeWs = null
     }
-    sensorWebSocket.close()
   },
   methods: {
     // ---- WebSocket (primary data path) ----
@@ -434,20 +428,8 @@ export default {
         temperatureValue: temperatureTrend.yData[index],
         collectionTime: item
       }))
-      this.diagnosisEvidence = (data.diagnosisEvidence && data.diagnosisEvidence.length)
-        ? data.diagnosisEvidence
-        : [
-          { title: '1X/2X 倍频异常', desc: '存在明显倍频成分，提示转子不平衡或轴系偏心。', type: 'danger', level: '高' },
-          { title: '频域升高', desc: '中高频能量增强，可能与轴承外圈接触损伤相关。', type: 'warning', level: '中' },
-          { title: '温升趋势', desc: '监测周期内温度稳步抬升，需关注润滑状态。', type: 'warning', level: '中' }
-        ]
-      this.historyTable = (data.analysisRecords && data.analysisRecords.length)
-        ? data.analysisRecords
-        : [
-          { sampleTime: '2025-05-20 10:24:36', modelVersion: 'V3.2.1', diagnosisResult: '轴承外圈故障', confidence: 92, healthIndex: 58, riskLevel: '高', operator: '运维工程师', status: '完成' },
-          { sampleTime: '2025-05-20 09:24:12', modelVersion: 'V3.2.1', diagnosisResult: '轴承外圈故障', confidence: 90, healthIndex: 61, riskLevel: '高', operator: '运维工程师', status: '完成' },
-          { sampleTime: '2025-05-20 08:24:05', modelVersion: 'V3.2.0', diagnosisResult: '不平衡', confidence: 45, healthIndex: 65, riskLevel: '中', operator: '运维工程师', status: '完成' }
-        ]
+      this.diagnosisEvidence = data.diagnosisEvidence || []
+      this.historyTable = data.analysisRecords || []
       this.checkAlerts()
     },
     handleDeviceClick(row) {
@@ -529,7 +511,7 @@ export default {
 
 <style scoped>
 .monitoring-page { padding: 0; }
-.diagnosis-dashboard-page { min-height: calc(100vh - 84px); background: #071623; color: #ffffff; }
+.diagnosis-dashboard-page { min-height: calc(100vh - 84px); color: var(--ops-text); }
 .dashboard-shell {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -542,54 +524,51 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background: linear-gradient(180deg, #07111d 0%, #0b2234 100%);
-  border: 1px solid rgba(82, 171, 255, 0.16);
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 14px;
-  box-shadow: inset 0 0 20px rgba(0, 255, 255, 0.04), 0 8px 24px rgba(0, 0, 0, 0.22);
 }
-.sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 6px 4px 14px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-.brand-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #57d1ff, #3b82f6); color: #ffffff; font-size: 22px; font-weight: 800; box-shadow: 0 0 18px rgba(87, 209, 255, 0.35); }
-.brand-title { font-size: 18px; font-weight: 700; color: #ffffff; }
-.brand-subtitle { font-size: 12px; color: #ffffff; margin-top: 2px; }
+.sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 6px 4px 14px; border-bottom: 1px solid rgba(120,153,186,0.16); }
+.brand-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--ops-accent), #3b82f6); color: #08111d; font-size: 22px; font-weight: 800; box-shadow: 0 0 18px rgba(34, 211, 238, 0.22); }
+.brand-title { font-size: 18px; font-weight: 700; color: var(--ops-heading); }
+.brand-subtitle { font-size: 12px; color: var(--ops-muted); margin-top: 2px; }
 .sidebar-card { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.sidebar-card-title { font-size: 14px; font-weight: 700; color: #ffffff; }
-.sidebar-search :deep(.el-input__inner) { background: rgba(255,255,255,0.04); border-color: rgba(87, 209, 255, 0.12); color: #ffffff; }
+.sidebar-card-title { font-size: 14px; font-weight: 700; color: var(--ops-heading); }
+.sidebar-search :deep(.el-input__inner) { background: rgba(255,255,255,0.04); border-color: rgba(120,153,186,0.18); color: var(--ops-text); }
 .device-tree { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
-.device-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(87, 209, 255, 0.08); cursor: pointer; transition: all .2s ease; }
-.device-item:hover, .device-item.active { background: rgba(53, 143, 255, 0.16); border-color: rgba(87, 209, 255, 0.38); transform: translateY(-1px); }
+.device-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 12px; cursor: pointer; transition: all .2s ease; }
+.device-item:hover, .device-item.active { background: rgba(34, 211, 238, 0.10); border-color: rgba(34, 211, 238, 0.38); transform: translateY(-1px); }
 .device-item-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.device-icon { color: #ffffff; font-size: 16px; }
+.device-icon { color: var(--ops-accent); font-size: 16px; }
 .device-texts { min-width: 0; }
-.device-name { font-size: 13px; font-weight: 700; color: #ffffff; }
-.device-desc { font-size: 12px; color: #ffffff; margin-top: 2px; }
-.empty-tip { color: #ffffff; text-align: center; padding: 18px 0; font-size: 12px; }
-.sidebar-footer { padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+.device-name { font-size: 13px; font-weight: 700; color: var(--ops-heading); }
+.device-desc { font-size: 12px; color: var(--ops-muted); margin-top: 2px; }
+.empty-tip { color: var(--ops-muted); text-align: center; padding: 18px 0; font-size: 12px; }
+.sidebar-footer { padding-top: 10px; border-top: 1px solid rgba(120,153,186,0.16); }
 .full-width-btn { width: 100%; }
 .dashboard-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.dashboard-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; background: linear-gradient(180deg, rgba(7,17,29,0.96), rgba(8,29,46,0.94)); border: 1px solid rgba(82, 171, 255, 0.16); border-radius: 14px; box-shadow: inset 0 0 20px rgba(0, 255, 255, 0.04); }
-.page-title { font-size: 22px; font-weight: 800; color: #ffffff; }
-.page-subtitle { margin-top: 4px; font-size: 12px; color: #ffffff; }
-.topbar-actions { display: flex; align-items: center; gap: 10px; color: #ffffff; }
-.topbar-time { font-size: 12px; color: #ffffff; }
+.dashboard-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; }
+.page-title { font-size: 22px; font-weight: 800; color: var(--ops-heading); }
+.page-subtitle { margin-top: 4px; font-size: 12px; color: var(--ops-muted); }
+.topbar-actions { display: flex; align-items: center; gap: 10px; color: var(--ops-text); }
+.topbar-time { font-size: 12px; color: var(--ops-muted); }
 .metrics-row, .chart-row { margin: 0; }
-.metric-card, .panel-card { background: linear-gradient(180deg, #07131f 0%, #0b2234 100%); border: 1px solid rgba(82, 171, 255, 0.16); color: #ffffff; border-radius: 14px; }
+.metric-card, .panel-card { color: var(--ops-text); border-radius: 16px; }
 .metric-card { min-height: 120px; }
-.metric-head { display: flex; align-items: center; gap: 8px; color: #ffffff; font-size: 13px; }
+.metric-head { display: flex; align-items: center; gap: 8px; color: var(--ops-text); font-size: 13px; }
 .metric-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; }
-.metric-icon.pulse { background: rgba(87, 209, 255, 0.12); color: #ffffff; }
-.metric-icon.danger { background: rgba(255, 91, 91, 0.12); color: #ffffff; }
-.metric-icon.info { background: rgba(56, 130, 246, 0.12); color: #ffffff; }
-.metric-icon.shield { background: rgba(102, 255, 204, 0.12); color: #ffffff; }
-.metric-value { margin-top: 14px; line-height: 1; font-weight: 800; color: #ffffff; }
+.metric-icon.pulse { background: rgba(34, 211, 238, 0.12); color: var(--ops-accent); }
+.metric-icon.danger { background: rgba(239, 68, 68, 0.12); color: var(--ops-danger); }
+.metric-icon.info { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+.metric-icon.shield { background: rgba(16, 185, 129, 0.12); color: var(--ops-success); }
+.metric-value { margin-top: 14px; line-height: 1; font-weight: 800; color: var(--ops-heading); }
 .metric-score { font-size: 34px; }
 .metric-risk { font-size: 22px; }
-.metric-fault { font-size: 20px; color: #ffffff; }
-.metric-confidence { font-size: 22px; color: #ffffff; }
-.metric-sub { margin-top: 4px; color: #ffffff; }
-.risk-low { color: #ffffff; }
-.risk-mid { color: #ffffff; }
-.risk-high { color: #ffffff; }
+.metric-fault { font-size: 20px; color: var(--ops-heading); }
+.metric-confidence { font-size: 22px; color: var(--ops-heading); }
+.metric-sub { margin-top: 4px; color: var(--ops-muted); }
+.risk-low { color: var(--ops-success); }
+.risk-mid { color: var(--ops-warning); }
+.risk-high { color: var(--ops-danger); }
 .chart-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.25fr) 300px;
@@ -600,15 +579,15 @@ export default {
 .chart-main-left, .chart-main-right { min-width: 0; }
 .chart-side-panel { width: 300px; }
 .dark-panel { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24); }
-.panel-header { display: flex; justify-content: space-between; align-items: center; color: #ffffff; font-weight: 700; }
+.panel-header { display: flex; justify-content: space-between; align-items: center; color: var(--ops-heading); font-weight: 700; }
 .panel-actions { display: flex; align-items: center; gap: 8px; }
 .mini-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
-.mini-stat { background: rgba(255,255,255,0.03); border: 1px solid rgba(87, 209, 255, 0.08); border-radius: 10px; padding: 10px 12px; }
-.mini-stat span { display: block; font-size: 12px; color: #ffffff; }
-.mini-stat strong { display: block; margin-top: 6px; font-size: 18px; color: #ffffff; }
+.mini-stat { border-radius: 12px; padding: 10px 12px; }
+.mini-stat span { display: block; font-size: 12px; color: var(--ops-muted); }
+.mini-stat strong { display: block; margin-top: 6px; font-size: 18px; color: var(--ops-heading); }
 .model-result-list { display: flex; flex-direction: column; gap: 14px; }
-.model-result-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(87, 209, 255, 0.08); border-radius: 10px; padding: 12px; }
-.model-result-meta { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; color: #ffffff; }
+.model-result-item { border-radius: 12px; padding: 12px; }
+.model-result-meta { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--ops-text); }
 .lower-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.15fr);
@@ -616,16 +595,17 @@ export default {
 }
 .evidence-card, .trend-card { min-height: 300px; }
 .evidence-list { display: flex; flex-direction: column; gap: 10px; }
-.evidence-item { display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(87, 209, 255, 0.08); border-radius: 10px; padding: 10px 12px; }
-.evidence-index { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: rgba(87,209,255,0.12); color: #ffffff; font-weight: 800; flex-shrink: 0; }
+.evidence-item { display: flex; align-items: flex-start; gap: 10px; border-radius: 12px; padding: 10px 12px; }
+.evidence-index { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: rgba(34,211,238,0.12); color: var(--ops-accent); font-weight: 800; flex-shrink: 0; }
 .evidence-content { flex: 1; min-width: 0; }
-.evidence-title { font-weight: 700; color: #ffffff; }
-.evidence-desc { margin-top: 4px; font-size: 12px; color: #ffffff; line-height: 1.6; }
+.evidence-title { font-weight: 700; color: var(--ops-heading); }
+.evidence-desc { margin-top: 4px; font-size: 12px; color: var(--ops-text); line-height: 1.6; }
 .history-card { margin-bottom: 0; }
-:deep(.el-card__header) { background: transparent; border-bottom-color: rgba(255,255,255,0.08); }
-:deep(.el-table) { background: transparent; color: #ffffff; }
+:deep(.el-progress-bar__outer) { background: rgba(120,153,186,0.14); }
+:deep(.el-card__header) { background: transparent; border-bottom-color: rgba(120,153,186,0.14); }
+:deep(.el-table) { background: transparent; color: var(--ops-text); }
 :deep(.el-table th), :deep(.el-table tr), :deep(.el-table td) { background: transparent !important; }
-:deep(.el-table::before) { background-color: rgba(87, 209, 255, 0.08); }
+:deep(.el-table::before) { background-color: rgba(120,153,186,0.14); }
 :deep(.history-table .el-table__body-wrapper) { background: rgba(255,255,255,0.02); }
 @media (max-width: 1600px) {
   .chart-grid { grid-template-columns: 1fr 1fr; }

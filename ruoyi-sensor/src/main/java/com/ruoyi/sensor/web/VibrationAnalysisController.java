@@ -11,9 +11,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
-@RequestMapping("/sensor/vibration/analysis")
+@RequestMapping("/sensor/diagnosis/analysis")
 public class VibrationAnalysisController
 {
     private final VibrationAnalysisService vibrationAnalysisService;
@@ -23,6 +24,7 @@ public class VibrationAnalysisController
         this.vibrationAnalysisService = vibrationAnalysisService;
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @PostMapping("/analyze")
     public AjaxResult analyze(@RequestBody Map<String, Object> params)
     {
@@ -51,6 +53,7 @@ public class VibrationAnalysisController
         return AjaxResult.success(result);
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @PostMapping("/batchAnalyze")
     public AjaxResult batchAnalyze(@RequestBody Map<String, Object> params)
     {

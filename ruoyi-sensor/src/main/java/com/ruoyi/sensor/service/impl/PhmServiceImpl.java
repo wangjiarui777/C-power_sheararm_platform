@@ -63,6 +63,12 @@ public class PhmServiceImpl implements PhmService
     private static final String STATUS_UNHANDLED = "unhandled";
     private static final String STATUS_HANDLED = "handled";
     private static final String STATUS_IGNORED = "ignored";
+    private static final String CONDITION_ACTIVE = "ACTIVE";
+    private static final String CONDITION_RETURNED = "RETURNED_TO_NORMAL";
+    private static final String WORKFLOW_NEW = "NEW";
+    private static final String WORKFLOW_ACKNOWLEDGED = "ACKNOWLEDGED";
+    private static final String WORKFLOW_ASSIGNED = "ASSIGNED";
+    private static final String WORKFLOW_CLOSED = "CLOSED";
     private static final String EVENT_TYPE_DIAGNOSIS = "diagnosis";
     private static final String EVENT_TYPE_ALARM_HANDLE = "alarm_handle";
 
@@ -251,24 +257,160 @@ public class PhmServiceImpl implements PhmService
     }
 
     @Override
-    public PhmAlarmEventEntity getAlarm(Long id)
+    public Map<String, Object> getAlarm(Long id)
     {
-        return alarmEventMapper.selectById(id);
+        PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("alarm", alarm);
+        if (alarm == null)
+        {
+            detail.put("handleRecords", new ArrayList<>());
+            detail.put("events", new ArrayList<>());
+            return detail;
+        }
+
+        detail.put("handleRecords", handleRecordMapper.selectList(new LambdaQueryWrapper<PhmAlarmHandleRecordEntity>()
+                .eq(PhmAlarmHandleRecordEntity::getAlarmId, id)
+                .orderByDesc(PhmAlarmHandleRecordEntity::getCreateTime)));
+        PhmDeviceEntity device = alarm.getDeviceId() == null ? null : deviceMapper.selectById(alarm.getDeviceId());
+        if (device == null && StringUtils.hasText(alarm.getDeviceCode()))
+        {
+            device = deviceMapper.selectOne(new LambdaQueryWrapper<PhmDeviceEntity>()
+                    .eq(PhmDeviceEntity::getDeviceCode, alarm.getDeviceCode())
+                    .last("limit 1"));
+        }
+        detail.put("device", device);
+        detail.put("point", alarm.getPointId() == null ? null : pointMapper.selectById(alarm.getPointId()));
+        detail.put("rule", findAlarmRule(alarm));
+        detail.put("relatedDiagnosis", alarm.getRelatedRecordId() == null
+                ? latestDiagnosis(alarm.getDeviceCode())
+                : enhancedInferenceRecordMapper.selectById(alarm.getRelatedRecordId()));
+        detail.put("events", listDeviceEvents(alarm.getDeviceId(), alarm.getDeviceCode(), null).stream()
+                .limit(5)
+                .collect(Collectors.toList()));
+        return detail;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean handleAlarm(Long id, String username, PhmAlarmActionRequest request)
     {
-        return changeAlarmStatus(id, username, STATUS_HANDLED, "handle", request);
+        PhmAlarmActionRequest compatible = request == null ? new PhmAlarmActionRequest() : request;
+        compatible.setForce(true);
+        if (!StringUtils.hasText(compatible.getResolution()))
+        {
+            compatible.setResolution(StringUtils.hasText(compatible.getRemark())
+                    ? compatible.getRemark() : "通过兼容处理接口关闭");
+        }
+        return closeAlarm(id, username, compatible);
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean ignoreAlarm(Long id, String username, PhmAlarmActionRequest request)
     {
-        return changeAlarmStatus(id, username, STATUS_IGNORED, "ignore", request);
+        PhmAlarmActionRequest compatible = request == null ? new PhmAlarmActionRequest() : request;
+        compatible.setForce(true);
+        if (!StringUtils.hasText(compatible.getResolution()))
+        {
+            compatible.setResolution(StringUtils.hasText(compatible.getIgnoreReason())
+                    ? compatible.getIgnoreReason() : "告警已忽略");
+        }
+        return closeAlarm(id, username, compatible);
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean acknowledgeAlarm(Long id, String username, PhmAlarmActionRequest request)
+    {
+        PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
+        if (alarm == null || WORKFLOW_CLOSED.equals(alarm.getWorkflowStatus()))
+        {
+            return false;
+        }
+        String before = effectiveWorkflowStatus(alarm);
+        alarm.setWorkflowStatus(WORKFLOW_ACKNOWLEDGED);
+        alarm.setAcknowledgedBy(username);
+        alarm.setAcknowledgedTime(new Date());
+        alarm.setUpdateTime(new Date());
+        alarmEventMapper.updateById(alarm);
+        appendAlarmRecord(alarm, username, "acknowledge", before, WORKFLOW_ACKNOWLEDGED, request);
+        SensorWebSocketHandler.broadcastPhmAlarmChanged(alarm);
+        return true;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean assignAlarm(Long id, String username, PhmAlarmActionRequest request)
+    {
+        PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
+        if (alarm == null || request == null || !StringUtils.hasText(request.getAssignee())
+                || WORKFLOW_CLOSED.equals(alarm.getWorkflowStatus()))
+        {
+            return false;
+        }
+        String before = effectiveWorkflowStatus(alarm);
+        alarm.setWorkflowStatus(WORKFLOW_ASSIGNED);
+        alarm.setAssignee(request.getAssignee());
+        if (alarm.getAcknowledgedTime() == null)
+        {
+            alarm.setAcknowledgedBy(username);
+            alarm.setAcknowledgedTime(new Date());
+        }
+        alarm.setUpdateTime(new Date());
+        alarmEventMapper.updateById(alarm);
+        appendAlarmRecord(alarm, username, "assign", before, WORKFLOW_ASSIGNED, request);
+        SensorWebSocketHandler.broadcastPhmAlarmChanged(alarm);
+        return true;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean closeAlarm(Long id, String username, PhmAlarmActionRequest request)
+    {
+        PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
+        if (alarm == null)
+        {
+            return false;
+        }
+        boolean force = request != null && Boolean.TRUE.equals(request.getForce());
+        if (!CONDITION_RETURNED.equals(effectiveConditionStatus(alarm)) && !force)
+        {
+            throw new IllegalStateException("告警条件尚未恢复，不能关闭；如需强制关闭必须填写原因");
+        }
+        String resolution = request == null ? null : request.getResolution();
+        if (force && !StringUtils.hasText(resolution) && (request == null || !StringUtils.hasText(request.getRemark())))
+        {
+            throw new IllegalArgumentException("强制关闭必须填写原因");
+        }
+        String before = effectiveWorkflowStatus(alarm);
+        alarm.setWorkflowStatus(WORKFLOW_CLOSED);
+        alarm.setStatus(STATUS_HANDLED);
+        alarm.setClosedBy(username);
+        alarm.setClosedTime(new Date());
+        alarm.setResolution(StringUtils.hasText(resolution) ? resolution : request == null ? null : request.getRemark());
+        alarm.setHandler(username);
+        alarm.setHandleTime(new Date());
+        alarm.setHandleRemark(request == null ? null : request.getRemark());
+        alarm.setUpdateTime(new Date());
+        alarmEventMapper.updateById(alarm);
+        appendAlarmRecord(alarm, username, force ? "force_close" : "close", before, WORKFLOW_CLOSED, request);
+        refreshDeviceStatusAfterAlarm(alarm);
+        createAlarmHandleEvent(alarm, username, "close", request);
+        SensorWebSocketHandler.broadcastPhmAlarmChanged(alarm);
+        return true;
+    }
+
+    @Override
+    public List<PhmAlarmHandleRecordEntity> getAlarmTimeline(Long id)
+    {
+        return handleRecordMapper.selectList(new LambdaQueryWrapper<PhmAlarmHandleRecordEntity>()
+                .eq(PhmAlarmHandleRecordEntity::getAlarmId, id)
+                .orderByAsc(PhmAlarmHandleRecordEntity::getCreateTime));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void evaluateUpload(String deviceCode, String dataType, Integer channelId, Double value, Date sampleTime)
     {
         if (!StringUtils.hasText(deviceCode) || value == null)
@@ -336,14 +478,26 @@ public class PhmServiceImpl implements PhmService
         }
         if (matched == null)
         {
+            markAlarmReturnedToNormal(deviceCode, point, featureCode, sampleTime);
             return;
         }
-        Long openCount = alarmEventMapper.selectCount(new LambdaQueryWrapper<PhmAlarmEventEntity>()
+        PhmAlarmEventEntity active = alarmEventMapper.selectOne(new LambdaQueryWrapper<PhmAlarmEventEntity>()
                 .eq(PhmAlarmEventEntity::getDeviceCode, deviceCode)
                 .eq(PhmAlarmEventEntity::getFeatureCode, featureCode)
-                .eq(PhmAlarmEventEntity::getStatus, STATUS_UNHANDLED));
-        if (openCount != null && openCount > 0)
+                .eq(point != null, PhmAlarmEventEntity::getPointId, point == null ? null : point.getId())
+                .eq(PhmAlarmEventEntity::getConditionStatus, CONDITION_ACTIVE)
+                .ne(PhmAlarmEventEntity::getWorkflowStatus, WORKFLOW_CLOSED)
+                .orderByDesc(PhmAlarmEventEntity::getAlarmTime)
+                .last("limit 1"));
+        if (active != null)
         {
+            active.setOccurrenceCount(Optional.ofNullable(active.getOccurrenceCount()).orElse(1) + 1);
+            active.setLastTriggerTime(sampleTime == null ? new Date() : sampleTime);
+            active.setAlarmValue(measured);
+            active.setPointAlarmLevel(pointAlarmLevel);
+            active.setUpdateTime(new Date());
+            alarmEventMapper.updateById(active);
+            SensorWebSocketHandler.broadcastPhmAlarmChanged(active);
             return;
         }
 
@@ -363,6 +517,11 @@ public class PhmServiceImpl implements PhmService
         event.setDiagnosisResult(matched.getActionAdvice());
         event.setStatus(STATUS_UNHANDLED);
         event.setAlarmTime(sampleTime == null ? new Date() : sampleTime);
+        event.setConditionStatus(CONDITION_ACTIVE);
+        event.setWorkflowStatus(WORKFLOW_NEW);
+        event.setOccurrenceCount(1);
+        event.setFirstTriggerTime(event.getAlarmTime());
+        event.setLastTriggerTime(event.getAlarmTime());
         event.setCreateTime(new Date());
         event.setRemark("Generated by PHM rule: " + matched.getRuleName());
         alarmEventMapper.insert(event);
@@ -375,6 +534,7 @@ public class PhmServiceImpl implements PhmService
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void syncDiagnosisResult(Map<String, Object> diagnosis)
     {
         if (diagnosis == null)
@@ -518,7 +678,7 @@ public class PhmServiceImpl implements PhmService
                 .orderByAsc(PhmMeasurePointEntity::getDisplayOrder)
                 .last("limit 1");
         PhmMeasurePointEntity point = pointMapper.selectOne(wrapper);
-        if (point != null || channelId == null)
+        if (point != null)
         {
             return point;
         }
@@ -526,6 +686,27 @@ public class PhmServiceImpl implements PhmService
                 .eq(PhmMeasurePointEntity::getDeviceCode, deviceCode)
                 .orderByAsc(PhmMeasurePointEntity::getDisplayOrder)
                 .last("limit 1"));
+    }
+
+    private PhmAlarmRuleEntity findAlarmRule(PhmAlarmEventEntity alarm)
+    {
+        if (alarm == null || !StringUtils.hasText(alarm.getFeatureCode()))
+        {
+            return null;
+        }
+        List<PhmAlarmRuleEntity> rules = alarmRuleMapper.selectList(new LambdaQueryWrapper<PhmAlarmRuleEntity>()
+                .eq(PhmAlarmRuleEntity::getEnabled, true)
+                .eq(PhmAlarmRuleEntity::getFeatureCode, alarm.getFeatureCode()));
+        return rules.stream()
+                .filter(rule -> rule.getPointId() != null && rule.getPointId().equals(alarm.getPointId()))
+                .findFirst()
+                .orElseGet(() -> rules.stream()
+                        .filter(rule -> rule.getDeviceId() != null && rule.getDeviceId().equals(alarm.getDeviceId()))
+                        .findFirst()
+                        .orElseGet(() -> rules.stream()
+                                .filter(rule -> rule.getPointId() == null && rule.getDeviceId() == null)
+                                .findFirst()
+                                .orElse(null)));
     }
 
     private BigDecimal calculateGrowth(PhmMeasurePointEntity point, String featureCode, BigDecimal measured, Integer growthPeriod)
@@ -954,6 +1135,56 @@ public class PhmServiceImpl implements PhmService
         createAlarmHandleEvent(alarm, username, actionType, request);
         SensorWebSocketHandler.broadcastPhmAlarmChanged(alarm);
         return true;
+    }
+
+    private void markAlarmReturnedToNormal(String deviceCode, PhmMeasurePointEntity point, String featureCode, Date sampleTime)
+    {
+        List<PhmAlarmEventEntity> alarms = alarmEventMapper.selectList(new LambdaQueryWrapper<PhmAlarmEventEntity>()
+                .eq(PhmAlarmEventEntity::getDeviceCode, deviceCode)
+                .eq(PhmAlarmEventEntity::getFeatureCode, featureCode)
+                .eq(point != null, PhmAlarmEventEntity::getPointId, point == null ? null : point.getId())
+                .eq(PhmAlarmEventEntity::getConditionStatus, CONDITION_ACTIVE));
+        for (PhmAlarmEventEntity alarm : alarms)
+        {
+            alarm.setConditionStatus(CONDITION_RETURNED);
+            alarm.setLastTriggerTime(sampleTime == null ? new Date() : sampleTime);
+            alarm.setUpdateTime(new Date());
+            alarmEventMapper.updateById(alarm);
+            PhmAlarmActionRequest request = new PhmAlarmActionRequest();
+            request.setRemark("监测值恢复至规则阈值内");
+            appendAlarmRecord(alarm, "system", "return_to_normal", CONDITION_ACTIVE, CONDITION_RETURNED, request);
+            SensorWebSocketHandler.broadcastPhmAlarmChanged(alarm);
+        }
+    }
+
+    private String effectiveWorkflowStatus(PhmAlarmEventEntity alarm)
+    {
+        if (StringUtils.hasText(alarm.getWorkflowStatus()))
+        {
+            return alarm.getWorkflowStatus();
+        }
+        return STATUS_UNHANDLED.equals(alarm.getStatus()) ? WORKFLOW_NEW : WORKFLOW_CLOSED;
+    }
+
+    private String effectiveConditionStatus(PhmAlarmEventEntity alarm)
+    {
+        return StringUtils.hasText(alarm.getConditionStatus()) ? alarm.getConditionStatus() : CONDITION_ACTIVE;
+    }
+
+    private void appendAlarmRecord(PhmAlarmEventEntity alarm, String username, String actionType,
+                                   String before, String after, PhmAlarmActionRequest request)
+    {
+        PhmAlarmHandleRecordEntity record = new PhmAlarmHandleRecordEntity();
+        record.setAlarmId(alarm.getId());
+        record.setActionType(actionType);
+        record.setOperatorName(username);
+        record.setIgnoreReason(request == null ? null : request.getIgnoreReason());
+        record.setBeforeStatus(before);
+        record.setAfterStatus(after);
+        record.setAssignee(request == null ? null : request.getAssignee());
+        record.setRemark(request == null ? null : request.getRemark());
+        record.setCreateTime(new Date());
+        handleRecordMapper.insert(record);
     }
 
     private void refreshDeviceStatusAfterAlarm(PhmAlarmEventEntity handledAlarm)

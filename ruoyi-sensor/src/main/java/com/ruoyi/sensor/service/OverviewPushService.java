@@ -29,9 +29,9 @@ public class OverviewPushService
      * @param value      the measured value
      * @param sampleTime the sample / collection timestamp
      */
-    public void pushDataUpdate(String deviceCode, String dataType, Double value, Date sampleTime)
+    public void pushDataUpdate(String deviceCode, String dataType, Integer channelId, Double value, Date sampleTime)
     {
-        SensorWebSocketHandler.broadcastIncrementalUpdate(deviceCode, dataType, value, sampleTime);
+        SensorWebSocketHandler.broadcastIncrementalUpdate(deviceCode, dataType, channelId, value, sampleTime);
     }
 
     /**

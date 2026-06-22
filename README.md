@@ -44,7 +44,8 @@
 - **Swagger / SpringDoc OpenAPI**
 - **Lombok**
 - **Netty**
-- **TDengine JDBC**
+- **Apache IoTDB Session API**
+- **一次性 WebSocket 票据与采集端专用凭据**
 
 ### 前端
 - **Vue**
@@ -106,7 +107,7 @@
 - `Netty`：用于高性能网络通信与底层数据处理扩展
 - `JTransforms`：可用于 FFT 等数学变换与信号分析
 - `commons-math3`：提供统计计算、数值算法支持
-- `TDengine JDBC`：支持时序数据存储与查询
+- `Apache IoTDB Session API`：支持工业时序数据存储与查询
 
 这使得项目不仅能“展示数据”，也能对采集数据进行进一步计算和处理。
 
@@ -163,7 +164,7 @@
 - Maven 3.8+
 - Node.js（前端开发环境，如需本地运行前端）
 - MySQL / 业务所需数据库
-- TDengine（如项目中启用了时序数据存储）
+- Apache IoTDB 2.0.x 集群（如项目中启用了时序数据存储）
 - Python 3.10+（用于 `ruoyi-sensor/inference/inference_service.py` 副手推理服务）
 
 ## Python 副手推理服务

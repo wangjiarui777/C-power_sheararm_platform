@@ -27,6 +27,17 @@ public class PhmAlarmEventEntity
     private BigDecimal alarmValue;
     private String diagnosisResult;
     private String status;
+    private String conditionStatus;
+    private String workflowStatus;
+    private String assignee;
+    private String acknowledgedBy;
+    private Date acknowledgedTime;
+    private String closedBy;
+    private Date closedTime;
+    private String resolution;
+    private Integer occurrenceCount;
+    private Date firstTriggerTime;
+    private Date lastTriggerTime;
     private String handler;
     private Date handleTime;
     private String ignoreReason;

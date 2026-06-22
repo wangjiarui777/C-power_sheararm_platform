@@ -34,6 +34,12 @@
             <artifactId>aspectjweaver</artifactId>
         </dependency>
 
+        <!-- MyBatis-Plus compatible SqlSessionFactory without a second Boot starter -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus</artifactId>
+        </dependency>
+
         <!-- 阿里数据库连接池 -->
         <dependency>
             <groupId>com.alibaba</groupId>

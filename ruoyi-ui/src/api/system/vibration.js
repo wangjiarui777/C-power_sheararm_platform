@@ -21,9 +21,32 @@ export function getRecentVibration(params) {
  */
 export function uploadVibration(data) {
   return request({
-    url: '/system/vibration/upload',
+    url: '/sensor/vibration-data/upload',
     method: 'post',
     data
+  })
+}
+
+export function getRecentVibrationRecords() {
+  return request({
+    url: '/sensor/vibration-data/recent',
+    method: 'get'
+  })
+}
+
+export function getMultiChannelOverview(params) {
+  return request({
+    url: '/sensor/vibration-data/multi-channel/overview',
+    method: 'get',
+    params
+  })
+}
+
+export function getChannelAnalysis(channelId, params) {
+  return request({
+    url: '/sensor/vibration-data/multi-channel/' + channelId + '/analysis',
+    method: 'get',
+    params
   })
 }
 
@@ -32,7 +55,7 @@ export function uploadVibration(data) {
  */
 export function getVibration(dataId) {
   return request({
-    url: '/system/vibration/' + dataId,
+    url: '/sensor/vibration-data/' + dataId,
     method: 'get'
   })
 }
@@ -42,7 +65,7 @@ export function getVibration(dataId) {
  */
 export function addVibration(data) {
   return request({
-    url: '/system/vibration',
+    url: '/sensor/vibration-data',
     method: 'post',
     data
   })
@@ -53,7 +76,7 @@ export function addVibration(data) {
  */
 export function updateVibration(data) {
   return request({
-    url: '/system/vibration',
+    url: '/sensor/vibration-data',
     method: 'put',
     data
   })
@@ -64,7 +87,7 @@ export function updateVibration(data) {
  */
 export function delVibration(dataId) {
   return request({
-    url: '/system/vibration/' + dataId,
+    url: '/sensor/vibration-data/' + dataId,
     method: 'delete'
   })
 }

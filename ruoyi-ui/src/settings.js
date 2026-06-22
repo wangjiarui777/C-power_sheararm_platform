@@ -10,6 +10,11 @@ module.exports = {
   sideTheme: 'theme-dark',
 
   /**
+   * 全站外观：light、dark、industrial
+   */
+  appearanceMode: 'industrial',
+
+  /**
    * 系统布局配置
    */
   showSettings: true,

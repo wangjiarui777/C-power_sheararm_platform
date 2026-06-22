@@ -36,7 +36,7 @@
           </div>
         </div>
         <div class="morphology-box">
-          <img v-if="device.morphologyUrl" :src="device.morphologyUrl" alt="设备形貌图">
+          <img v-if="device.morphologyUrl" :src="fileHref(device.morphologyUrl)" alt="设备形貌图">
           <div v-else class="morphology-empty">暂无形貌图，请在配置管理中上传</div>
           <button
             v-for="item in points"
@@ -141,8 +141,9 @@
 </template>
 
 <script>
-import * as echarts from 'echarts'
+import echarts from '@/utils/echarts'
 import { getDeviceBrain, saveDeviceEvent } from '@/api/phm'
+import { industrialChartTheme } from '@/utils/industrialTheme'
 
 export default {
   name: 'PhmBrain',
@@ -170,9 +171,11 @@ export default {
     }
   },
   mounted() {
+    window.addEventListener('appearance-mode-change', this.renderChart)
     this.loadBrain()
   },
   beforeDestroy() {
+    window.removeEventListener('appearance-mode-change', this.renderChart)
     if (this.chart) this.chart.dispose()
   },
   methods: {
@@ -213,11 +216,29 @@ export default {
       if (!this.chart) this.chart = echarts.init(this.$refs.trendChart)
       const trend = (this.activePoint && this.activePoint.trend) || []
       this.chart.setOption({
-        tooltip: { trigger: 'axis' },
+        animation: false,
+        color: [industrialChartTheme.vibration],
+        tooltip: { trigger: 'axis', backgroundColor: industrialChartTheme.tooltipBg, borderColor: industrialChartTheme.tooltipBorder, textStyle: { color: industrialChartTheme.text } },
         grid: { left: 42, right: 18, top: 28, bottom: 32 },
-        xAxis: { type: 'category', data: trend.map(item => this.parseTime(item.sampleTime, '{h}:{i}:{s}')) },
-        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#e5e7eb' } } },
-        series: [{ type: 'line', smooth: true, showSymbol: false, data: trend.map(item => item.value), lineStyle: { color: '#2563eb', width: 2 }, areaStyle: { color: 'rgba(37,99,235,.12)' } }]
+        xAxis: {
+          type: 'category',
+          data: trend.map(item => this.parseTime(item.sampleTime, '{h}:{i}:{s}')),
+          axisLabel: { color: industrialChartTheme.axis },
+          axisLine: { lineStyle: { color: industrialChartTheme.border } }
+        },
+        yAxis: {
+          type: 'value',
+          axisLabel: { color: industrialChartTheme.axis },
+          splitLine: { lineStyle: { color: industrialChartTheme.grid } }
+        },
+        series: [{
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          data: trend.map(item => item.value),
+          lineStyle: { color: industrialChartTheme.vibration, width: 2.4 },
+          areaStyle: { color: 'rgba(56,189,248,.14)' }
+        }]
       })
     },
     openDiagnosis() {
@@ -271,7 +292,7 @@ export default {
         return
       }
       const point = this.activePoint && this.activePoint.point
-      const url = this.chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' })
+      const url = this.chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#09111d' })
       const link = document.createElement('a')
       link.href = url
       link.download = `${this.device.deviceCode || 'device'}-${point ? point.pointName : 'point'}-trend.png`
@@ -306,47 +327,52 @@ export default {
     },
     eventTypeText(type) {
       return { access: '设备接入', repair: '维修', maintenance: '保养', diagnosis: '智能诊断', alarm_handle: '告警处置', other: '其他' }[type] || type
+    },
+    fileHref(url) {
+      if (!url) return ''
+      if (/^(https?:)?\/\//.test(url)) return url
+      const base = process.env.VUE_APP_BASE_API || ''
+      return url.indexOf('/') === 0 ? base + url : url
     }
   }
 }
 </script>
 
 <style scoped>
-.brain-page { background: #f6f8fb; min-height: calc(100vh - 84px); }
+.brain-page { min-height: calc(100vh - 84px); }
 .brain-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.brain-hero h2 { margin: 6px 0; color: #0f172a; }
-.brain-hero p { margin: 0; color: #64748b; }
-.brain-status { min-width: 160px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; text-align: right; }
-.brain-status strong { display: block; margin-top: 8px; font-size: 28px; color: #0f172a; }
-.brain-status span { color: #64748b; font-size: 12px; }
+.brain-hero h2 { margin: 6px 0; color: var(--ops-heading); }
+.brain-hero p { margin: 0; color: var(--ops-muted); }
+.brain-status { min-width: 180px; padding: 16px 18px; text-align: right; border-radius: 16px; }
+.brain-status strong { display: block; margin-top: 8px; font-size: 30px; color: var(--ops-heading); }
+.brain-status span { color: var(--ops-muted); font-size: 12px; }
 .brain-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr) 360px; gap: 14px; }
-.brain-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; min-height: 200px; }
-.brain-panel h3 { margin: 0 0 12px; color: #0f172a; }
+.brain-panel { padding: 16px; min-height: 200px; }
+.brain-panel h3 { margin: 0 0 12px; color: var(--ops-heading); }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.diagnosis-card { margin-bottom: 14px; padding: 12px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; }
-.diagnosis-card span { color: #2563eb; font-size: 12px; }
-.diagnosis-card strong { display: block; margin-top: 6px; color: #0f172a; }
-.diagnosis-card p { margin: 6px 0 0; color: #475569; line-height: 1.5; }
+.diagnosis-card { margin-bottom: 14px; padding: 16px; border-radius: 16px; background: linear-gradient(180deg, rgba(17, 47, 70, 0.92), rgba(10, 26, 42, 0.96)); border: 1px solid rgba(56, 189, 248, 0.22); }
+.diagnosis-card span { color: var(--ops-accent); font-size: 12px; }
+.diagnosis-card strong { display: block; margin-top: 6px; color: var(--ops-heading); }
+.diagnosis-card p { margin: 6px 0 0; color: var(--ops-text); line-height: 1.6; }
 .diagnosis-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.nameplate pre { margin: 0; padding: 10px; background: #f8fafc; border-radius: 6px; color: #475569; white-space: pre-wrap; }
-.morphology-box { position: relative; min-height: 260px; margin-bottom: 14px; overflow: hidden; border: 1px solid #dbe3ef; border-radius: 8px; background: #f8fafc; }
-.morphology-box img { display: block; width: 100%; height: 300px; object-fit: contain; background: #fff; }
-.morphology-empty { display: flex; align-items: center; justify-content: center; height: 260px; color: #94a3b8; }
-.point-marker { position: absolute; width: 28px; height: 28px; transform: translate(-50%, -50%); border: 2px solid #fff; border-radius: 50%; background: #2563eb; color: #fff; box-shadow: 0 6px 16px rgba(37,99,235,.28); cursor: pointer; }
-.morph-card { position: absolute; min-width: 118px; transform: translate(-10%, -10%); border: 1px solid rgba(37,99,235,.25); border-radius: 8px; padding: 8px; background: rgba(255,255,255,.92); box-shadow: 0 8px 22px rgba(15,23,42,.12); cursor: pointer; }
-.morph-card strong { display: block; color: #0f172a; font-size: 12px; }
-.morph-card span { display: block; margin-top: 3px; color: #475569; font-size: 12px; }
+.nameplate pre { margin: 0; padding: 12px; background: rgba(8, 17, 30, 0.68); border-radius: 10px; color: var(--ops-text); white-space: pre-wrap; border: 1px solid rgba(120, 153, 186, 0.16); }
+.morphology-box { position: relative; min-height: 260px; margin-bottom: 14px; overflow: hidden; border-radius: 16px; background: rgba(8, 17, 30, 0.62); }
+.morphology-box img { display: block; width: 100%; height: 300px; object-fit: contain; background: rgba(9, 17, 29, 0.65); }
+.morphology-empty { display: flex; align-items: center; justify-content: center; height: 260px; color: var(--ops-muted); }
+.point-marker { position: absolute; width: 28px; height: 28px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--ops-accent); color: #08111d; cursor: pointer; font-weight: 700; }
+.morph-card { position: absolute; min-width: 128px; transform: translate(-10%, -10%); border-radius: 12px; padding: 10px; cursor: pointer; }
+.morph-card strong { display: block; color: var(--ops-heading); font-size: 12px; }
+.morph-card span { display: block; margin-top: 3px; color: var(--ops-text); font-size: 12px; }
 .point-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.point-card { border: 1px solid #dbe3ef; border-radius: 8px; padding: 12px; cursor: pointer; }
-.point-card:hover { border-color: #2563eb; box-shadow: 0 6px 18px rgba(37,99,235,.08); }
-.point-title { font-weight: 700; color: #0f172a; }
-.point-sub { margin-top: 4px; color: #64748b; font-size: 12px; }
-.point-values { display: flex; justify-content: space-between; margin-top: 10px; color: #475569; }
-.trend-chart { height: 300px; }
+.point-card { border-radius: 12px; padding: 14px; cursor: pointer; }
+.point-title { font-weight: 700; color: var(--ops-heading); }
+.point-sub { margin-top: 4px; color: var(--ops-muted); font-size: 12px; }
+.point-values { display: flex; justify-content: space-between; margin-top: 10px; color: var(--ops-text); }
+.trend-chart { height: 320px; }
 .event-head { margin-top: 18px; }
 .event-list { max-height: 260px; overflow: auto; padding-right: 8px; }
-.event-list p { margin: 4px 0 0; color: #64748b; }
+.event-list p { margin: 4px 0 0; color: var(--ops-muted); }
 @media (max-width: 1200px) {
   .brain-grid { grid-template-columns: 1fr; }
   .brain-hero { align-items: stretch; flex-direction: column; }

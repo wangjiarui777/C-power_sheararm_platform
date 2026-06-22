@@ -1,767 +1,278 @@
 <template>
-  <div class="app-container temperature-page">
-    <el-alert
-      v-if="superEgoAlert.visible"
-      class="super-ego-alert"
-      :type="superEgoAlert.type"
-      show-icon
-      :closable="true"
-      :title="superEgoAlert.title"
-      :description="superEgoAlert.description"
-      @close="superEgoAlert.visible = false"
+  <div class="analysis-page">
+    <context-bar
+      eyebrow="热状态与耦合诊断"
+      title="温度分析工作台"
+      :device="workbench.device"
+      :latest-sample-time="snapshot.sampleTime"
+      :delay-seconds="delaySeconds"
+      :connection-state="connectionState"
+      @refresh="loadAll"
     />
 
-    <el-row :gutter="10">
-      <el-col v-for="channel in channels" :key="channel.id" :span="6" class="mb10">
-        <el-card shadow="hover" class="channel-card" :class="channel.status" @click.native="openDetail(channel)">
-          <div class="channel-head">
-            <div class="channel-title">{{ channel.title }}</div>
-            <el-tag size="mini" :type="statusTagType(channel.status)">{{ channel.statusLabel }}</el-tag>
-          </div>
-
-          <div class="card-body">
-            <div class="metric-zone">
-              <div class="metric-main metric-main--temp">
-                <div class="metric-label">当前温度</div>
-                <div class="metric-value">{{ formatNumber(channel.temperature) }}</div>
-                <div class="metric-unit">℃</div>
-              </div>
-              <div class="metric-main">
-                <div class="metric-label">MA / ROC</div>
-                <div class="metric-inline">
-                  <span>MA {{ formatNumber(channel.ma) }}</span>
-                  <span>ROC {{ formatNumber(channel.roc) }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="detail-zone">
-              <div class="detail-table">
-                <div class="detail-row"><span>历史 MA 最大值</span><strong>{{ formatNumber(channel.maMax) }}</strong></div>
-                <div class="detail-row"><span>历史 ROC 最大值</span><strong>{{ formatNumber(channel.rocMax) }}</strong></div>
-                <div class="detail-row"><span>升温异常</span><strong>{{ channel.abnormalRise ? '是' : '否' }}</strong></div>
-              </div>
-              <div :ref="el => setGaugeRef(el, channel.id)" class="health-gauge"></div>
-            </div>
-          </div>
-
-          <div class="channel-footer">
-            <span class="foot-text">{{ channel.sampleTimeText }}</span>
-            <span class="foot-time">健康度 {{ channel.health }}%</span>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <div class="trend-panel">
-      <div class="trend-header">
-        <div>
-          <div class="trend-title">温度趋势图 · {{ activeChannel.title }}</div>
-          <div class="trend-subtitle">原始温度与 MA 平滑曲线、ROC 升温监测、阈值联动</div>
-        </div>
-        <el-radio-group v-model="chartMode" size="mini" @change="refreshCharts">
-          <el-radio-button label="trend">温度趋势</el-radio-button>
-          <el-radio-button label="coupling">温-振耦合</el-radio-button>
-        </el-radio-group>
+    <section class="toolbar panel">
+      <div class="selectors">
+        <el-select v-model="selectedDevice" size="mini" filterable @change="changeDevice">
+          <el-option v-for="device in devices" :key="device.deviceCode" :label="`${device.label} · ${device.deviceCode}`" :value="device.deviceCode" />
+        </el-select>
+        <el-select v-model="selectedPointIds" size="mini" multiple collapse-tags filterable @change="changePoints">
+          <el-option v-for="point in workbench.points" :key="point.pointId" :label="point.pointName" :value="point.pointId" />
+        </el-select>
       </div>
-      <div ref="trendChartRef" class="trend-chart"></div>
-    </div>
-
-    <div class="alarm-panel">
-      <div class="alarm-panel__head">
-        <span>近期温升 / 复合告警事件</span>
-        <el-tag size="mini" type="danger">点击定位通道</el-tag>
+      <time-range-select v-model="range" @input="loadAll" />
+      <div class="toolbar-actions">
+        <el-button size="mini" @click="goVibration">振动分析</el-button>
+        <el-button size="mini" type="primary" icon="el-icon-refresh" @click="loadAll">刷新</el-button>
       </div>
-      <el-table :data="alarmEvents" height="220" size="mini" stripe @row-click="jumpToAlarmEvent">
-        <el-table-column prop="timeText" label="时间" min-width="180" />
-        <el-table-column prop="channelTitle" label="通道" width="120" />
-        <el-table-column prop="levelText" label="级别" width="100">
-          <template slot-scope="scope">
-            <el-tag :type="alarmTagType(scope.row.level)" size="mini">{{ scope.row.levelText }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="message" label="告警描述" min-width="260" />
-      </el-table>
-    </div>
+    </section>
 
-    <el-drawer
-      :visible.sync="detailVisible"
-      direction="btt"
-      size="100%"
-      custom-class="temperature-drawer"
-      :with-header="false"
-      append-to-body
-      @opened="handleDrawerOpened"
-      @closed="handleDrawerClosed"
-    >
-      <div class="drawer-shell">
-        <div class="drawer-topbar">
-          <div>
-            <div class="drawer-title">{{ activeChannel.title }} 详细信息</div>
-            <div class="drawer-subtitle">MA 窗口 {{ maWindow }} · ROC 异常升温判定 · 最近 100 条历史记录</div>
-          </div>
-          <div class="drawer-actions">
-            <el-tag :type="statusTagType(activeChannel.status)" size="mini">{{ activeChannel.statusLabel }}</el-tag>
-            <el-button size="mini" icon="el-icon-close" @click="detailVisible = false">关闭</el-button>
-          </div>
+    <section class="metric-strip">
+      <div><span>当前温度</span><strong>{{ metric(snapshot.value) }}</strong><small>{{ snapshot.unit || '℃' }}</small></div>
+      <div><span>温升速率</span><strong>{{ metric(statistics.latestRoc) }}</strong><small>℃/min</small></div>
+      <div><span>历史极值</span><strong>{{ metric(statistics.maximum) }}</strong><small>℃</small></div>
+      <div><span>同步振动</span><strong>{{ metric(statistics.latestVibration) }}</strong><small>mm/s</small></div>
+      <div><span>数据质量</span><strong class="quality-value">{{ snapshot.quality || 'OFFLINE' }}</strong><small>{{ dataStatusText }}</small></div>
+    </section>
+
+    <main class="temperature-layout">
+      <section class="panel chart-panel">
+        <div class="panel-head">
+          <div><strong>{{ chartMode === 'coupling' ? '温振耦合' : '多测点温度趋势' }}</strong><span>{{ point.pointName || '请选择测点' }}</span></div>
+          <el-radio-group v-model="chartMode" size="mini" @change="renderChart">
+            <el-radio-button label="trend">温度趋势</el-radio-button>
+            <el-radio-button label="coupling">温振耦合</el-radio-button>
+            <el-radio-button label="roc">变化率</el-radio-button>
+          </el-radio-group>
         </div>
-
-        <div class="drawer-content">
-          <el-row :gutter="12" class="detail-row">
-            <el-col :xs="24" :md="8">
-              <div class="metric-panel">
-                <div class="main-metric main-metric--temp">
-                  <div class="metric-label">当前温度</div>
-                  <div class="metric-value big">{{ formatNumber(activeChannel.temperature) }}</div>
-                  <div class="metric-unit">℃</div>
-                </div>
-                <div class="main-metric">
-                  <div class="metric-label">滑动平均 MA</div>
-                  <div class="metric-value big">{{ formatNumber(activeChannel.ma) }}</div>
-                  <div class="metric-unit">℃</div>
-                </div>
-                <div class="main-metric">
-                  <div class="metric-label">温度变化率 ROC</div>
-                  <div class="metric-value big">{{ formatNumber(activeChannel.roc) }}</div>
-                  <div class="metric-unit">℃/min</div>
-                </div>
-                <div class="sub-metrics compact-table">
-                  <div class="sub-item"><span>历史 MA 最大值</span><strong>{{ formatNumber(activeChannel.maMax) }}</strong></div>
-                  <div class="sub-item"><span>历史 ROC 最大值</span><strong>{{ formatNumber(activeChannel.rocMax) }}</strong></div>
-                  <div class="sub-item"><span>升温异常</span><strong>{{ activeChannel.abnormalRise ? '是' : '否' }}</strong></div>
-                  <div class="sub-item"><span>耦合判断</span><strong>{{ activeChannel.couplingDecision }}</strong></div>
-                </div>
-                <div class="health-box">
-                  <div>
-                    <div class="health-label">健康度</div>
-                    <div class="health-desc">{{ activeChannel.health }}%</div>
-                  </div>
-                  <el-progress type="circle" :percentage="activeChannel.health" :width="92" :color="healthColor(activeChannel.health)" />
-                </div>
-              </div>
-            </el-col>
-
-            <el-col :xs="24" :md="16">
-              <div class="drawer-chart-header">
-                <el-radio-group v-model="detailChartMode" size="mini" @change="refreshCharts">
-                  <el-radio-button label="trend">温度趋势</el-radio-button>
-                  <el-radio-button label="coupling">温-振耦合</el-radio-button>
-                </el-radio-group>
-                <div class="drawer-chart-tip">原始温度、MA 曲线、ROC 判定与振动联动</div>
-              </div>
-              <div ref="detailChartRef" class="chart-box"></div>
-            </el-col>
-          </el-row>
-
-          <el-card class="log-card" shadow="never">
-            <div slot="header" class="card-header">
-              <span>MA / ROC 历史极值与关键记录</span>
-              <el-button size="mini" type="primary" plain @click="loadHistory(activeChannel.id)">刷新</el-button>
-            </div>
-            <el-table :data="historyRows" height="300" stripe size="mini" border>
-              <el-table-column type="index" label="序号" width="60" />
-              <el-table-column prop="sampleTimeText" label="采集精确时间" min-width="180" />
-              <el-table-column prop="temperatureValue" label="温度值" width="110" align="center">
-                <template slot-scope="scope">{{ formatNumber(scope.row.temperatureValue) }}</template>
-              </el-table-column>
-              <el-table-column prop="maValue" label="MA" width="110" align="center">
-                <template slot-scope="scope">{{ formatNumber(scope.row.maValue) }}</template>
-              </el-table-column>
-              <el-table-column prop="rocValue" label="ROC" width="110" align="center">
-                <template slot-scope="scope">{{ formatNumber(scope.row.rocValue) }}</template>
-              </el-table-column>
-              <el-table-column prop="motorSpeed" label="当前电机转速" width="130" align="center">
-                <template slot-scope="scope">{{ formatNumber(scope.row.motorSpeed) }}</template>
-              </el-table-column>
-            </el-table>
-          </el-card>
+        <div ref="temperatureChart" class="temperature-chart"></div>
+        <div v-if="!hasRows" class="chart-empty">该时间范围没有温度数据</div>
+        <div class="legend-note">
+          <span><i class="gap"></i>温振未在 30 秒内对齐时保留数据缺口，不进行补值</span>
+          <span><i class="event"></i>图中标记维修、润滑、停机及告警处置事件</span>
         </div>
-      </div>
-    </el-drawer>
+      </section>
+
+      <aside class="side-column">
+        <section class="panel rule-card">
+          <div class="panel-head"><div><strong>温升规则</strong><span>{{ thresholds.ruleVersion || '--' }}</span></div></div>
+          <h3>{{ thresholds.ruleName || '未配置规则' }}</h3>
+          <div class="rule-grid">
+            <span>高限<b>{{ metric(thresholds.high) }} ℃</b></span>
+            <span>高高限<b>{{ metric(thresholds.highHigh) }} ℃</b></span>
+            <span>增长周期<b>{{ thresholds.growthPeriod || '--' }}</b></span>
+            <span>连续次数<b>{{ thresholds.consecutiveCount || 1 }}</b></span>
+          </div>
+          <p>{{ thresholds.actionAdvice }}</p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><strong>设备事件</strong><span>用于解释趋势变化</span></div></div>
+          <div class="event-list">
+            <article v-for="event in events.slice(0, 8)" :key="event.id">
+              <i></i>
+              <span><strong>{{ eventType(event.eventType) }}</strong><small>{{ event.eventContent }}</small><em>{{ formatTime(event.eventTime) }}</em></span>
+            </article>
+            <div v-if="!events.length" class="empty-card">当前时间窗没有设备事件</div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><strong>温升告警</strong><span>条件与流程状态并列</span></div></div>
+          <div class="alarm-list">
+            <button v-for="alarm in alarms" :key="alarm.id" @click="openAlarm(alarm)">
+              <span><strong>{{ alarm.diagnosisResult || '温度告警' }}</strong><small>{{ alarm.conditionStatus || 'ACTIVE' }} · {{ alarm.workflowStatus || 'NEW' }}</small></span>
+              <i class="el-icon-arrow-right"></i>
+            </button>
+            <div v-if="!alarms.length" class="empty-card">当前测点无温升告警</div>
+          </div>
+        </section>
+      </aside>
+    </main>
   </div>
 </template>
 
 <script>
-import * as echarts from 'echarts'
-import { listTemperature } from '@/api/system/temperature'
+import echarts from '@/utils/echarts'
+import { mapState } from 'vuex'
+import { getTemperatureAnalysis } from '@/api/monitoring'
+import ContextBar from '@/components/IndustrialMonitoring/ContextBar'
+import TimeRangeSelect from '@/components/IndustrialMonitoring/TimeRangeSelect'
+import { industrialChartTheme } from '@/utils/industrialTheme'
 
 export default {
   name: 'Temperature',
+  components: { ContextBar, TimeRangeSelect },
   data() {
     return {
-      ws: null,
-      trendChart: null,
-      gaugeCharts: {},
-      detailVisible: false,
-      historyLoading: false,
-      historyRows: [],
+      selectedDevice: '',
+      selectedPointIds: [],
+      analyses: {},
       chartMode: 'trend',
-      detailChartMode: 'trend',
-      activeChannelId: 1,
-      maWindow: 5,
-      superEgoAlert: { visible: false, type: 'warning', title: '', description: '' },
-      alarmEvents: [],
-      channels: Array.from({ length: 8 }, (_, index) => this.buildChannel(index + 1)),
-      liveData: {},
-      maxPoints: 180
+      chart: null
     }
   },
   computed: {
-    activeChannel() {
-      return this.channels.find(item => item.id === this.activeChannelId) || this.buildChannel(this.activeChannelId)
+    ...mapState('monitoring', ['assets', 'workbench', 'connectionState']),
+    devices() { return this.assets.reduce((all, org) => all.concat(org.children || []), []) },
+    activePointId() { return this.selectedPointIds[0] },
+    data() { return this.analyses[this.activePointId] || {} },
+    point() { return this.data.point || {} },
+    snapshot() { return this.data.snapshot || {} },
+    statistics() { return this.data.statistics || {} },
+    thresholds() { return this.data.thresholds || {} },
+    events() { return this.data.events || [] },
+    alarms() { return this.data.alarms || [] },
+    hasRows() { return Object.values(this.analyses).some(item => item.trend && item.trend.length) },
+    delaySeconds() {
+      if (!this.snapshot.sampleTime) return null
+      return Math.max(0, Math.floor((Date.now() - new Date(this.snapshot.sampleTime).getTime()) / 1000))
+    },
+    dataStatusText() { return this.data.dataStatus === 'available' ? '真实采样' : '暂无采样' },
+    range: {
+      get() { return this.$store.state.monitoring.range },
+      set(value) { this.$store.dispatch('monitoring/setContext', { range: value }) }
     }
   },
-  created() {
-    this.initChannels()
-    this.connectWebSocket()
+  async created() {
+    if (!this.assets.length) await this.$store.dispatch('monitoring/loadAssets')
+    this.selectedDevice = this.$route.query.deviceCode || this.$store.state.monitoring.deviceCode
+    if (this.selectedDevice) this.$store.dispatch('monitoring/setContext', { deviceCode: this.selectedDevice })
+    await this.$store.dispatch('monitoring/loadWorkbench')
+    const routePoint = Number(this.$route.query.pointId)
+    this.selectedPointIds = [routePoint || this.$store.state.monitoring.pointId || (this.workbench.points[0] && this.workbench.points[0].pointId)].filter(Boolean)
+    if (this.$route.query.range) this.$store.dispatch('monitoring/setContext', { range: this.$route.query.range })
+    this.$store.dispatch('monitoring/connect')
+    await this.loadAll()
   },
   mounted() {
-    window.addEventListener('resize', this.handleResize)
-    this.$nextTick(() => this.refreshGaugeCharts())
+    window.addEventListener('resize', this.resize)
+    window.addEventListener('appearance-mode-change', this.renderChart)
+    this.$nextTick(() => {
+      this.chart = echarts.init(this.$refs.temperatureChart)
+      this.renderChart()
+    })
   },
   beforeDestroy() {
-    window.removeEventListener('resize', this.handleResize)
-    this.closeWebSocket()
-    this.disposeCharts()
+    window.removeEventListener('resize', this.resize)
+    window.removeEventListener('appearance-mode-change', this.renderChart)
+    if (this.chart) this.chart.dispose()
+    this.$store.dispatch('monitoring/disconnect')
   },
   methods: {
-    buildChannel(id) {
-      const titles = ['驱动端轴承温度', '驱动端电机温度', '非驱动端轴承温度', '非驱动端电机温度', '减速机输入端温度', '减速机输出端温度', '油箱温度', '环境温度']
-      return {
-        id,
-        title: `通道${id}`,
-        desc: titles[id - 1],
-        temperature: 0,
-        ma: 0,
-        roc: 0,
-        peakTemp: 0,
-        maMax: 0,
-        rocMax: 0,
-        vibration: 0,
-        health: 100,
-        status: 'normal',
-        statusLabel: '正常',
-        sampleTimeText: '--',
-        abnormalRise: false,
-        couplingDecision: '正常',
-        history: [],
-        vibrationHistory: [],
-        alarmHistory: []
-      }
+    async changeDevice(value) {
+      this.$store.dispatch('monitoring/setContext', { deviceCode: value, pointId: null })
+      await this.$store.dispatch('monitoring/loadWorkbench', { deviceCode: value })
+      this.selectedPointIds = this.workbench.points[0] ? [this.workbench.points[0].pointId] : []
+      this.syncRoute()
+      this.loadAll()
     },
-    initChannels() {
-      this.channels.forEach(channel => {
-        const history = this.mockTempSeries(60, channel.id)
-        const vibrationHistory = this.mockVibrationSeries(60, channel.id)
-        const enriched = this.enrichSeries(history, vibrationHistory)
-        this.$set(this.liveData, channel.id, enriched)
-        this.syncChannelState(channel.id, enriched)
-      })
+    changePoints(value) {
+      if (value.length > 4) this.selectedPointIds = value.slice(0, 4)
+      this.$store.dispatch('monitoring/setContext', { pointId: this.activePointId })
+      this.syncRoute()
+      this.loadAll()
     },
-    mockTempSeries(count, seed) {
-      const now = Date.now()
-      return Array.from({ length: count }, (_, i) => ({
-        collectionTime: now - (count - i) * 1000,
-        temperatureValue: Number((35 + Math.sin((i + seed) / 6) * 2.5 + seed * 0.45).toFixed(2))
+    syncRoute() {
+      this.$router.replace({ query: { deviceCode: this.selectedDevice, pointId: this.activePointId, range: this.range } })
+    },
+    async loadAll() {
+      const entries = await Promise.all(this.selectedPointIds.map(async pointId => {
+        const response = await getTemperatureAnalysis(pointId, { ...this.rangeParams(), maxPoints: 1200 })
+        return [pointId, response.data || {}]
       }))
+      this.analyses = Object.fromEntries(entries)
+      this.renderChart()
     },
-    mockVibrationSeries(count, seed) {
-      const now = Date.now()
-      return Array.from({ length: count }, (_, i) => ({
-        collectionTime: now - (count - i) * 1000,
-        vibrationValue: Number((1.3 + Math.cos((i + seed) / 4) * 0.4 + seed * 0.08).toFixed(2))
+    rangeParams() {
+      if (this.range === 'realtime') return {}
+      const durations = { '15m': 15 * 60e3, '1h': 60 * 60e3, '8h': 8 * 60 * 60e3, '24h': 24 * 60 * 60e3 }
+      const to = new Date()
+      return { from: new Date(to.getTime() - (durations[this.range] || durations['15m'])).toISOString(), to: to.toISOString() }
+    },
+    renderChart() {
+      this.$nextTick(() => {
+        if (!this.chart) return
+        const primaryRows = this.data.trend || []
+        const times = primaryRows.map(row => this.axisTime(row.time))
+        const series = []
+        if (this.chartMode === 'trend') {
+          Object.values(this.analyses).forEach((analysis, index) => {
+            const rows = analysis.trend || []
+            series.push({
+              name: analysis.point ? analysis.point.pointName : `测点${index + 1}`,
+              type: 'line',
+              showSymbol: false,
+              connectNulls: false,
+              data: rows.map(row => row.temperature),
+              lineStyle: { width: index === 0 ? 2.5 : 1.5 },
+              markLine: index === 0 ? this.thresholdLines() : undefined,
+              markPoint: index === 0 ? this.eventMarks(analysis.events || []) : undefined
+            })
+          })
+        } else if (this.chartMode === 'coupling') {
+          series.push(
+            { name: '温度', type: 'line', showSymbol: false, connectNulls: false, data: primaryRows.map(row => row.temperature), lineStyle: { color: industrialChartTheme.temperature, width: 2.3 }, markLine: this.thresholdLines() },
+            { name: '同步振动', type: 'line', yAxisIndex: 1, showSymbol: false, connectNulls: false, data: primaryRows.map(row => row.couplingQuality === 'ALIGNED' ? row.vibration : null), lineStyle: { color: industrialChartTheme.vibration, width: 2.1 } }
+          )
+        } else {
+          series.push(
+            { name: 'MA', type: 'line', showSymbol: false, connectNulls: false, data: primaryRows.map(row => row.ma), lineStyle: { color: industrialChartTheme.temperature, width: 2.1 } },
+            { name: 'ROC', type: 'bar', yAxisIndex: 1, data: primaryRows.map(row => row.roc), itemStyle: { color: industrialChartTheme.warning }, barMaxWidth: 8 }
+          )
+        }
+        this.chart.setOption({
+          animation: false,
+          color: [industrialChartTheme.temperature, industrialChartTheme.vibration, industrialChartTheme.event, industrialChartTheme.warning],
+          tooltip: { trigger: 'axis', backgroundColor: industrialChartTheme.tooltipBg, borderColor: industrialChartTheme.tooltipBorder, textStyle: { color: industrialChartTheme.text } },
+          legend: { top: 5, right: 10, textStyle: { color: industrialChartTheme.muted } },
+          grid: { left: 58, right: 58, top: 48, bottom: 40 },
+          xAxis: { type: 'category', boundaryGap: false, data: times, axisLabel: { color: industrialChartTheme.axis }, axisLine: { lineStyle: { color: industrialChartTheme.border } } },
+          yAxis: [
+            { type: 'value', name: '℃', scale: true, axisLabel: { color: industrialChartTheme.axis }, splitLine: { lineStyle: { color: industrialChartTheme.grid } } },
+            { type: 'value', name: this.chartMode === 'roc' ? '℃/min' : 'mm/s', scale: true, axisLabel: { color: industrialChartTheme.axis }, splitLine: { show: false } }
+          ],
+          series
+        }, true)
+      })
+    },
+    thresholdLines() {
+      const data = []
+      if (this.thresholds.high !== null && this.thresholds.high !== undefined) data.push({ yAxis: this.thresholds.high, name: '高限', lineStyle: { color: industrialChartTheme.warning } })
+      if (this.thresholds.highHigh !== null && this.thresholds.highHigh !== undefined) data.push({ yAxis: this.thresholds.highHigh, name: '高高限', lineStyle: { color: industrialChartTheme.danger } })
+      return { symbol: 'none', label: { color: industrialChartTheme.muted }, data }
+    },
+    eventMarks(events) {
+      const data = events.slice(0, 12).map(event => ({
+        name: this.eventType(event.eventType),
+        coord: [this.axisTime(event.eventTime), 'max'],
+        value: this.eventType(event.eventType),
+        itemStyle: { color: industrialChartTheme.event }
       }))
+      return { symbol: 'pin', symbolSize: 34, label: { show: false }, data }
     },
-    enrichSeries(tempSeries, vibrationSeries) {
-      const rows = []
-      for (let i = 0; i < tempSeries.length; i++) {
-        const item = tempSeries[i]
-        const window = tempSeries.slice(Math.max(0, i - this.maWindow + 1), i + 1).map(x => Number(this.pickNumber(x, ['temperatureValue', 'temperature', 'temp', 'value'])))
-        const ma = this.calcMA(window)
-        const prev = i > 0 ? Number(this.pickNumber(tempSeries[i - 1], ['temperatureValue', 'temperature', 'temp', 'value'])) : Number(this.pickNumber(item, ['temperatureValue', 'temperature', 'temp', 'value']))
-        const current = Number(this.pickNumber(item, ['temperatureValue', 'temperature', 'temp', 'value']))
-        const roc = this.calcROC(current, prev, 1)
-        rows.push({
-          collectionTime: item.collectionTime || item.sampleTime || item.time,
-          temperatureValue: current,
-          maValue: ma,
-          rocValue: roc,
-          vibrationValue: vibrationSeries[i] ? Number(this.pickNumber(vibrationSeries[i], ['vibrationValue', 'vibration', 'rms', 'speed', 'value'])) : 0
-        })
-      }
-      return {
-        history: rows.slice(-this.maxPoints),
-        vibrationHistory: vibrationSeries.slice(-this.maxPoints)
-      }
+    goVibration() {
+      this.$router.push({ path: '/monitoring-center/vibration', query: { deviceCode: this.selectedDevice, pointId: this.activePointId, range: this.range } })
     },
-    connectWebSocket() {
-      this.closeWebSocket()
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const url = `${protocol}//${window.location.host}/ws/sensor`
-      this.ws = new WebSocket(url)
-      this.ws.onmessage = this.handleWebSocketMessage
-    },
-    handleWebSocketMessage(evt) {
-      let msg
-      try {
-        msg = JSON.parse(evt.data)
-      } catch (error) {
-        return
-      }
-      const channelId = Number(msg.channelId || msg.channel || msg.id)
-      if (!channelId || !this.liveData[channelId]) return
-
-      const channel = this.channels[channelId - 1]
-      if (!channel) return
-
-      const temperature = this.toNumber(this.pickField(msg, ['temperatureValue', 'temperature', 'temp']), channel.temperature)
-      const vibration = this.toNumber(this.pickField(msg, ['vibrationValue', 'vibration', 'rms', 'speed']), channel.vibration)
-      const sampleTime = this.pickField(msg, ['collectionTime', 'sampleTime', 'collectTime', 'createTime']) || new Date().toISOString()
-      const maValue = this.toNumber(this.pickField(msg, ['maValue', 'ma']), temperature)
-      const rocValue = this.toNumber(this.pickField(msg, ['rocValue', 'roc']), 0)
-      const history = this.liveData[channelId].history.slice()
-      const vibrationHistory = this.liveData[channelId].vibrationHistory.slice()
-      const now = new Date(sampleTime).getTime()
-      history.push({ collectionTime: now, temperatureValue: temperature, maValue, rocValue })
-      vibrationHistory.push({ collectionTime: now, vibrationValue: vibration })
-
-      const normalized = this.enrichSeries(history, vibrationHistory)
-      this.$set(this.liveData, channelId, normalized)
-      this.syncChannelState(channelId, normalized)
-
-      if (msg.alarm || channel.abnormalRise) {
-        const title = channel.abnormalRise ? '潜在故障演进' : '温度异常告警'
-        const description = channel.abnormalRise
-          ? `${channel.title} 出现持续升温且振动同步上升，建议重点关注机械磨损或润滑不良`
-          : `${channel.title} 温度已超过阈值，请及时排查`
-        this.superEgoAlert = { visible: true, type: 'error', title, description }
-        this.alarmEvents.unshift({
-          time: sampleTime,
-          timeText: this.formatDateTime(sampleTime),
-          channelId,
-          channelTitle: channel.title,
-          level: channel.abnormalRise ? '高' : '中',
-          levelText: channel.abnormalRise ? '高优先级' : '预警',
-          message: channel.abnormalRise ? 'ROC 持续为正且振动同步上升' : '温度触发阈值告警'
-        })
-        this.alarmEvents = this.alarmEvents.slice(0, 10)
-      }
-
-      this.refreshGaugeChart(channelId)
-      if (this.detailVisible && this.activeChannelId === channelId) {
-        this.refreshCharts()
-      }
-    },
-    syncChannelState(channelId, normalized) {
-      const channel = this.channels[channelId - 1]
-      if (!channel) return
-      const latest = normalized.history[normalized.history.length - 1]
-      const maValues = normalized.history.map(item => item.maValue)
-      const rocValues = normalized.history.map(item => item.rocValue)
-      const latestTemp = latest ? latest.temperatureValue : 0
-      const latestMa = latest ? latest.maValue : 0
-      const latestRoc = latest ? latest.rocValue : 0
-      const vibration = normalized.vibrationHistory[normalized.vibrationHistory.length - 1]
-        ? this.pickNumber(normalized.vibrationHistory[normalized.vibrationHistory.length - 1], ['vibrationValue', 'vibration', 'rms', 'speed', 'value'])
-        : 0
-      const health = this.calcHealth(latestTemp, latestRoc, vibration)
-      const abnormalRise = this.checkAbnormalRise(normalized.history, normalized.vibrationHistory)
-      const status = abnormalRise ? 'abnormal' : health >= 80 ? 'normal' : health >= 60 ? 'warning' : 'abnormal'
-
-      channel.temperature = latestTemp
-      channel.ma = latestMa
-      channel.roc = latestRoc
-      channel.vibration = vibration
-      channel.maMax = maValues.length ? Math.max(...maValues) : 0
-      channel.rocMax = rocValues.length ? Math.max(...rocValues) : 0
-      channel.health = health
-      channel.status = status
-      channel.statusLabel = status === 'abnormal' ? '异常' : status === 'warning' ? '预警' : '正常'
-      channel.sampleTimeText = latest ? this.formatDateTime(latest.time) : '--'
-      channel.abnormalRise = abnormalRise
-      channel.couplingDecision = abnormalRise ? '潜在故障演进' : vibration > 1.8 && latestRoc > 0 ? '待观察' : '正常'
-      channel.history = normalized.history
-      channel.vibrationHistory = normalized.vibrationHistory
-      channel.alarmHistory = channel.alarmHistory || []
-    },
-    pickField(obj, keys) {
-      if (!obj) return null
-      for (let i = 0; i < keys.length; i++) {
-        const key = keys[i]
-        if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') return obj[key]
-      }
-      return null
-    },
-    pickNumber(obj, keys) {
-      const value = this.pickField(obj, keys)
-      const num = Number(value)
-      return Number.isNaN(num) ? 0 : num
-    },
-    calcMA(values) {
-      if (!values || !values.length) return 0
-      const sum = values.reduce((total, item) => total + Number(item || 0), 0)
-      return Number((sum / values.length).toFixed(2))
-    },
-    calcROC(now, prev, deltaT) {
-      if (!deltaT) return 0
-      return Number(((Number(now) - Number(prev)) / deltaT).toFixed(2))
-    },
-    checkAbnormalRise(history, vibrationHistory) {
-      const len = history.length
-      if (len < 3) return false
-      const last3 = history.slice(-3)
-      const rocPositive = last3.every(item => Number(item.roc) > 0)
-      const vibrationPositive = vibrationHistory.slice(-3).every((item, index, arr) => index === 0 || Number(item.value) >= Number(arr[index - 1].value))
-      return rocPositive && vibrationPositive
-    },
-    statusTagType(status) {
-      return status === 'abnormal' ? 'danger' : status === 'warning' ? 'warning' : 'success'
-    },
-    alarmTagType(level) {
-      return level === '高' ? 'danger' : 'warning'
-    },
-    healthColor(health) {
-      if (health >= 85) return '#67c23a'
-      if (health >= 60) return '#e6a23c'
-      return '#f56c6c'
-    },
-    formatNumber(value) {
-      if (value === null || value === undefined || value === '') return '--'
-      const num = Number(value)
-      return Number.isNaN(num) ? value : num.toFixed(2)
-    },
-    toNumber(value, fallback) {
-      const num = Number(value)
-      if (Number.isNaN(num)) return fallback == null ? null : fallback
-      return num
-    },
-    formatDateTime(value) {
-      if (!value) return '--'
-      const date = new Date(value)
-      const pad = n => String(n).padStart(2, '0')
-      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3, '0')}`
-    },
-    openDetail(channel) {
-      this.activeChannelId = channel.id
-      this.detailVisible = true
-      this.loadHistory(channel.id)
-    },
-    jumpToAlarmEvent(row) {
-      this.activeChannelId = row.channelId
-      this.openDetail(this.channels[row.channelId - 1] || this.buildChannel(row.channelId))
-      this.$message.success(`已定位到 ${row.channelTitle}`)
-    },
-    handleDrawerOpened() {
-      this.initCharts()
-      this.refreshCharts()
-    },
-    handleDrawerClosed() {
-      this.disposeCharts()
-    },
-    loadHistory(channelId) {
-      this.historyLoading = true
-      listTemperature({ pageNum: 1, pageSize: 100, channelId })
-        .then(response => {
-          const rows = response.rows || []
-          this.historyRows = rows.map((item, index) => ({
-            ...item,
-            sampleTimeText: this.formatDateTime(item.collectionTime || item.sampleTime || item.collectTime || item.createTime),
-            temperatureValue: this.pickField(item, ['temperatureValue', 'temperature', 'temp']) == null ? (35 + Math.random() * 6).toFixed(2) : this.pickField(item, ['temperatureValue', 'temperature', 'temp']),
-            maValue: this.pickField(item, ['maValue', 'ma']) == null ? (35 + Math.random() * 5).toFixed(2) : this.pickField(item, ['maValue', 'ma']),
-            rocValue: this.pickField(item, ['rocValue', 'roc']) == null ? (Math.random() * 2).toFixed(2) : this.pickField(item, ['rocValue', 'roc']),
-            motorSpeed: this.pickField(item, ['motorSpeed', 'speed']) == null ? 1480 + index : this.pickField(item, ['motorSpeed', 'speed'])
-          }))
-        })
-        .finally(() => { this.historyLoading = false })
-    },
-    initCharts() {
-      this.$nextTick(() => {
-        if (!this.trendChart && this.$refs.trendChartRef) {
-          this.trendChart = echarts.init(this.$refs.trendChartRef)
-        }
-        this.channels.forEach(channel => {
-          if (!this.gaugeCharts[channel.id] && this.$refs[`gauge-${channel.id}`]) {
-            this.gaugeCharts[channel.id] = echarts.init(this.$refs[`gauge-${channel.id}`])
-          }
-        })
-      })
-    },
-    refreshGaugeCharts() {
-      this.channels.forEach(channel => {
-        const ref = this.$refs[`gauge-${channel.id}`]
-        const dom = Array.isArray(ref) ? ref[0] : ref
-        if (!dom) return
-        if (!this.gaugeCharts[channel.id]) {
-          this.gaugeCharts[channel.id] = echarts.init(dom)
-        }
-        this.gaugeCharts[channel.id].setOption(this.buildGaugeOption(channel.health), true)
-      })
-    },
-    refreshGaugeChart(channelId) {
-      const chart = this.gaugeCharts[channelId]
-      const channel = this.channels[channelId - 1]
-      if (chart && channel) chart.setOption(this.buildGaugeOption(channel.health), true)
-    },
-    refreshCharts() {
-      this.$nextTick(() => {
-        this.refreshGaugeCharts()
-        this.refreshTrendChart()
-      })
-    },
-    refreshTrendChart() {
-      if (!this.trendChart) return
-      const channel = this.channels[this.activeChannelId - 1]
-      const live = this.liveData[this.activeChannelId] || { history: [], vibrationHistory: [] }
-      if (this.chartMode === 'coupling' || this.detailChartMode === 'coupling') {
-        this.trendChart.setOption(this.buildCouplingOption(channel, live.history, live.vibrationHistory), true)
-      } else {
-        this.trendChart.setOption(this.buildTrendOption(channel, live.history), true)
-      }
-    },
-    buildGaugeOption(health) {
-      return {
-        series: [{
-          type: 'gauge',
-          startAngle: 220,
-          endAngle: -40,
-          min: 0,
-          max: 100,
-          radius: '100%',
-          progress: { show: true, width: 10, itemStyle: { color: health >= 85 ? '#67c23a' : health >= 60 ? '#e6a23c' : '#f56c6c' } },
-          axisLine: { lineStyle: { width: 10, color: [[1, '#333333']] } },
-          axisTick: { show: false },
-          splitLine: { show: false },
-          axisLabel: { show: false },
-          pointer: { show: false },
-          anchor: { show: false },
-          title: { show: false },
-          detail: { valueAnimation: true, formatter: '{value}%', color: '#1f2937', fontSize: 14, offsetCenter: [0, '45%'] },
-          data: [{ value: health }]
-        }]
-      }
-    },
-    buildTrendOption(channel, history) {
-      const xData = history.map(item => this.formatChartTime(item.collectionTime))
-      const raw = history.map(item => Number(item.temperatureValue || 0))
-      const ma = history.map(item => Number(item.maValue || 0))
-      const maxIndex = raw.length ? raw.indexOf(Math.max(...raw)) : -1
-      return {
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis' },
-        legend: { data: ['原始温度', 'MA 平滑'], textStyle: { color: '#475569' } },
-        grid: { left: 52, right: 24, top: 42, bottom: 36 },
-        xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#64748b' } },
-        yAxis: { type: 'value', name: '℃', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#333333' } }, axisLabel: { color: '#64748b' } },
-        series: [
-          {
-            name: '原始温度',
-            type: 'line',
-            smooth: true,
-            showSymbol: false,
-            data: raw,
-            lineStyle: { color: 'rgba(14,165,233,0.58)', width: 1.5 }
-          },
-          {
-            name: 'MA 平滑',
-            type: 'line',
-            smooth: true,
-            showSymbol: false,
-            data: ma,
-            lineStyle: { color: '#0ea5e9', width: 2.5 },
-            markLine: {
-              symbol: 'none',
-              data: [{ yAxis: 65, name: '预警线' }, { yAxis: 75, name: '报警线' }],
-              lineStyle: { color: '#f5c542', type: 'dashed' },
-              label: { color: '#475569' }
-            }
-          }
-        ],
-        graphic: maxIndex >= 0 ? [{ type: 'text', left: 'center', top: 8, style: { text: `峰值温度：${xData[maxIndex]} / ${raw[maxIndex].toFixed(2)}℃`, fill: '#1f2937', font: '12px sans-serif' } }] : []
-      }
-    },
-    buildCouplingOption(channel, history, vibrationHistory) {
-      const xData = history.map(item => this.formatChartTime(item.collectionTime))
-      const temp = history.map(item => Number(item.temperatureValue || 0))
-      const vib = vibrationHistory.map(item => Number(this.pickField(item, ['vibrationValue', 'vibration', 'rms', 'speed', 'value']) || 0))
-      const couplingLabel = this.activeChannel.couplingDecision === '潜在故障演进' ? '潜在故障演进' : this.activeChannel.couplingDecision
-      return {
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'axis' },
-        legend: { data: ['温度', '振动速度'], textStyle: { color: '#475569' } },
-        grid: { left: 52, right: 52, top: 42, bottom: 36 },
-        xAxis: { type: 'category', boundaryGap: false, data: xData, axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { color: '#64748b' } },
-        yAxis: [
-          { type: 'value', name: '℃', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { lineStyle: { color: '#333333' } }, axisLabel: { color: '#64748b' } },
-          { type: 'value', name: 'mm/s', axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { show: false }, axisLabel: { color: '#64748b' } }
-        ],
-        series: [
-          { name: '温度', type: 'line', smooth: true, showSymbol: false, data: temp, lineStyle: { color: '#0ea5e9', width: 2 }, yAxisIndex: 0 },
-          { name: '振动速度', type: 'line', smooth: true, showSymbol: false, data: vib, lineStyle: { color: '#d97706', width: 2 }, yAxisIndex: 1 }
-        ],
-        graphic: [{ type: 'text', left: 'center', top: 8, style: { text: couplingLabel, fill: '#1f2937', font: '12px sans-serif' } }]
-      }
-    },
-
-    handleResize() {
-      if (this.trendChart) this.trendChart.resize()
-      Object.values(this.gaugeCharts).forEach(chart => chart && chart.resize())
-    },
-    closeWebSocket() {
-      if (this.ws) {
-        this.ws.close()
-        this.ws = null
-      }
-    },
-    disposeCharts() {
-      if (this.trendChart) {
-        this.trendChart.dispose()
-        this.trendChart = null
-      }
-      Object.values(this.gaugeCharts).forEach(chart => chart && chart.dispose())
-      this.gaugeCharts = {}
-    }
+    openAlarm(alarm) { this.$router.push({ path: '/phm/alarms', query: { alarmId: alarm.id } }) },
+    eventType(value) { return { repair: '维修', maintenance: '保养', alarm_handle: '告警处置', diagnosis: '诊断', access: '投运', other: '事件' }[value] || value },
+    metric(value) { return value === null || value === undefined ? '--' : Number(value).toFixed(2) },
+    formatTime(value) { return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '--' },
+    axisTime(value) { return value ? new Date(value).toLocaleTimeString('zh-CN', { hour12: false }) : '' },
+    resize() { if (this.chart) this.chart.resize() }
   }
 }
 </script>
 
 <style scoped>
-.temperature-page { min-height: calc(100vh - 84px); padding: 10px; background: linear-gradient(180deg, #1f2937 0%, #111827 100%); }
-.super-ego-alert, .alarm-panel, .trend-panel { margin-bottom: 12px; }
-.super-ego-alert { animation: blink 1s linear infinite; }
-.mb10 { margin-bottom: 10px; }
-.channel-card { cursor: pointer; background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0, 255, 255, 0.22); color: #ffffff; box-shadow: 0 0 12px rgba(0, 255, 255, 0.08), inset 0 0 18px rgba(0, 255, 255, 0.03); }
-.channel-card.abnormal { border-color: rgba(245, 108, 108, 0.65); }
-.channel-card.warning { border-color: rgba(230, 162, 60, 0.55); }
-.channel-head, .channel-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.channel-title { font-size: 14px; font-weight: 700; }
-.card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-.metric-zone { display: grid; gap: 8px; }
-.metric-main, .main-metric { padding: 10px; background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.12); border-radius: 6px; }
-.main-metric--temp { background: rgba(125, 211, 252, 0.06); }
-.metric-label { font-size: 12px; color: rgba(0,255,255,0.72); }
-.metric-value { margin-top: 4px; font-size: 26px; font-weight: 800; line-height: 1.1; color: #ffffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
-.metric-value.big { font-size: 38px; }
-.metric-unit { margin-top: 2px; font-size: 12px; color: rgba(235,255,255,0.68); }
-.metric-inline { margin-top: 4px; display: flex; justify-content: space-between; gap: 10px; color: #ffffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
-.detail-zone { display: grid; grid-template-columns: 1fr 92px; gap: 8px; align-items: center; }
-.detail-table { display: grid; gap: 6px; }
-.detail-row, .sub-item { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; background: rgba(1, 12, 28, 0.58); border: 1px solid rgba(0,255,255,0.1); color: rgba(235,255,255,0.9); font-size: 12px; }
-.detail-row strong, .sub-item strong { color: #ffffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
-.health-gauge { width: 100%; height: 92px; }
-.channel-footer { margin-top: 12px; font-size: 12px; color: #ffffff; }
-.foot-time { color: #ffffff; }
-.trend-panel, .alarm-panel { background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0,255,255,0.12); box-shadow: 0 0 12px rgba(0,255,255,0.08), inset 0 0 18px rgba(0,255,255,0.03); border-radius: 8px; padding: 12px; color: #ffffff; }
-.alarm-panel { margin-top: 12px; }
-.trend-header, .alarm-panel__head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
-.trend-title { font-size: 16px; font-weight: 700; }
-.trend-subtitle { margin-top: 4px; font-size: 12px; color: #ffffff; }
-.trend-chart { width: 100%; height: 320px; }
-.drawer-shell { height: 100vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #111827 0%, #1f2937 100%); color: #ffffff; }
-.drawer-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid rgba(0,255,255,0.10); }
-.drawer-title { font-size: 20px; font-weight: 800; }
-.drawer-subtitle { margin-top: 4px; font-size: 12px; color: #ffffff; }
-.drawer-actions { display: flex; align-items: center; gap: 10px; }
-.drawer-content { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 20px 20px; min-height: 0; }
-.metric-panel { display: grid; gap: 8px; }
-.sub-metrics { display: grid; gap: 6px; }
-.compact-table { margin-top: 2px; }
-.health-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; background: rgba(0,255,255,0.03); border: 1px solid rgba(0,255,255,0.14); }
-.health-label { font-size: 12px; color: rgba(0,255,255,0.72); }
-.health-desc { margin-top: 4px; font-size: 18px; font-weight: 700; color: #ffffff; font-family: 'Digital-7', 'Segoe UI', 'Arial', sans-serif; }
-.drawer-chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.drawer-chart-tip { font-size: 12px; color: #ffffff; }
-.chart-box { width: 100%; height: 320px; background: rgba(1, 12, 28, 0.78); border-radius: 10px; border: 1px solid rgba(0,255,255,0.12); box-shadow: 0 0 12px rgba(0,255,255,0.08), inset 0 0 18px rgba(0,255,255,0.03); }
-.log-card { margin-top: 12px; background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0,255,255,0.12); }
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-:deep(.temperature-drawer) { background: transparent; }
-:deep(.temperature-drawer .el-drawer__body) { height: 100%; }
-:deep(.el-table) { background: transparent; color: #ffffff; }
-:deep(.el-table th), :deep(.el-table tr), :deep(.el-table td) { background: transparent !important; }
-:deep(.el-table::before) { background-color: rgba(0,255,255,0.08); }
-:deep(.el-radio-button__inner) { background: #2b3340; color: #ffffff; border-color: rgba(255,255,255,0.12); }
-:deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) { background: #409eff; border-color: #409eff; }
-
-/* 浅色工业生产主题覆盖 */
-.temperature-page { background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%); color: #ffffff; }
-.channel-card,
-.trend-panel,
-.alarm-panel,
-.log-card,
-.chart-box {
-  background: #1a1a1a;
-  border-color: #d7dee8;
-  color: #ffffff;
-  box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
-}
-.channel-card:hover {
-  border-color: #94a3b8;
-  box-shadow: 0 10px 22px rgba(31, 41, 55, 0.12);
-}
-.channel-card.abnormal { border-color: rgba(220, 38, 38, 0.48); }
-.channel-card.warning { border-color: rgba(217, 119, 6, 0.48); }
-.metric-main,
-.main-metric,
-.detail-row,
-.sub-item,
-.health-box {
-  background: #171717;
-  border-color: #b8b8b8;
-  color: #ffffff;
-}
-.main-metric--temp { background: #1f1f1f; }
-.metric-label,
-.health-label { color: #ffffff; }
-.metric-value,
-.metric-value.big,
-.metric-inline,
-.detail-row strong,
-.sub-item strong,
-.health-desc,
-.foot-time,
-.drawer-title,
-.trend-title,
-.alarm-panel__head { color: #ffffff; }
-.metric-unit,
-.channel-footer,
-.trend-subtitle,
-.drawer-subtitle,
-.drawer-chart-tip { color: #ffffff; }
-.drawer-shell {
-  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
-  color: #ffffff;
-}
-.drawer-topbar { border-bottom-color: #d7dee8; }
-:deep(.temperature-drawer) { background: #121212; }
-:deep(.el-table) {
-  background: #1a1a1a;
-  color: #ffffff;
-}
-:deep(.el-table th) {
-  background: #171717 !important;
-  color: #ffffff !important;
-}
-:deep(.el-table tr),
-:deep(.el-table td) {
-  background: #1a1a1a !important;
-  color: #ffffff !important;
-}
-:deep(.el-table--striped .el-table__body tr.el-table__row--striped td) { background: #171717 !important; }
-:deep(.el-table::before) { background-color: #d7dee8; }
-:deep(.el-radio-button__inner) {
-  background: #1a1a1a;
-  color: #ffffff;
-  border-color: #cbd5e1;
-}
-:deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
-}
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-@media (max-width: 1200px) {
-  .card-body { grid-template-columns: 1fr; }
-  .detail-zone { grid-template-columns: 1fr; }
-  .trend-header, .drawer-topbar { flex-direction: column; align-items: flex-start; }
-  .trend-chart, .chart-box { height: 260px; }
-}
+.analysis-page{min-height:calc(100vh - 84px);padding:12px;background:#0b1219;color:#dce7ee;font-family:"Microsoft YaHei UI","PingFang SC",sans-serif}
+.panel{padding:12px;border:1px solid #273846;border-radius:10px;background:#15212c}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0}.selectors,.toolbar-actions{display:flex;gap:8px}.selectors .el-select:first-child{width:240px}.selectors .el-select:last-child{width:260px}
+.metric-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px}.metric-strip>div{padding:11px 13px;border:1px solid #273846;border-radius:9px;background:#15212c}.metric-strip span,.metric-strip small{display:block;color:#8195a6;font-size:11px}.metric-strip strong{display:block;margin:5px 0 2px;font-family:"DIN Alternate",Consolas,monospace;font-size:24px}.quality-value{font-size:18px!important}
+.temperature-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:12px}.chart-panel{position:relative;min-width:0}.side-column{display:grid;align-content:start;gap:12px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.panel-head strong,.panel-head span{display:block}.panel-head span{margin-top:3px;color:#8195a6;font-size:12px}
+.temperature-chart{height:560px;border:1px solid #22323e;border-radius:8px;background:#101a23}.chart-empty{position:absolute;inset:53% 0 auto;color:#718696;text-align:center;pointer-events:none}.legend-note{display:flex;justify-content:space-between;gap:12px;padding-top:9px;color:#8195a6;font-size:11px}.legend-note i{display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:50%;background:#71808d}.legend-note .event{background:#a67de8}
+.rule-card h3{margin:0 0 10px;font-size:15px}.rule-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.rule-grid span{padding:8px;border:1px solid #2b3d4b;border-radius:6px;color:#8195a6;font-size:11px}.rule-grid b{display:block;margin-top:4px;color:#dce7ee;font-family:Consolas,monospace}.rule-card p{margin:10px 0 0;color:#9eb0be;font-size:12px;line-height:1.6}
+.event-list{display:grid;gap:8px}.event-list article{display:grid;grid-template-columns:8px minmax(0,1fr);gap:9px}.event-list i{width:7px;height:7px;margin-top:5px;border-radius:50%;background:#a67de8}.event-list strong,.event-list small,.event-list em{display:block}.event-list small{margin-top:2px;color:#aab9c5;font-size:11px;line-height:1.4}.event-list em{margin-top:2px;color:#718696;font-size:10px;font-style:normal}
+.alarm-list{display:grid;gap:7px}.alarm-list button{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px;border:1px solid #2b3d4b;border-left:3px solid #e7a23b;border-radius:7px;background:#101a23;color:#dce7ee;text-align:left;cursor:pointer}.alarm-list strong,.alarm-list small{display:block}.alarm-list small{margin-top:3px;color:#8195a6}.empty-card{padding:16px;color:#718696;text-align:center}
+:deep(.el-input__inner){border-color:#2b3d4b;background:#101a23;color:#dce7ee}
+@media(max-width:1100px){.temperature-layout{grid-template-columns:1fr}.side-column{grid-template-columns:repeat(3,minmax(0,1fr))}.metric-strip{grid-template-columns:repeat(3,1fr)}.temperature-chart{height:440px}}
+@media(max-width:800px){.toolbar,.panel-head{align-items:flex-start;flex-direction:column}.selectors,.side-column{grid-template-columns:1fr;flex-direction:column}.selectors .el-select:first-child,.selectors .el-select:last-child{width:100%}.metric-strip{grid-template-columns:1fr}.legend-note{flex-direction:column}}
 </style>

@@ -108,7 +108,7 @@
         <el-table :data="attachments" stripe>
           <el-table-column label="预览" width="100">
             <template slot-scope="scope">
-              <img v-if="scope.row.fileUrl" :src="scope.row.fileUrl" class="attachment-thumb" alt="图片预览">
+              <img v-if="scope.row.fileUrl" :src="fileHref(scope.row.fileUrl)" class="attachment-thumb" alt="图片预览">
             </template>
           </el-table-column>
           <el-table-column prop="fileName" label="文件名" min-width="180" show-overflow-tooltip />
@@ -160,7 +160,7 @@
                 >
                   <el-button size="mini">上传</el-button>
                 </el-upload>
-                <img v-if="scope.row.configValue" :src="scope.row.configValue" class="config-logo-preview" alt="Logo预览">
+                <img v-if="scope.row.configValue" :src="fileHref(scope.row.configValue)" class="config-logo-preview" alt="Logo预览">
               </div>
               <el-input v-else v-model="scope.row.configValue" size="mini" />
             </template>
@@ -462,6 +462,12 @@ export default {
       const index = name ? name.lastIndexOf('.') : -1
       return index >= 0 ? name.substring(index + 1) : ''
     },
+    fileHref(url) {
+      if (!url) return ''
+      if (/^(https?:)?\/\//.test(url)) return url
+      const base = process.env.VUE_APP_BASE_API || ''
+      return url.indexOf('/') === 0 ? base + url : url
+    },
     async saveConfig(row) {
       await saveSystemConfig(row)
       this.$message.success('配置已保存')
@@ -485,14 +491,17 @@ export default {
 </script>
 
 <style scoped>
-.config-page { background: #f6f8fb; min-height: calc(100vh - 84px); }
+.config-page { min-height: calc(100vh - 84px); }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.page-head h2 { margin: 0 0 6px; color: #0f172a; }
-.page-head p { margin: 0; color: #64748b; }
+.page-head h2 { margin: 0 0 6px; }
+.page-head p { margin: 0; }
 .toolbar { display: flex; gap: 10px; margin-bottom: 12px; }
 .toolbar .el-select { width: 260px; }
-.attachment-thumb { width: 70px; height: 46px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; }
+.attachment-thumb { width: 70px; height: 46px; object-fit: cover; }
 .config-logo-cell { display: flex; align-items: center; gap: 8px; }
 .config-logo-cell .el-input { max-width: 320px; }
-.config-logo-preview { width: 38px; height: 38px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; }
+.config-logo-preview { width: 38px; height: 38px; object-fit: contain; }
+:deep(.el-tabs__header) { margin-bottom: 8px; }
+:deep(.el-tabs__item) { font-weight: 600; }
+:deep(.el-input-number) { width: 140px; }
 </style>

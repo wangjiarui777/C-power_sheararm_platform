@@ -1,10 +1,13 @@
 package com.ruoyi.sensor.service.support;
 
 import com.ruoyi.sensor.domain.entity.PhmDeviceEntity;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PhmDeviceEventPolicyTest
 {
-    public static void main(String[] args)
+    @Test
+    void buildsAccessContentWithSafeFallbacks()
     {
         PhmDeviceEntity device = new PhmDeviceEntity();
         device.setDeviceName("一号主轴承试验台");
@@ -25,9 +28,7 @@ public class PhmDeviceEventPolicyTest
 
     private static void assertContains(String text, String expected, String message)
     {
-        if (text == null || !text.contains(expected))
-        {
-            throw new AssertionError(message + ", expected fragment=" + expected + ", actual=" + text);
-        }
+        assertTrue(text != null && text.contains(expected),
+                message + ", expected fragment=" + expected + ", actual=" + text);
     }
 }

@@ -7,7 +7,8 @@
 # =============================================================================
 
 $ErrorActionPreference = 'Continue'
-$projectRoot = $PSScriptRoot
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Split-Path -Parent $scriptRoot
 
 # -----------------------------------------------------------------------------
 # 配置变量（按需修改）
@@ -56,6 +57,44 @@ function Test-Command {
     } catch {
         return $false
     }
+}
+
+function New-ProjectVenv {
+    param(
+        [Parameter(Mandatory = $true)][string]$VenvDir,
+        [Parameter(Mandatory = $true)][string]$VenvPython
+    )
+
+    if (Test-Path $VenvPython) {
+        Write-Skip "Python 虚拟环境已存在: $VenvPython"
+        return $true
+    }
+
+    Write-Host "    创建项目 Python 虚拟环境: $VenvDir"
+
+    $created = $false
+    if (Test-Command 'py') {
+        & py -3.11 --version 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            & py -3.11 -m venv $VenvDir
+            $created = ($LASTEXITCODE -eq 0)
+        } else {
+            Write-Warn '未检测到 Python 3.11，尝试使用系统 python 创建 .venv'
+        }
+    }
+
+    if (-not $created -and (Test-Command 'python')) {
+        & python -m venv $VenvDir
+        $created = ($LASTEXITCODE -eq 0)
+    }
+
+    if ($created -and (Test-Path $VenvPython)) {
+        Write-OK "Python 虚拟环境已创建: $VenvPython"
+        return $true
+    }
+
+    Write-Warn 'Python 虚拟环境创建失败，请手动执行: py -3.11 -m venv .venv'
+    return $false
 }
 
 # -----------------------------------------------------------------------------
@@ -179,7 +218,22 @@ if (Test-Command 'mysql') {
         $sqlDir = Join-Path $projectRoot 'sql'
         if (Test-Path $sqlDir) {
             Write-Host '    导入初始化 SQL...'
-            $sqlFiles = Get-ChildItem $sqlDir -Filter '*.sql' | Sort-Object Name
+            $orderedSqlNames = @(
+                'ry_20260417.sql',
+                'quartz.sql',
+                'vibration_data.sql',
+                'temperature_data.sql',
+                'sensor_monitoring_module.sql',
+                'vibration_analysis.sql',
+                'enhanced_inference_record.sql',
+                'phm_platform.sql',
+                'industrial_monitoring_upgrade.sql',
+                'cleanup_redundant_sidebar_menus.sql'
+            )
+            $sqlFiles = $orderedSqlNames |
+                ForEach-Object { Join-Path $sqlDir $_ } |
+                Where-Object { Test-Path $_ } |
+                ForEach-Object { Get-Item $_ }
             foreach ($file in $sqlFiles) {
                 Write-Host "      导入: $($file.Name)"
                 # 使用 cmd 方式导入，避免 PowerShell 下 source 命令不兼容
@@ -235,28 +289,22 @@ if ($redisRunning) {
 }
 
 # -----------------------------------------------------------------------------
-# 7. TDengine
+# 7. Apache IoTDB
 # -----------------------------------------------------------------------------
-Write-Step '7/9 安装 TDengine 3.x'
-
-$taosInstalled = Test-Command 'taos'
-if ($taosInstalled) {
-    Write-Skip 'TDengine 已安装'
-} else {
-    Write-Warn 'TDengine 不在 winget 仓库中，需手动安装:'
-    Write-Warn '  1. 访问 https://docs.tdengine.com/get-started/package/'
-    Write-Warn '  2. 下载 TDengine 3.x Windows x64 安装包'
-    Write-Warn '  3. 安装后启动服务: sc start taosd'
-    Write-Warn '  4. 创建数据库: taos -s "CREATE DATABASE sensor_db KEEP 3650 DURATION 10 BUFFER 16;"'
-    Write-Warn ''
-    Write-Warn '  如果不需要传感器时序数据功能，可跳过此步骤，'
-    Write-Warn '  之后在 application-dev.yml 中设置 sensor.tdengine.enabled: false'
-}
+Write-Step '7/9 准备 Apache IoTDB 2.0.x 集群'
+Write-Warn 'IoTDB 建议按独立集群部署，不通过本脚本自动安装。'
+Write-Warn '  1. 按官方文档部署 3 ConfigNode + 3 DataNode'
+Write-Warn '  2. 建议使用主机名，例如 iotdb-dn-1:6667,iotdb-dn-2:6667,iotdb-dn-3:6667'
+Write-Warn '  3. 推荐参数: schema_replication_factor=3, data_replication_factor=2, timestamp_precision=us'
+Write-Warn '  4. 集群就绪后执行 ruoyi-admin\\src\\main\\resources\\sql\\iotdb-init.sql'
+Write-Warn ''
+Write-Warn '如果当前环境不需要时序存储，可在 application-dev.yml 中设置:'
+Write-Warn '  sensor.store-type: noop'
 
 # -----------------------------------------------------------------------------
 # 8. Python 3.10+
 # -----------------------------------------------------------------------------
-Write-Step '8/9 安装 Python 3.10+'
+Write-Step '8/9 安装 Python 3.10+ 并配置项目 .venv'
 
 if (Test-Command 'python') {
     $pyVer = (& python --version 2>&1)
@@ -275,17 +323,31 @@ if (Test-Command 'python') {
     }
 }
 
-# 安装 Python 依赖
-if (Test-Command 'python') {
+# 安装 Python 依赖到项目 .venv，避免污染系统 / Miniconda 环境
+$venvDir = Join-Path $projectRoot '.venv'
+$venvPython = Join-Path $venvDir 'Scripts\python.exe'
+
+if (New-ProjectVenv -VenvDir $venvDir -VenvPython $venvPython) {
+    Write-Host "    使用 Python: $venvPython"
+
     $reqFile = Join-Path $projectRoot 'ruoyi-sensor\inference\requirements.txt'
     if (Test-Path $reqFile) {
-        Write-Host '    安装 Python 依赖 (ruoyi-sensor\inference\requirements.txt)...'
-        pip install -r $reqFile -i https://pypi.tuna.tsinghua.edu.cn/simple 2>&1 | Out-Null
+        Write-Host '    安装 Python 依赖到 .venv (ruoyi-sensor\inference\requirements.txt)...'
+        & $venvPython -m pip install -r $reqFile -i https://pypi.tuna.tsinghua.edu.cn/simple 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
             Write-OK 'Python 依赖安装完成'
         } else {
-            Write-Warn '部分 Python 依赖安装失败，请手动执行: pip install -r ruoyi-sensor\inference\requirements.txt'
+            Write-Warn '部分 Python 依赖安装失败，请手动执行: .\.venv\Scripts\python.exe -m pip install -r ruoyi-sensor\inference\requirements.txt'
         }
+    } else {
+        Write-Warn "未找到 Python requirements 文件: $reqFile"
+    }
+
+    $torchVersion = & $venvPython -c "import torch; print(torch.__version__)" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "torch 可用: $torchVersion"
+    } else {
+        Write-Warn '当前 .venv 缺少 torch，请执行: .\.venv\Scripts\python.exe -m pip install -r ruoyi-sensor\inference\requirements.txt'
     }
 }
 
@@ -319,7 +381,7 @@ $checks = @(
     @{Name='MySQL';        Cmd='mysql';     Args='--version';  Required=$true},
     @{Name='Redis';        Cmd='redis-cli'; Args='ping';       Required=$true},
     @{Name='Python';       Cmd='python';    Args='--version';  Required=$false},
-    @{Name='TDengine';     Cmd='taos';      Args='-V';         Required=$false}
+    @{Name='项目 .venv';   Cmd=$venvPython; Args='--version';  Required=$false},
 )
 
 foreach ($c in $checks) {
@@ -332,6 +394,8 @@ foreach ($c in $checks) {
         Write-Host "  [MISS] $icon $($c.Name) 未安装或未加入 PATH" -ForegroundColor Red
     }
 }
+
+Write-Host '  [INFO] [可选] Apache IoTDB 集群请按部署文档单独核验 DataNode RPC 6667 与 ConfigNode 10710 连通性。' -ForegroundColor Yellow
 
 Write-Host @'
 

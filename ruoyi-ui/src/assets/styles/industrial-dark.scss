@@ -8,22 +8,22 @@
   --industrial-border: #1e293b;
   --industrial-text: #f8fafc;
   --industrial-muted: #94a3b8;
-  --industrial-amber: #22d3ee;
-  --industrial-orange: #38bdf8;
+  --industrial-amber: var(--current-color, #22d3ee);
+  --industrial-orange: var(--current-color-light, #38bdf8);
 
   /* === 语义化文本颜色 === */
   --text-heading:  #f8fafc;
   --text-body:     #cbd5e1;
   --text-label:    #94a3b8;
-  --text-value:    #22d3ee;
-  --text-link:     #38bdf8;
+  --text-value:    var(--current-color, #22d3ee);
+  --text-link:     var(--current-color-light, #38bdf8);
   --text-success:  #10b981;
   --text-warning:  #f59e0b;
   --text-danger:   #ef4444;
   --text-info:     #38bdf8;
   --text-muted:    #94a3b8;
   --text-code:     #5eead4;
-  --text-accent:   #22d3ee;
+  --text-accent:   var(--current-color, #22d3ee);
 }
 
 html,
@@ -1453,12 +1453,12 @@ html body #app .chart-box {
   --iiot-panel-soft: rgba(15, 23, 42, 0.78);
   --iiot-panel-hover: rgba(34, 211, 238, 0.08);
   --iiot-border: #1e293b;
-  --iiot-border-active: rgba(34, 211, 238, 0.42);
+  --iiot-border-active: var(--current-color-dark-bg, rgba(34, 211, 238, 0.42));
   --iiot-text: #cbd5e1;
   --iiot-muted: #94a3b8;
   --iiot-heading: #f8fafc;
-  --iiot-cyan: #22d3ee;
-  --iiot-blue: #38bdf8;
+  --iiot-cyan: var(--current-color, #22d3ee);
+  --iiot-blue: var(--current-color-light, #38bdf8);
   --iiot-success: #10b981;
   --iiot-warning: #f59e0b;
   --iiot-danger: #ef4444;
@@ -2243,4 +2243,156 @@ html body #app [tabindex]:focus-visible {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(34, 211, 238, 0.5) !important;
+}
+
+/* =====================================================================
+   el-descriptions dark theme — bordered cells in dialogs / detail views
+   ===================================================================== */
+html body #app .el-descriptions,
+body .el-descriptions {
+  color: var(--iiot-text) !important;
+}
+
+html body #app .el-descriptions__body,
+body .el-descriptions__body {
+  background: transparent !important;
+  color: var(--iiot-text) !important;
+}
+
+html body #app .el-descriptions__body table,
+body .el-descriptions__body table {
+  border-color: var(--iiot-border) !important;
+}
+
+html body #app .el-descriptions__body table td.el-descriptions__cell,
+html body #app .el-descriptions__body table th.el-descriptions__cell,
+body .el-descriptions__body table td.el-descriptions__cell,
+body .el-descriptions__body table th.el-descriptions__cell {
+  background: transparent !important;
+  color: var(--iiot-text) !important;
+  border-color: var(--iiot-border) !important;
+}
+
+html body #app .el-descriptions__body table td.el-descriptions__cell.is-bordered-label,
+body .el-descriptions__body table td.el-descriptions__cell.is-bordered-label {
+  background: rgba(15, 23, 42, 0.5) !important;
+  color: var(--iiot-muted) !important;
+  font-weight: 600 !important;
+}
+
+/* =====================================================================
+   el-timeline dark theme — used in alarm detail / event lists
+   ===================================================================== */
+html body #app .el-timeline-item__timestamp,
+body .el-timeline-item__timestamp {
+  color: var(--iiot-muted) !important;
+}
+
+html body #app .el-timeline-item__tail,
+body .el-timeline-item__tail {
+  border-left-color: var(--iiot-border) !important;
+}
+
+html body #app .el-timeline-item__node,
+body .el-timeline-item__node {
+  background: var(--iiot-cyan) !important;
+}
+
+html body #app .el-timeline-item__wrapper,
+body .el-timeline-item__wrapper {
+  color: var(--iiot-text) !important;
+}
+
+/* =====================================================================
+   el-input-number dark theme — used in alarm threshold adjustment
+   ===================================================================== */
+html body #app .el-input-number .el-input__inner,
+body .el-input-number .el-input__inner {
+  background: rgba(15, 23, 42, 0.9) !important;
+  color: var(--iiot-heading) !important;
+}
+
+html body #app .el-input-number__decrease,
+html body #app .el-input-number__increase,
+body .el-input-number__decrease,
+body .el-input-number__increase {
+  background: rgba(15, 23, 42, 0.86) !important;
+  color: var(--iiot-text) !important;
+  border-color: var(--iiot-border) !important;
+}
+
+html body #app .el-input-number__decrease:hover,
+html body #app .el-input-number__increase:hover,
+body .el-input-number__decrease:hover,
+body .el-input-number__increase:hover {
+  color: var(--iiot-cyan) !important;
+}
+
+/* =====================================================================
+   el-select dropdown dark theme — inside dialogs and popovers
+   ===================================================================== */
+body .el-select-dropdown {
+  background: var(--iiot-panel-solid) !important;
+  border-color: var(--iiot-border) !important;
+  color: var(--iiot-text) !important;
+}
+
+body .el-select-dropdown__item {
+  color: var(--iiot-text) !important;
+}
+
+body .el-select-dropdown__item.hover,
+body .el-select-dropdown__item:hover {
+  background: rgba(34, 211, 238, 0.1) !important;
+  color: var(--iiot-cyan) !important;
+}
+
+body .el-select-dropdown__item.selected {
+  color: var(--iiot-cyan) !important;
+}
+
+/* =====================================================================
+   el-date-picker dark theme — range inputs and separators
+   ===================================================================== */
+body .el-date-range-picker {
+  background: var(--iiot-panel-solid) !important;
+  border-color: var(--iiot-border) !important;
+}
+
+body .el-date-range-picker__content {
+  color: var(--iiot-text) !important;
+}
+
+body .el-date-range-picker__header {
+  color: var(--iiot-heading) !important;
+}
+
+body .el-date-editor--daterange .el-range-input,
+body .el-date-editor--datetimerange .el-range-input {
+  background: transparent !important;
+  color: var(--iiot-heading) !important;
+}
+
+body .el-date-editor--daterange .el-range-separator,
+body .el-date-editor--datetimerange .el-range-separator {
+  color: var(--iiot-muted) !important;
+}
+
+body .el-range-input::placeholder {
+  color: var(--iiot-muted) !important;
+}
+
+/* =====================================================================
+   el-loading dark theme — spinner backdrop
+   ===================================================================== */
+body .el-loading-mask {
+  background-color: rgba(11, 20, 38, 0.8) !important;
+}
+
+body .el-loading-spinner .el-loading-text {
+  color: var(--iiot-muted) !important;
+}
+
+body .el-loading-spinner .path {
+  stroke: var(--iiot-cyan) !important;
 }

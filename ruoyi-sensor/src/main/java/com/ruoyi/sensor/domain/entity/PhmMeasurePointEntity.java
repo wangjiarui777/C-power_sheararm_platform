@@ -20,6 +20,8 @@ public class PhmMeasurePointEntity
     private Integer channelId;
     private String signalType;
     private String featureCodes;
+    private String unit;
+    private String qualityPolicy;
     private BigDecimal cardX;
     private BigDecimal cardY;
     private BigDecimal pointX;

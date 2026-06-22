@@ -1,11 +1,6 @@
 package com.ruoyi.sensor.web;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,167 +19,186 @@ import com.ruoyi.sensor.service.SensorWebSocketPushService;
 import com.ruoyi.sensor.service.PhmService;
 import com.ruoyi.sensor.service.VibrationAnalysisBatchService;
 import com.ruoyi.sensor.service.VibrationAnalysisPersistenceService;
-import com.ruoyi.sensor.tdengine.TdengineQueryService;
+import com.ruoyi.sensor.service.timeseries.TimeSeriesAnalysisService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.client.RestClient;
 
 @RestController
-@RequestMapping("/sensor/vibration")
+@RequestMapping({"/sensor/diagnosis", "/sensor/vibration"})
 public class VibrationDiagnosisController
 {
-    private static final String PYTHON_GEAR_INFER_URL = "http://127.0.0.1:5000/infer";
-    private static final String PYTHON_BEARING_INFER_URL = "http://127.0.0.1:5001/infer";
     private static final String WS_EVENT_ANALYSIS = "analysis";
     private static final String WS_EVENT_REALTIME = "realtime";
 
-    private final TdengineQueryService tdengineQueryService;
+    private final TimeSeriesAnalysisService timeSeriesAnalysisService;
     private final VibrationAnalysisBatchService batchService;
     private final VibrationAnalysisPersistenceService persistenceService;
     private final SensorWebSocketPushService webSocketPushService;
     private final PhmService phmService;
+    private final String gearInferUrl;
+    private final String bearingInferUrl;
+    private final String defaultDeviceCode;
+    private final String defaultModelType;
+    private final int connectTimeoutMs;
+    private final int readTimeoutMs;
+    private final RestClient restClient;
 
-    public VibrationDiagnosisController(TdengineQueryService tdengineQueryService,
+    public VibrationDiagnosisController(TimeSeriesAnalysisService timeSeriesAnalysisService,
         VibrationAnalysisBatchService batchService,
         VibrationAnalysisPersistenceService persistenceService,
         SensorWebSocketPushService webSocketPushService,
-        PhmService phmService)
+        PhmService phmService,
+        @Value("${sensor.inference.gear-url:}") String gearInferUrl,
+        @Value("${sensor.inference.bearing-url:}") String bearingInferUrl,
+        @Value("${sensor.inference.default-device-code:}") String defaultDeviceCode,
+        @Value("${sensor.inference.default-model-type:gear}") String defaultModelType,
+        @Value("${sensor.inference.connect-timeout-ms:5000}") int connectTimeoutMs,
+        @Value("${sensor.inference.read-timeout-ms:120000}") int readTimeoutMs)
     {
-        this.tdengineQueryService = tdengineQueryService;
+        this.timeSeriesAnalysisService = timeSeriesAnalysisService;
         this.batchService = batchService;
         this.persistenceService = persistenceService;
         this.webSocketPushService = webSocketPushService;
         this.phmService = phmService;
+        this.gearInferUrl = gearInferUrl;
+        this.bearingInferUrl = bearingInferUrl;
+        this.defaultDeviceCode = defaultDeviceCode;
+        this.defaultModelType = defaultModelType;
+        this.connectTimeoutMs = connectTimeoutMs;
+        this.readTimeoutMs = readTimeoutMs;
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(connectTimeoutMs);
+        factory.setReadTimeout(readTimeoutMs);
+        this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 
+    @PreAuthorize("hasAuthority('sensor:collector:upload')")
     @PostMapping("/receiver/callback")
     public AjaxResult receiverCallback(@RequestBody Map<String, Object> payload)
     {
         String filePath = payload == null ? null : String.valueOf(payload.get("filePath"));
         String filename = payload == null ? null : String.valueOf(payload.get("filename"));
         Map<String, Object> latest = new LinkedHashMap<>();
-        latest.put("deviceCode", payload == null ? "BEARING-001" : String.valueOf(payload.getOrDefault("deviceCode", "BEARING-001")));
+        latest.put("deviceCode", resolveDeviceCode(payload));
         latest.put("channelId", payload == null ? 1 : toNumber(payload.get("channelId"), 1));
         latest.put("sampleTime", new Date());
         latest.put("modelVersion", "best_model_classwise_maha.pth");
         latest.put("diagnosisResult", "在线诊断任务已接收");
         latest.put("diagnosisName", "在线诊断任务已接收");
-        latest.put("diagnosisDetail", "MAT 文件已接收，等待模型推理服务处理");
-        latest.put("confidence", 0);
-        latest.put("healthIndex", 100);
-        latest.put("riskLevel", "低");
-        latest.put("status", "分析中");
-        latest.put("latestRms", 0);
-        latest.put("latestPeak", 0);
-        latest.put("batchId", 1L);
+        latest.put("diagnosisDetail", "MAT 文件已接收，尚未产生模型诊断结果");
+        latest.put("confidence", null);
+        latest.put("healthIndex", null);
+        latest.put("riskLevel", null);
+        latest.put("status", "pending");
+        latest.put("dataStatus", "pending");
+        latest.put("latestRms", null);
+        latest.put("latestPeak", null);
+        latest.put("batchId", null);
         latest.put("filePath", filePath);
         latest.put("filename", filename);
         latest.put("waveform", new ArrayList<>());
         latest.put("frequencyAxis", new ArrayList<>());
         latest.put("spectrum", new ArrayList<>());
-        latest.put("evidence", Arrays.asList(
-            evidence("文件已接收", "服务端已收到 MAT 文件并完成持久化。", "中"),
-            evidence("推理待执行", "后续可在此处接入 Python 推理服务与模型结果。", "中")
-        ));
+        latest.put("evidence", new ArrayList<>());
         return AjaxResult.success(latest);
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @PostMapping("/receiver/analyze")
     public AjaxResult receiverAnalyze(@RequestBody Map<String, Object> payload)
     {
-        String deviceCode = payload == null ? "BEARING-001" : String.valueOf(payload.getOrDefault("deviceCode", "BEARING-001"));
+        String deviceCode = resolveDeviceCode(payload);
         String filePath = payload == null ? null : String.valueOf(payload.get("filePath"));
 
         try {
             Map<String, Object> pythonResult = callPythonInfer(payload);
+            validatePythonResult(pythonResult);
             Map<String, Object> normalized = normalizePythonResult(pythonResult, deviceCode, filePath, payload);
             persistDiagnosis(normalized);
             phmService.syncDiagnosisResult(normalized);
             pushDiagnosis(normalized);
             return AjaxResult.success(normalized);
         } catch (Exception ex) {
-            Map<String, Object> fallback = buildFallbackDiagnosis(deviceCode, filePath, ex.getMessage());
-            persistDiagnosis(fallback);
-            phmService.syncDiagnosisResult(fallback);
-            pushDiagnosis(fallback);
-            return AjaxResult.error("推理失败: " + ex.getMessage()).put("data", fallback);
+            Map<String, Object> failure = buildFailureResult(deviceCode, filePath, ex.getMessage());
+            persistDiagnosis(failure);
+            pushDiagnosis(failure);
+            return AjaxResult.error("推理失败: " + ex.getMessage()).put("data", failure);
         }
     }
 
-    @GetMapping("/analysis/tdengine")
-    public AjaxResult tdengine(@RequestParam(defaultValue = "BEARING-001") String deviceCode,
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
+    @GetMapping("/analysis/timeseries")
+    public AjaxResult timeseries(@RequestParam(required = false) String deviceCode,
         @RequestParam(defaultValue = "1") Integer channelId,
         @RequestParam(defaultValue = "120") Integer timeLimit,
         @RequestParam(defaultValue = "64") Integer fftLimit)
     {
-        Map<String, Object> data = tdengineQueryService.loadDiagnosisData(deviceCode, channelId, timeLimit, fftLimit);
+        Map<String, Object> data = timeSeriesAnalysisService.loadDiagnosisData(normalizeDeviceCode(deviceCode), channelId, timeLimit, fftLimit);
         return AjaxResult.success(data);
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
     @GetMapping("/diagnosis/latest")
-    public AjaxResult latest(@RequestParam(defaultValue = "BEARING-001") String deviceCode,
+    public AjaxResult latest(@RequestParam(required = false) String deviceCode,
         @RequestParam(defaultValue = "1") Integer channelId)
     {
-        Map<String, Object> data = tdengineQueryService.loadDiagnosisData(deviceCode, channelId, 120, 64);
+        deviceCode = normalizeDeviceCode(deviceCode);
+        Map<String, Object> data = timeSeriesAnalysisService.loadDiagnosisData(deviceCode, channelId, 120, 64);
         Map<String, Object> latest = new LinkedHashMap<>(data);
+        boolean available = "available".equals(data.get("dataStatus"));
+        double rms = available ? ((Number) data.getOrDefault("rms", 0D)).doubleValue() : 0D;
         latest.put("deviceCode", deviceCode);
         latest.put("channelId", channelId);
-        latest.put("sampleTime", new Date());
-        latest.put("modelVersion", "best_model_classwise_maha.pth");
-        latest.put("diagnosisResult", data.getOrDefault("diagnosis", "正常").toString());
-        latest.put("diagnosisName", data.getOrDefault("diagnosis", "正常").toString());
-        latest.put("diagnosisDetail", data.getOrDefault("diagnosisDetail", "基于当前特征完成在线诊断").toString());
-        latest.put("confidence", data.getOrDefault("confidence", 82));
-        latest.put("healthIndex", Math.max(0, 100 - ((Number) data.getOrDefault("rms", 0)).intValue() * 5));
-        latest.put("riskLevel", ((Number) data.getOrDefault("rms", 0)).doubleValue() > 7 ? "高" : "中");
-        latest.put("status", "完成");
-        latest.put("latestRms", data.getOrDefault("rms", 0));
-        latest.put("latestPeak", data.getOrDefault("peak", 0));
-        latest.put("batchId", 1L);
+        latest.put("modelVersion", null);
+        latest.put("diagnosisResult", available ? data.get("diagnosis") : null);
+        latest.put("diagnosisName", available ? data.get("diagnosis") : null);
+        latest.put("diagnosisDetail", data.get("diagnosisDetail"));
+        latest.put("confidence", available ? data.get("confidence") : null);
+        latest.put("healthIndex", available ? Math.max(0, 100 - (int) rms * 5) : null);
+        latest.put("riskLevel", available ? (rms > 7 ? "高" : rms > 4 ? "中" : "低") : null);
+        latest.put("status", available ? "完成" : "暂无数据");
+        latest.put("latestRms", available ? data.get("rms") : null);
+        latest.put("latestPeak", available ? data.get("peak") : null);
+        latest.put("batchId", null);
         latest.put("waveform", data.getOrDefault("waveform", new ArrayList<>()));
         latest.put("frequencyAxis", data.getOrDefault("frequencyAxis", new ArrayList<>()));
         latest.put("spectrum", data.getOrDefault("spectrum", new ArrayList<>()));
-        latest.put("evidence", Arrays.asList(
-            evidence("频域能量变化", "检测到中高频能量抬升，符合轴承冲击类故障特征。", "中"),
-            evidence("RMS 波动", "RMS 相比平稳阶段有所抬升，需关注设备运行状态。", "中"),
-            evidence("模型输出", "当前模型置信度达到阈值，可作为在线辅助诊断依据。", "高")
-        ));
+        latest.put("evidence", available
+                ? Arrays.asList(evidence("时序数据", "诊断结果来自当前设备的已入库波形与频谱。", "中"))
+                : new ArrayList<>());
         return AjaxResult.success(latest);
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
     @GetMapping("/device/list")
     public AjaxResult deviceList()
     {
-        List<VibrationAnalysisBatchEntity> batches = batchService.list(new VibrationAnalysisBatchEntity());
-        List<Map<String, Object>> rows = new ArrayList<>();
-        if (batches != null && !batches.isEmpty()) {
-            for (VibrationAnalysisBatchEntity batch : batches) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("deviceCode", batch.getDeviceCode());
-                row.put("deviceName", batch.getDeviceCode());
-                row.put("vibrationValue", batch.getSampleRate());
-                row.put("statusText", batch.getSampleRate() != null && batch.getSampleRate() > 7 ? "异常" : "正常");
-                row.put("status", batch.getSampleRate() != null && batch.getSampleRate() > 7 ? "danger" : "success");
-                rows.add(row);
-            }
-        }
-        if (rows.isEmpty()) {
-            rows.add(device("BEARING-001", "1#主电机", 6.4, "预警", "warning"));
-            rows.add(device("BEARING-002", "2#风机", 8.8, "异常", "danger"));
-            rows.add(device("BEARING-003", "3#泵组", 3.2, "正常", "success"));
-            rows.add(device("BEARING-004", "4#减速箱", 4.9, "正常", "success"));
-        }
-        return AjaxResult.success(rows);
+        return AjaxResult.success(phmService.listDevices(null));
     }
 
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
     @GetMapping("/diagnosis/trend")
-    public AjaxResult trend(@RequestParam(defaultValue = "BEARING-001") String deviceCode)
+    public AjaxResult trend(@RequestParam(required = false) String deviceCode)
     {
-        Map<String, Object> data = tdengineQueryService.loadDiagnosisData(deviceCode, 1, 120, 64);
+        deviceCode = normalizeDeviceCode(deviceCode);
+        Map<String, Object> data = timeSeriesAnalysisService.loadDiagnosisData(deviceCode, 1, 120, 64);
         Map<String, Object> trend = new LinkedHashMap<>();
+        trend.put("dataStatus", data.get("dataStatus"));
+        if (!"available".equals(data.get("dataStatus")))
+        {
+            trend.put("xAxis", new ArrayList<>());
+            trend.put("values", new ArrayList<>());
+            return AjaxResult.success(trend);
+        }
         trend.put("xAxis", Arrays.asList("D-6", "D-5", "D-4", "D-3", "D-2", "D-1", "Today"));
         trend.put("values", Arrays.asList(72, 74, 71, 68, 65, 62, Math.max(0, 100 - ((Number) data.getOrDefault("rms", 0)).intValue() * 5)));
         return AjaxResult.success(trend);
@@ -204,40 +218,53 @@ public class VibrationDiagnosisController
     {
         // 根据模型类型路由到对应的推理服务端口
         String modelType = payload != null ? String.valueOf(payload.getOrDefault("modelType",
-            payload.getOrDefault("model_type", "gear"))) : "gear";
-        String inferUrl = "bearing".equalsIgnoreCase(modelType) ? PYTHON_BEARING_INFER_URL : PYTHON_GEAR_INFER_URL;
-        HttpURLConnection conn = (HttpURLConnection) new URL(inferUrl).openConnection();
-        conn.setRequestMethod("POST");
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(120000);  // 推理耗时约 6-8s (CPU)，预留充足余量
-        conn.setDoOutput(true);
-        conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            payload.getOrDefault("model_type", defaultModelType))) : defaultModelType;
+        String inferUrl = "bearing".equalsIgnoreCase(modelType) ? bearingInferUrl : gearInferUrl;
+        if (inferUrl == null || inferUrl.isBlank())
+        {
+            throw new IOException("未配置 " + modelType + " 推理服务地址");
+        }
 
         Map<String, Object> inferPayload = new LinkedHashMap<>(payload == null ? new LinkedHashMap<>() : payload);
         // 推理模型由客户端显式选择；缺省时仅作为兼容回退使用齿轮模型。
         if (!inferPayload.containsKey("modelType") && !inferPayload.containsKey("model_type")) {
-            inferPayload.put("modelType", "gear");
+            inferPayload.put("modelType", defaultModelType);
         }
         String body = JSON.toJSONString(inferPayload);
-        try (OutputStream os = conn.getOutputStream()) {
-            os.write(body.getBytes(StandardCharsets.UTF_8));
-        }
 
-        int status = conn.getResponseCode();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(
-            status >= 400 ? conn.getErrorStream() : conn.getInputStream(), StandardCharsets.UTF_8));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line);
-        }
-        reader.close();
-        conn.disconnect();
+        String response = restClient.post()
+            .uri(inferUrl)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(body)
+            .retrieve()
+            .onStatus(status -> status.value() >= 400, (req, resp) -> {
+                throw new IOException("Python 推理服务返回 HTTP " + resp.getStatusCode());
+            })
+            .body(String.class);
 
-        if (status < 200 || status >= 300) {
-            throw new IOException("Python 推理服务返回 HTTP " + status + ": " + sb);
+        return JSON.parseObject(response, Map.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void validatePythonResult(Map<String, Object> pythonResult) throws IOException
+    {
+        if (pythonResult == null || pythonResult.isEmpty())
+        {
+            throw new IOException("推理服务返回空结果");
         }
-        return JSON.parseObject(sb.toString(), Map.class);
+        if (Boolean.FALSE.equals(pythonResult.get("success")))
+        {
+            throw new IOException("推理服务返回失败状态: " + stringValue(pythonResult.get("message"), "unknown"));
+        }
+        Map<String, Object> result = pythonResult.get("data") instanceof Map
+            ? (Map<String, Object>) pythonResult.get("data") : pythonResult;
+        boolean hasDiagnosis = result.get("diagnosisResult") != null
+            || result.get("diagnosisName") != null
+            || result.get("label") != null;
+        if (!hasDiagnosis)
+        {
+            throw new IOException("推理结果缺少诊断标签");
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -303,27 +330,27 @@ public class VibrationDiagnosisController
         return latest;
     }
 
-    private Map<String, Object> buildFallbackDiagnosis(String deviceCode, String filePath, String reason)
+    private Map<String, Object> buildFailureResult(String deviceCode, String filePath, String reason)
     {
-        Map<String, Object> fallback = new LinkedHashMap<>();
-        fallback.put("deviceCode", deviceCode);
-        fallback.put("sampleTime", new Date());
-        fallback.put("modelVersion", "best_model_classwise_maha.pth");
-        fallback.put("diagnosisResult", "推理失败");
-        fallback.put("diagnosisName", "推理失败");
-        fallback.put("diagnosisDetail", reason == null ? "Python 推理服务不可用" : reason);
-        fallback.put("confidence", 0);
-        fallback.put("healthIndex", 0);
-        fallback.put("riskLevel", "高");
-        fallback.put("status", "异常");
-        fallback.put("latestRms", 0);
-        fallback.put("latestPeak", 0);
-        fallback.put("filePath", filePath);
-        fallback.put("waveform", new ArrayList<>());
-        fallback.put("frequencyAxis", new ArrayList<>());
-        fallback.put("spectrum", new ArrayList<>());
-        fallback.put("evidence", Arrays.asList(evidence("推理异常", fallback.get("diagnosisDetail").toString(), "高")));
-        return fallback;
+        Map<String, Object> failure = new LinkedHashMap<>();
+        failure.put("deviceCode", deviceCode);
+        failure.put("sampleTime", new Date());
+        failure.put("modelVersion", null);
+        failure.put("diagnosisResult", "任务失败");
+        failure.put("diagnosisName", "任务失败");
+        failure.put("diagnosisDetail", reason == null ? "推理服务不可用" : reason);
+        failure.put("confidence", null);
+        failure.put("healthIndex", null);
+        failure.put("riskLevel", null);
+        failure.put("status", "failed");
+        failure.put("latestRms", null);
+        failure.put("latestPeak", null);
+        failure.put("filePath", filePath);
+        failure.put("waveform", new ArrayList<>());
+        failure.put("frequencyAxis", new ArrayList<>());
+        failure.put("spectrum", new ArrayList<>());
+        failure.put("evidence", new ArrayList<>());
+        return failure;
     }
 
     private String stringValue(Object value, String defaultValue)
@@ -350,7 +377,7 @@ public class VibrationDiagnosisController
     {
         VibrationAnalysisRecordEntity record = new VibrationAnalysisRecordEntity();
         record.setBatchId(toLong(diagnosis.get("batchId"), null));
-        record.setDeviceCode(stringValue(diagnosis.get("deviceCode"), "BEARING-001"));
+        record.setDeviceCode(stringValue(diagnosis.get("deviceCode"), defaultDeviceCode));
         record.setRms(toNumber(diagnosis.get("latestRms"), 0));
         record.setPeak(toNumber(diagnosis.get("latestPeak"), 0));
         record.setDiagnosisResult(stringValue(diagnosis.get("diagnosisResult"), stringValue(diagnosis.get("diagnosisName"), "正常")));
@@ -363,14 +390,18 @@ public class VibrationDiagnosisController
     private void pushDiagnosis(Map<String, Object> diagnosis)
     {
         ChannelRealtimeVo vo = new ChannelRealtimeVo();
-        vo.setDeviceCode(stringValue(diagnosis.get("deviceCode"), "BEARING-001"));
+        vo.setDeviceCode(stringValue(diagnosis.get("deviceCode"), defaultDeviceCode));
         vo.setChannelId(1);
         vo.setSampleTime(java.time.LocalDateTime.now());
         vo.setRms(toNumber(diagnosis.get("latestRms"), 0));
         vo.setPeak(toNumber(diagnosis.get("latestPeak"), 0));
         vo.setAlarm("高".equals(stringValue(diagnosis.get("riskLevel"), "低")));
         vo.setAlarmMessage(stringValue(diagnosis.get("diagnosisDetail"), ""));
-        webSocketPushService.pushFeature(vo);
+        boolean failed = "failed".equals(resolveResultState(stringValue(diagnosis.get("status"), "")));
+        if (!failed)
+        {
+            webSocketPushService.pushFeature(vo);
+        }
 
         SensorWebSocketMessageVo message = new SensorWebSocketMessageVo();
         message.setType(WS_EVENT_ANALYSIS);
@@ -383,10 +414,10 @@ public class VibrationDiagnosisController
         message.setDiagnosisResult(stringValue(diagnosis.get("diagnosisResult"), stringValue(diagnosis.get("diagnosisName"), "正常")));
         message.setDiagnosisName(stringValue(diagnosis.get("diagnosisName"), stringValue(diagnosis.get("diagnosisResult"), "正常")));
         message.setDiagnosisDetail(stringValue(diagnosis.get("diagnosisDetail"), ""));
-        message.setModelType(stringValue(diagnosis.get("modelType"), "gear"));
+        message.setModelType(stringValue(diagnosis.get("modelType"), defaultModelType));
         message.setConfidence(toNumber(diagnosis.get("confidence"), 0));
         message.setHealthIndex(toNumber(diagnosis.get("healthIndex"), 0));
-        message.setRiskLevel(stringValue(diagnosis.get("riskLevel"), "低"));
+        message.setRiskLevel(stringValue(diagnosis.get("riskLevel"), null));
         message.setRms(vo.getRms());
         message.setPeak(vo.getPeak());
         message.setSampleTime(java.time.LocalDateTime.now());
@@ -459,14 +490,15 @@ public class VibrationDiagnosisController
         return "idle";
     }
 
-    private Map<String, Object> device(String deviceCode, String deviceName, double vibrationValue, String statusText, String status)
+    private String resolveDeviceCode(Map<String, Object> payload)
     {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("deviceCode", deviceCode);
-        row.put("deviceName", deviceName);
-        row.put("vibrationValue", vibrationValue);
-        row.put("statusText", statusText);
-        row.put("status", status);
-        return row;
+        Object value = payload == null ? null : payload.get("deviceCode");
+        return normalizeDeviceCode(value == null ? null : String.valueOf(value));
+    }
+
+    private String normalizeDeviceCode(String value)
+    {
+        String normalized = value == null ? "" : value.trim();
+        return normalized.isEmpty() ? defaultDeviceCode : normalized;
     }
 }

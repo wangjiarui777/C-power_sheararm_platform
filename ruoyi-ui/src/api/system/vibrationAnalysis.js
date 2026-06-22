@@ -1,48 +1,54 @@
 import request from '@/utils/request'
-import { listBearingDiagnosisHistory, getBearingDiagnosisFftData } from './bearingDiagnosis'
 
 /**
- * @deprecated Use `@/api/system/bearingDiagnosis` instead.
+ * 查询振动批次分页列表 → VibrationBatchController.page()
  */
 export function listVibrationBatch(params) {
-  return listBearingDiagnosisHistory(params)
+  return request({
+    url: '/sensor/diagnosis/batch/page',
+    method: 'get',
+    params
+  })
 }
 
 /**
- * @deprecated Use `@/api/system/bearingDiagnosis` instead.
+ * 查询单个批次详情 → VibrationBatchController.detail()
  */
 export function getVibrationBatch(batchId) {
-  return getBearingDiagnosisFftData({ batchId })
+  return request({
+    url: '/sensor/diagnosis/batch/detail/' + batchId,
+    method: 'get'
+  })
 }
 
 /**
- * @deprecated Legacy vibration batch create endpoint retained for compatibility.
+ * 新增振动批次 → VibrationBatchController.add()
  */
 export function addVibrationBatch(data) {
   return request({
-    url: '/sensor/vibration/batch',
+    url: '/sensor/diagnosis/batch',
     method: 'post',
     data
   })
 }
 
 /**
- * @deprecated Legacy vibration batch update endpoint retained for compatibility.
+ * 修改振动批次 → VibrationBatchController.edit()
  */
 export function updateVibrationBatch(data) {
   return request({
-    url: '/sensor/vibration/batch',
+    url: '/sensor/diagnosis/batch',
     method: 'put',
     data
   })
 }
 
 /**
- * @deprecated Legacy vibration batch delete endpoint retained for compatibility.
+ * 删除振动批次 → VibrationBatchController.remove()
  */
 export function delVibrationBatch(batchId) {
   return request({
-    url: '/sensor/vibration/batch/' + batchId,
+    url: '/sensor/diagnosis/batch/' + batchId,
     method: 'delete'
   })
 }

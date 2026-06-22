@@ -165,7 +165,7 @@
 </template>
 
 <script>
-import * as echarts from 'echarts'
+import echarts from '@/utils/echarts'
 import {
   listVibrationBatch,
   getVibrationBatch,
@@ -213,9 +213,11 @@ export default {
     getList() {
       this.loading = true
       listVibrationBatch(this.queryParams).then(res => {
-        const rows = res.rows || res.data || []
-        this.batchList = Array.isArray(rows) ? rows : []
-        this.total = res.total || this.batchList.length
+        // 后端 VibrationBatchController.page() 返回 AjaxResult.success(PageResult)
+        // 前端响应拦截器返回 res.data → { code, msg, data: { total, pageNum, pageSize, rows } }
+        const pageData = (res && res.data) || res || {}
+        this.batchList = Array.isArray(pageData.rows) ? pageData.rows : []
+        this.total = pageData.total || this.batchList.length
       }).finally(() => {
         this.loading = false
       })

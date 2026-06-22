@@ -1,831 +1,379 @@
 <template>
-  <div class="app-container monitoring-center-page">
-    <section class="page-shell">
-      <header class="page-toolbar">
-        <div>
-          <div class="page-title">实时监测中心</div>
-          <div class="page-subtitle">8 通道实时追踪 · 推理服务数据流 · 异常快速定位</div>
-        </div>
-        <div class="toolbar-actions">
-          <el-tag size="mini" type="success">推理服务 5000</el-tag>
-          <el-button size="mini" icon="el-icon-refresh" @click="fetchLatestInference">刷新</el-button>
-          <el-button size="mini" type="primary" icon="el-icon-data-analysis" @click="$router.push('/monitoring-center/vibration')">历史分析</el-button>
-        </div>
-      </header>
+  <div class="monitoring-page">
+    <context-bar
+      title="实时监测工作台"
+      :device="workbench.device"
+      :latest-sample-time="summary.latestSampleTime"
+      :delay-seconds="summary.dataDelaySeconds"
+      :connection-state="connectionState"
+      @refresh="refresh"
+    />
 
-      <section class="workflow-strip">
-        <div class="workflow-step active"><span>1</span><strong>选择通道</strong></div>
-        <div class="workflow-step active"><span>2</span><strong>实时监测</strong></div>
-        <div class="workflow-step"><span>3</span><strong>异常复核</strong></div>
+    <section class="kpi-strip">
+      <div><span>在线设备</span><strong>{{ summary.onlineDevices || 0 }}</strong><small>当前筛选范围</small></div>
+      <div><span>异常设备</span><strong class="alarm">{{ summary.abnormalDevices || 0 }}</strong><small>需优先复核</small></div>
+      <div><span>未确认告警</span><strong class="warning">{{ summary.unacknowledgedAlarms || 0 }}</strong><small>NEW 状态</small></div>
+      <div><span>数据延迟</span><strong>{{ delayText }}</strong><small>最后采样至今</small></div>
+    </section>
+
+    <main class="workbench-layout">
+      <asset-navigator
+        :assets="assets"
+        :active-device-code="deviceCode"
+        @select-device="selectDevice"
+      />
+
+      <section class="center-column">
+        <section class="panel point-panel">
+          <div class="panel-head">
+            <div><strong>设备测点</strong><span>状态与数据质量分开呈现</span></div>
+            <div class="actions">
+              <el-button size="mini" type="primary" plain :disabled="!activePoint" @click="openAnalysis('vibration')">振动分析</el-button>
+              <el-button size="mini" type="warning" plain :disabled="!activePoint" @click="openAnalysis('temperature')">温度分析</el-button>
+            </div>
+          </div>
+          <div class="point-grid">
+            <point-card
+              v-for="point in workbench.points"
+              :key="point.pointId"
+              :point="point"
+              :active="Number(point.pointId) === Number(pointId)"
+              @select="selectPoint"
+            />
+            <div v-if="!workbench.points.length" class="empty-state">
+              <strong>当前设备尚未配置测点</strong>
+              <span>请先在 PHM 配置管理中建立设备与测点关系。</span>
+            </div>
+          </div>
+        </section>
+
+        <status-rail :events="workbench.stateRail || []" @select="openAlarmFromRail" />
+
+        <section class="panel trend-panel">
+          <div class="panel-head">
+            <div><strong>最近趋势</strong><span>{{ activePoint ? activePoint.pointName : '请选择测点' }}</span></div>
+            <time-range-select v-model="range" @input="loadTrend" />
+          </div>
+          <div ref="trendChart" class="trend-chart"></div>
+          <div v-if="!trendRows.length" class="chart-empty">该时间范围没有有效采样数据</div>
+        </section>
       </section>
 
-      <main class="monitor-layout">
-        <section class="zone control-zone">
-          <div class="zone-header">
-            <span>通道选择</span>
-            <el-tag size="mini">8 通道</el-tag>
-          </div>
-
-          <div class="channel-grid">
-            <button
-              v-for="item in channelList"
-              :key="item.channelId"
-              class="channel-tile"
-              :class="[statusClass(item.status), { active: activeChannelId === item.channelId }]"
-              @click="activeChannelId = item.channelId"
-              @dblclick="openChannelDetail(item.channelId)"
-            >
-              <span class="tile-title">{{ item.name }}</span>
-              <el-tag size="mini" :type="statusTagType(item.status)">{{ statusText(item.status) }}</el-tag>
-              <strong>{{ formatNumber(item.value) }}</strong>
-              <small>{{ item.unit }}</small>
-            </button>
-          </div>
-        </section>
-
-        <section class="zone visualization-zone">
-          <div class="zone-header">
-            <span>实时趋势 · 通道{{ activeChannelId }}</span>
-            <div class="zone-actions">
-              <el-tag size="mini" :type="statusTagType(activeChannel.status)">{{ statusText(activeChannel.status) }}</el-tag>
-              <el-button size="mini" type="text" @click="openChannelDetail(activeChannelId)">详情</el-button>
+      <aside class="panel alarm-panel">
+        <div class="panel-head">
+          <div><strong>待处置告警</strong><span>确认并不解除告警条件</span></div>
+          <el-tag type="danger" size="mini">{{ workbench.alarms.length }}</el-tag>
+        </div>
+        <div class="alarm-list">
+          <article v-for="alarm in workbench.alarms" :key="alarm.id" class="alarm-item" :class="alarmClass(alarm)">
+            <div class="alarm-title">
+              <span>{{ alarm.pointName || alarm.deviceName }}</span>
+              <el-tag :type="alarm.alarmLevel >= 3 ? 'danger' : 'warning'" size="mini">{{ alarm.alarmLevel }}级</el-tag>
             </div>
-          </div>
-
-          <div class="kpi-row">
-            <div class="kpi-item">
-              <span>有效值</span>
-              <strong>{{ formatNumber(activeChannel.metrics.rms) }}</strong>
-              <small>mm/s</small>
+            <strong>{{ alarm.diagnosisResult || '监测指标触发告警规则' }}</strong>
+            <small>{{ alarm.alarmNo }} · {{ formatTime(alarm.alarmTime) }}</small>
+            <div class="alarm-meta">
+              <span>{{ workflowText(alarm.workflowStatus) }}</span>
+              <span>{{ conditionText(alarm.conditionStatus) }}</span>
             </div>
-            <div class="kpi-item">
-              <span>峰值</span>
-              <strong>{{ formatNumber(activeChannel.metrics.peak) }}</strong>
-              <small>峰值</small>
+            <div class="alarm-actions">
+              <el-button v-if="!alarm.workflowStatus || alarm.workflowStatus === 'NEW'" size="mini" type="primary" @click="acknowledge(alarm)">确认</el-button>
+              <el-button size="mini" @click="openAssign(alarm)">指派</el-button>
+              <el-button size="mini" type="text" @click="openAlarm(alarm)">详情</el-button>
             </div>
-            <div class="kpi-item">
-              <span>位移</span>
-              <strong>{{ formatNumber(activeChannel.metrics.displacement) }}</strong>
-              <small>mm</small>
-            </div>
-            <div class="kpi-item">
-              <span>温度</span>
-              <strong>{{ formatNumber(activeChannel.metrics.temp) }}</strong>
-              <small>℃</small>
-            </div>
-          </div>
-
-          <div ref="overviewChartRef" class="primary-chart"></div>
-        </section>
-
-        <aside class="zone log-zone">
-          <div class="zone-header">
-            <span>运行日志</span>
-            <el-button size="mini" type="text" @click="goHistory">更多</el-button>
-          </div>
-
-          <el-table :data="activeLogs" height="100%" size="mini" stripe>
-            <el-table-column prop="time" label="时间" min-width="130" />
-            <el-table-column prop="value" label="有效值" width="80" />
-            <el-table-column prop="alarmLevel" label="级别" width="74">
-              <template slot-scope="scope">
-                <el-tag :type="alarmTagType(scope.row.alarmLevel)" size="mini">{{ scope.row.alarmLevel }}</el-tag>
-              </template>
-            </el-table-column>
-          </el-table>
-        </aside>
-      </main>
-
-      <el-drawer
-        :visible.sync="detailVisible"
-        direction="btt"
-        size="100%"
-        custom-class="monitoring-drawer"
-        :with-header="false"
-        append-to-body
-        @opened="handleDrawerOpened"
-        @closed="handleDrawerClosed"
-      >
-        <div class="drawer-shell">
-          <div class="drawer-topbar">
-            <div>
-              <div class="drawer-title">通道{{ activeChannelId }} 通道详情</div>
-              <div class="drawer-subtitle">实时曲线 · 关键指标 · 最近 20 条日志</div>
-            </div>
-            <div class="drawer-actions">
-              <el-tag :type="statusTagType(activeChannel.status)" size="mini">{{ statusText(activeChannel.status) }}</el-tag>
-              <el-button size="mini" icon="el-icon-close" @click="detailVisible = false">关闭</el-button>
-            </div>
-          </div>
-
-          <div class="drawer-grid">
-            <section class="zone metric-zone">
-              <div class="main-metric">
-                <div class="metric-label">振动速度有效值 RMS</div>
-                <div class="metric-value big">{{ formatNumber(activeChannel.metrics.rms) }}</div>
-                <div class="metric-unit">mm/s</div>
-              </div>
-              <div class="sub-metrics">
-                <div class="sub-item"><span>峰值</span><strong>{{ formatNumber(activeChannel.metrics.peak) }}</strong></div>
-                <div class="sub-item"><span>位移</span><strong>{{ formatNumber(activeChannel.metrics.displacement) }}</strong></div>
-                <div class="sub-item"><span>实时温度</span><strong>{{ formatNumber(activeChannel.metrics.temp) }}</strong></div>
-              </div>
-              <div class="health-box">
-                <div>
-                  <div class="health-label">健康度</div>
-                  <div class="health-desc">{{ activeChannel.health }}%</div>
-                </div>
-                <el-progress type="circle" :percentage="activeChannel.health" :width="92" :color="healthColor(activeChannel.health)" />
-              </div>
-            </section>
-
-            <section class="zone drawer-chart-zone">
-              <div class="zone-header"><span>实时曲线</span></div>
-              <div ref="waveChartRef" class="primary-chart"></div>
-            </section>
-
-            <section class="zone drawer-log-zone">
-              <div class="zone-header">
-                <span>最近 20 条历史记录</span>
-                <el-button size="mini" type="primary" plain @click="goHistory">查看更多</el-button>
-              </div>
-              <el-table :data="activeLogs" height="100%" size="mini" stripe>
-                <el-table-column prop="time" label="采集时间" min-width="150" />
-                <el-table-column prop="value" label="测量值" width="90" />
-                <el-table-column prop="alarmLevel" label="级别" width="80">
-                  <template slot-scope="scope">
-                    <el-tag :type="alarmTagType(scope.row.alarmLevel)" size="mini">{{ scope.row.alarmLevel }}</el-tag>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </section>
+          </article>
+          <div v-if="!workbench.alarms.length" class="empty-state compact">
+            <strong>没有待处置告警</strong><span>设备处于正常或已恢复状态。</span>
           </div>
         </div>
-      </el-drawer>
-    </section>
+      </aside>
+    </main>
+
+    <el-dialog title="指派告警" :visible.sync="assignVisible" width="420px">
+      <el-form label-width="80px">
+        <el-form-item label="处理人"><el-input v-model="assignForm.assignee" placeholder="输入账号或姓名" /></el-form-item>
+        <el-form-item label="说明"><el-input v-model="assignForm.remark" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <span slot="footer">
+        <el-button @click="assignVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!assignForm.assignee" @click="submitAssign">确认指派</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import * as echarts from 'echarts'
-import inferenceWebSocket from '@/utils/inference-websocket'
+import echarts from '@/utils/echarts'
+import { mapState } from 'vuex'
+import { getPointTrend } from '@/api/monitoring'
+import { acknowledgeAlarm, assignAlarm } from '@/api/phm'
+import ContextBar from '@/components/IndustrialMonitoring/ContextBar'
+import AssetNavigator from '@/components/IndustrialMonitoring/AssetNavigator'
+import PointCard from '@/components/IndustrialMonitoring/PointCard'
+import StatusRail from '@/components/IndustrialMonitoring/StatusRail'
+import TimeRangeSelect from '@/components/IndustrialMonitoring/TimeRangeSelect'
+import { industrialChartTheme } from '@/utils/industrialTheme'
 
 export default {
   name: 'MonitoringCenter',
+  components: { ContextBar, AssetNavigator, PointCard, StatusRail, TimeRangeSelect },
   data() {
     return {
-      activeChannelId: 1,
-      detailVisible: false,
-      unsubscribeWs: null,
-      inferencePollTimer: null,
-      overviewChart: null,
-      waveChart: null,
-      channelDataMap: {
-        1: this.createChannel('通道1', 'mm/s'),
-        2: this.createChannel('通道2', 'mm/s'),
-        3: this.createChannel('通道3', 'mm/s'),
-        4: this.createChannel('通道4', 'mm/s'),
-        5: this.createChannel('通道5', 'mm/s'),
-        6: this.createChannel('通道6', 'mm/s'),
-        7: this.createChannel('通道7', 'mm/s'),
-        8: this.createChannel('通道8', 'mm/s')
-      }
+      trendChart: null,
+      trendRows: [],
+      assignVisible: false,
+      currentAlarm: null,
+      assignForm: { assignee: '', remark: '' }
     }
   },
   computed: {
-    channelList() {
-      return Object.keys(this.channelDataMap).map(id => {
-        const item = this.channelDataMap[id]
-        return {
-          channelId: Number(id),
-          name: item.name,
-          unit: item.unit,
-          status: item.status,
-          value: item.value,
-          latest: item.latest
-        }
-      })
+    ...mapState('monitoring', ['assets', 'workbench', 'deviceCode', 'pointId', 'connectionState']),
+    summary() { return this.workbench.summary || {} },
+    activePoint() { return this.workbench.points.find(item => Number(item.pointId) === Number(this.pointId)) || this.workbench.points[0] },
+    range: {
+      get() { return this.$store.state.monitoring.range },
+      set(value) { this.$store.dispatch('monitoring/setContext', { range: value }) }
     },
-    activeChannel() {
-      return this.channelDataMap[this.activeChannelId] || this.createChannel(`CH${this.activeChannelId}`, 'mm/s')
-    },
-    activeLogs() {
-      return (this.activeChannel.logs || []).slice(0, 20)
+    delayText() {
+      const value = this.summary.dataDelaySeconds
+      if (value === null || value === undefined) return '--'
+      return Number(value) < 60 ? `${value}s` : `${Math.floor(value / 60)}m`
     }
   },
-  watch: {
-    activeChannelId() {
-      this.$nextTick(() => {
-        this.renderWaveChart()
-      })
-    },
-    detailVisible(val) {
-      if (val) {
-        this.$nextTick(() => this.renderWaveChart())
-      }
-    }
+  async created() {
+    await this.$store.dispatch('monitoring/loadAssets')
+    const routeDevice = this.$route.query.deviceCode
+    if (routeDevice) this.$store.dispatch('monitoring/setContext', { deviceCode: routeDevice })
+    await this.$store.dispatch('monitoring/loadWorkbench')
+    this.$store.dispatch('monitoring/connect')
+    this.loadTrend()
   },
   mounted() {
-    this.connectWebSocket()
+    window.addEventListener('resize', this.resize)
+    window.addEventListener('appearance-mode-change', this.renderTrend)
     this.$nextTick(() => {
-      this.renderWaveChart()
-      window.addEventListener('resize', this.handleResize)
+      if (this.$refs.trendChart) this.trendChart = echarts.init(this.$refs.trendChart)
+      this.renderTrend()
     })
   },
   beforeDestroy() {
-    window.removeEventListener('resize', this.handleResize)
-    if (this.unsubscribeWs) {
-      this.unsubscribeWs()
-      this.unsubscribeWs = null
-    }
-    this.stopInferencePolling()
-    inferenceWebSocket.close()
-    if (this.overviewChart) {
-      this.overviewChart.dispose()
-      this.overviewChart = null
-    }
-    if (this.waveChart) {
-      this.waveChart.dispose()
-      this.waveChart = null
-    }
+    window.removeEventListener('resize', this.resize)
+    window.removeEventListener('appearance-mode-change', this.renderTrend)
+    if (this.trendChart) this.trendChart.dispose()
+    this.$store.dispatch('monitoring/disconnect')
   },
   methods: {
-    createChannel(name, unit) {
-      return {
-        name,
-        unit,
-        status: 'success',
-        value: null,
-        health: 100,
-        latest: { rms: null, temperatureValue: null },
-        metrics: { rms: null, peak: null, displacement: null, temp: null },
-        wave: [],
-        logs: []
-      }
+    async refresh() {
+      await Promise.all([
+        this.$store.dispatch('monitoring/loadAssets'),
+        this.$store.dispatch('monitoring/loadWorkbench')
+      ])
+      this.loadTrend()
     },
-    openChannelDetail(channelId) {
-      this.activeChannelId = channelId
-      this.detailVisible = true
+    async selectDevice(device) {
+      this.$store.dispatch('monitoring/setContext', { deviceCode: device.deviceCode, pointId: null })
+      await this.$store.dispatch('monitoring/loadWorkbench', { deviceCode: device.deviceCode })
+      this.$router.replace({ query: { ...this.$route.query, deviceCode: device.deviceCode } })
+      this.loadTrend()
     },
-    connectWebSocket() {
-      this.fetchLatestInference()
-      this.startInferencePolling()
-      this.unsubscribeWs = inferenceWebSocket.subscribe((event, payload) => {
-        if (event === 'open') {
-          this.fetchLatestInference()
-          return
-        }
-        if (event === 'error') {
-          return
-        }
-        if (event !== 'message' || !payload) return
-        this.applyRealtimeData(payload)
+    selectPoint(point) {
+      this.$store.dispatch('monitoring/setContext', { pointId: point.pointId })
+      this.$router.replace({ query: { ...this.$route.query, pointId: point.pointId } })
+      this.loadTrend()
+    },
+    openAnalysis(type) {
+      if (!this.activePoint) return
+      this.$router.push({
+        path: `/monitoring-center/${type}`,
+        query: { deviceCode: this.deviceCode, pointId: this.activePoint.pointId, range: this.range }
       })
-      inferenceWebSocket.connect()
     },
-    startInferencePolling() {
-      if (this.inferencePollTimer) return
-      this.inferencePollTimer = window.setInterval(() => {
-        this.fetchLatestInference()
-      }, 3000)
-    },
-    stopInferencePolling() {
-      if (this.inferencePollTimer) {
-        window.clearInterval(this.inferencePollTimer)
-        this.inferencePollTimer = null
+    async loadTrend() {
+      if (!this.activePoint) {
+        this.trendRows = []
+        this.renderTrend()
+        return
       }
-    },
-    fetchLatestInference() {
-      var base = process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
-      fetch(base.replace(/\/$/, '') + '/analyze', { cache: 'no-store' })
-        .then(res => res.json())
-        .then(payload => this.applyRealtimeData(payload))
-        .catch(() => {})
-    },
-    applyRealtimeData(payload) {
-      payload = this.normalizeInferencePayload(payload)
-      if (!payload) return
-
-      var channelId = Number(payload.channelId || payload.channel || payload.channelNo || 1)
-      if (!this.channelDataMap[channelId]) {
-        this.$set(this.channelDataMap, channelId, this.createChannel(`通道${channelId}`, 'mm/s'))
-      }
-
-      var channel = this.channelDataMap[channelId]
-      var rms = this.toNumber(payload.rms, channel.metrics.rms)
-      var peak = this.toNumber(payload.peak, channel.metrics.peak)
-      var displacement = this.toNumber(payload.displacement || payload.peakToPeak || payload.pp, channel.metrics.displacement)
-      var temp = this.toNumber(payload.temperatureValue || payload.temp, channel.metrics.temp)
-      var vibrationValue = this.toNumber(payload.vibrationValue, rms)
-      var health = payload.health == null ? this.calcHealth(rms, temp) : this.toNumber(payload.health, this.calcHealth(rms, temp))
-      var status = payload.alarm ? 'danger' : payload.warning ? 'warning' : health >= 80 ? 'success' : health >= 60 ? 'warning' : 'danger'
-      var time = payload.sampleTime ? this.formatLogTime(payload.sampleTime) : this.formatTime(new Date())
-
-      channel.value = vibrationValue
-      channel.status = status
-      channel.health = health
-      channel.latest = {
-        deviceCode: payload.deviceCode || channel.latest.deviceCode,
-        channelId: channelId,
-        sampleTime: time,
-        vibrationValue: vibrationValue,
-        temperatureValue: temp,
-        rms: rms,
-        peak: peak,
-        alarm: !!payload.alarm,
-        alarmMessage: payload.alarmMessage || ''
-      }
-      channel.metrics.rms = rms
-      channel.metrics.peak = peak
-      channel.metrics.displacement = displacement
-      channel.metrics.temp = temp
-
-      if (Array.isArray(payload.wave) && payload.wave.length) {
-        channel.wave = payload.wave.slice(-200)
-      } else {
-        channel.wave.push({ time: time, value: rms == null ? 0 : rms })
-        if (channel.wave.length > 200) {
-          channel.wave.splice(0, channel.wave.length - 200)
-        }
-      }
-
-      channel.logs.unshift({
-        time: time,
-        value: this.formatNumber(rms),
-        alarmLevel: status === 'danger' ? '高' : status === 'warning' ? '中' : '低',
-        statusDesc: payload.alarm ? '告警触发' : payload.warning ? '预警' : '正常运行'
+      const response = await getPointTrend(this.activePoint.pointId, {
+        ...this.rangeParams(),
+        metrics: 'vibration,temperature',
+        maxPoints: 600
       })
-      if (channel.logs.length > 20) channel.logs.length = 20
-
-      if (channelId === this.activeChannelId) {
-        this.$nextTick(() => {
-          this.renderWaveChart()
-        })
-      }
+      this.trendRows = (response.data && response.data.rows) || []
+      this.renderTrend()
     },
-    normalizeInferencePayload(payload) {
-      if (!payload) return null
-      if (payload.type === 'health_status' || payload.type === 'file_list' || payload.type === 'pong') return null
-      var data = payload.data || payload
-      if (payload.type === 'auto_analysis' && payload.success === false) return null
-      if (!data || (!data.rms && !data.latestRms && !data.waveform && !data.time_data)) return null
-
-      var channelId = Number(data.channelId || data.channel || data.channelNo || 1)
-      var timeAxis = Array.isArray(data.time_axis) ? data.time_axis : []
-      var waveform = Array.isArray(data.waveform) ? data.waveform : (Array.isArray(data.time_data) ? data.time_data : [])
-      var wave = waveform.map((value, index) => ({
-        time: timeAxis[index] == null ? String(index) : String(timeAxis[index]),
-        value: this.toNumber(value, 0)
-      }))
-      var health = data.healthIndex == null ? data.health : data.healthIndex
-      var risk = data.riskLevel || data.alarmLevel
-
-      return {
-        channelId: channelId || 1,
-        rms: data.rms == null ? data.latestRms : data.rms,
-        peak: data.peak == null ? data.latestPeak : data.peak,
-        displacement: data.displacement || data.peakToPeak || data.pp,
-        temperatureValue: data.temperatureValue || data.temp,
-        vibrationValue: data.vibrationValue || data.latestRms || data.rms,
-        health: health,
-        alarm: data.alarm || risk === '高' || risk === 'alarm',
-        warning: data.warning || risk === '中' || risk === 'warning' || risk === 'attention',
-        alarmMessage: data.alarmMessage || data.diagnosisResult || data.diagnosisName || '',
-        sampleTime: data.sampleTime || data.createTime || new Date().toISOString(),
-        wave: wave
-      }
+    rangeParams() {
+      if (this.range === 'realtime') return {}
+      const durations = { '15m': 15 * 60e3, '1h': 60 * 60e3, '8h': 8 * 60 * 60e3, '24h': 24 * 60 * 60e3 }
+      const end = new Date()
+      const start = new Date(end.getTime() - (durations[this.range] || durations['15m']))
+      return { from: start.toISOString(), to: end.toISOString() }
     },
-    renderWaveChart() {
-      this.renderChartByRef('overviewChartRef', 'overviewChart')
-      this.renderChartByRef('waveChartRef', 'waveChart')
+    renderTrend() {
+      this.$nextTick(() => {
+        if (!this.trendChart) return
+        const rows = this.trendRows
+        const thresholds = (this.activePoint && this.activePoint.thresholds) || {}
+        this.trendChart.setOption({
+          animation: false,
+          backgroundColor: 'transparent',
+          color: [industrialChartTheme.vibration, industrialChartTheme.temperature],
+          tooltip: { trigger: 'axis', backgroundColor: industrialChartTheme.tooltipBg, borderColor: industrialChartTheme.tooltipBorder, textStyle: { color: industrialChartTheme.text } },
+          legend: { top: 4, right: 12, textStyle: { color: industrialChartTheme.muted } },
+          grid: { left: 55, right: 50, top: 42, bottom: 34 },
+          xAxis: { type: 'category', boundaryGap: false, data: rows.map(row => this.formatAxis(row.time)), axisLabel: { color: industrialChartTheme.axis }, axisLine: { lineStyle: { color: industrialChartTheme.border } } },
+          yAxis: [
+            { type: 'value', name: 'mm/s', scale: true, axisLabel: { color: industrialChartTheme.axis }, splitLine: { lineStyle: { color: industrialChartTheme.grid } } },
+            { type: 'value', name: '℃', scale: true, axisLabel: { color: industrialChartTheme.axis }, splitLine: { show: false } }
+          ],
+          series: [
+            { name: '振动', type: 'line', showSymbol: false, connectNulls: false, data: rows.map(row => row.vibration), lineStyle: { color: industrialChartTheme.vibration, width: 2.4 }, markLine: this.markLine(thresholds) },
+            { name: '温度', type: 'line', yAxisIndex: 1, showSymbol: false, connectNulls: false, data: rows.map(row => row.temperature), lineStyle: { color: industrialChartTheme.temperature, width: 2.1 } }
+          ]
+        }, true)
+      })
     },
-    renderChartByRef(refName, chartName) {
-      var el = this.$refs[refName]
-      if (Array.isArray(el)) el = el[0]
-      if (!el) return
-      if (!this[chartName]) {
-        this[chartName] = echarts.init(el)
-      }
-      var series = this.activeChannel.wave || []
-      this[chartName].setOption({
-        backgroundColor: 'transparent',
-        animation: true,
-        animationDuration: 300,
-        tooltip: { trigger: 'axis' },
-        grid: { left: 38, right: 18, top: 18, bottom: 28 },
-        xAxis: {
-          type: 'category',
-          boundaryGap: false,
-          data: series.map(item => item.time),
-          axisLine: { lineStyle: { color: '#cbd5e1' } },
-          axisLabel: { color: '#64748b' }
-        },
-        yAxis: {
-          type: 'value',
-          scale: true,
-          splitLine: { show: false },
-          axisLine: { lineStyle: { color: '#cbd5e1' } },
-          axisLabel: { color: '#64748b' }
-        },
-        series: [{
-          type: 'line',
-          smooth: true,
-          showSymbol: false,
-          data: series.map(item => item.value),
-          lineStyle: { width: 2, color: '#2563eb' },
-          areaStyle: {
-            color: {
-              type: 'linear',
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: 'rgba(37,99,235,0.20)' },
-                { offset: 1, color: 'rgba(37,99,235,0)' }
-              ]
-            }
-          }
-        }]
-      }, true)
+    markLine(thresholds) {
+      const data = []
+      if (thresholds.high !== null && thresholds.high !== undefined) data.push({ yAxis: thresholds.high, name: '高限', lineStyle: { color: industrialChartTheme.warning } })
+      if (thresholds.highHigh !== null && thresholds.highHigh !== undefined) data.push({ yAxis: thresholds.highHigh, name: '高高限', lineStyle: { color: industrialChartTheme.danger } })
+      return { symbol: 'none', label: { color: industrialChartTheme.muted }, data }
     },
-    calcHealth(rms, temp) {
-      var rmsNum = Number(rms)
-      var tempNum = Number(temp)
-      var rmsScore = Number.isNaN(rmsNum) ? 0.5 : Math.max(0, Math.min(1, 1 - rmsNum / 8))
-      var tempScore = Number.isNaN(tempNum) ? 0.5 : Math.max(0, Math.min(1, 1 - Math.max(0, tempNum - 60) / 70))
-      return Math.round((rmsScore * 0.6 + tempScore * 0.4) * 100)
+    acknowledge(alarm) {
+      acknowledgeAlarm(alarm.id, { remark: '监测工作台确认' }).then(() => {
+        this.$message.success('告警已确认，条件状态保持不变')
+        this.$store.dispatch('monitoring/loadWorkbench')
+      }).catch(e => {
+        this.$message.error(e.message || '确认失败')
+      })
     },
-    statusClass(status) {
-      return status === 'danger' ? 'danger' : status === 'warning' ? 'warning' : 'success'
+    openAssign(alarm) {
+      this.currentAlarm = alarm
+      this.assignForm = { assignee: alarm.assignee || '', remark: '' }
+      this.assignVisible = true
     },
-    statusTagType(status) {
-      return status === 'danger' ? 'danger' : status === 'warning' ? 'warning' : 'success'
+    submitAssign() {
+      assignAlarm(this.currentAlarm.id, this.assignForm).then(() => {
+        this.$message.success('告警已指派')
+        this.assignVisible = false
+        this.$store.dispatch('monitoring/loadWorkbench')
+      }).catch(e => {
+        this.$message.error(e.message || '指派失败')
+      })
     },
-    statusText(status) {
-      return status === 'danger' ? '告警' : status === 'warning' ? '预警' : '正常'
-    },
-    healthColor(health) {
-      if (health >= 85) return '#67c23a'
-      if (health >= 60) return '#e6a23c'
-      return '#f56c6c'
-    },
-    alarmTagType(level) {
-      if (level === '高') return 'danger'
-      if (level === '中') return 'warning'
-      return 'success'
-    },
-    goHistory() {
-      this.$message.info('这里可跳转至历史报表页面')
-    },
-    formatNumber(value) {
-      if (value === null || value === undefined || value === '') return '--'
-      var num = Number(value)
-      return Number.isNaN(num) ? value : num.toFixed(2)
-    },
-    toNumber(value, fallback) {
-      var num = Number(value)
-      if (Number.isNaN(num)) return fallback == null ? null : fallback
-      return num
-    },
-    formatTime(date) {
-      var d = new Date(date)
-      var pad = function(n) { return n < 10 ? '0' + n : '' + n }
-      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
-    },
-    formatLogTime(value) {
-      if (!value) return this.formatTime(new Date())
-      return String(value)
-    },
-    handleDrawerOpened() {
-      this.$nextTick(() => this.renderWaveChart())
-    },
-    handleDrawerClosed() {
-      if (this.waveChart) {
-        this.waveChart.dispose()
-        this.waveChart = null
-      }
-    },
-    handleResize() {
-      if (this.overviewChart) {
-        this.overviewChart.resize()
-      }
-      if (this.waveChart) {
-        this.waveChart.resize()
-      }
-    }
+    openAlarm(alarm) { this.$router.push({ path: '/phm/alarms', query: { alarmId: alarm.id } }) },
+    openAlarmFromRail(item) { if (item.alarmId) this.openAlarm({ id: item.alarmId }) },
+    alarmClass(alarm) { return alarm.alarmLevel >= 3 ? 'alarm' : 'warning' },
+    workflowText(value) { return { NEW: '待确认', ACKNOWLEDGED: '已确认', ASSIGNED: '已指派', CLOSED: '已关闭' }[value] || '待确认' },
+    conditionText(value) { return value === 'RETURNED_TO_NORMAL' ? '条件已恢复' : '条件仍活动' },
+    formatTime(value) { return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '--' },
+    formatAxis(value) { return value ? new Date(value).toLocaleTimeString('zh-CN', { hour12: false }) : '' },
+    resize() { if (this.trendChart) this.trendChart.resize() }
   }
 }
 </script>
 
 <style scoped>
-.monitoring-center-page {
-  min-height: calc(100vh - 84px);
-  padding: 10px;
-  background: linear-gradient(180deg, #111827 0%, #1f2937 100%);
-}
-.mb10 { margin-bottom: 10px; }
-.channel-card {
-  cursor: pointer;
-  background: rgba(1, 12, 28, 0.78);
-  border: 1px solid rgba(0, 255, 255, 0.22);
-  color: #ffffff;
-  box-shadow: 0 0 12px rgba(0, 255, 255, 0.08), inset 0 0 18px rgba(0, 255, 255, 0.03);
-}
-.channel-card.active { border-color: #00ffff; box-shadow: 0 0 18px rgba(0,255,255,0.18), 0 0 0 1px rgba(0,255,255,0.15) inset; }
-.channel-card.success { border-color: rgba(0, 255, 255, 0.22); }
-.channel-card.warning { border-color: rgba(230, 162, 60, 0.55); }
-.channel-card.danger { border-color: rgba(245, 108, 108, 0.65); }
-.channel-head, .channel-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.channel-title { font-size: 14px; font-weight: 700; }
-.metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-.metric-block { padding: 10px; background: rgba(0,255,255,0.05); border: 1px solid rgba(0,255,255,0.12); border-radius: 6px; }
-.metric-label { font-size: 12px; color: rgba(0,255,255,0.72); }
-.metric-value { margin-top: 4px; font-size: 26px; font-weight: 800; line-height: 1.1; color: #ffffff; font-family: 'Courier New', monospace; }
-.metric-value.big { font-size: 38px; }
-.metric-unit { margin-top: 2px; font-size: 12px; color: rgba(235,255,255,0.68); }
-.channel-footer { margin-top: 12px; font-size: 12px; color: #ffffff; }
-.foot-time { color: #ffffff; }
-.drawer-shell { height: 100vh; display: flex; flex-direction: column; background: linear-gradient(180deg, #111827 0%, #1f2937 100%); color: #ffffff; }
-.drawer-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid rgba(0,255,255,0.10); }
-.drawer-title { font-size: 20px; font-weight: 800; }
-.drawer-subtitle { margin-top: 4px; font-size: 12px; color: #ffffff; }
-.drawer-actions { display: flex; align-items: center; gap: 10px; }
-.drawer-content { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 20px 20px; min-height: 0; }
-.detail-row { flex: 0 0 auto; }
-.metric-panel { display: grid; gap: 8px; }
-.main-metric, .log-card { background: rgba(1, 12, 28, 0.78); border: 1px solid rgba(0,255,255,0.12); box-shadow: 0 0 12px rgba(0,255,255,0.08), inset 0 0 18px rgba(0,255,255,0.03); }
-.main-metric { padding: 10px; }
-.sub-metrics { display: grid; gap: 6px; }
-.sub-item { display: flex; justify-content: space-between; padding: 7px 10px; background: rgba(0,255,255,0.04); border: 1px solid rgba(0,255,255,0.1); font-size: 12px; }
-.sub-item strong { font-family: 'Courier New', monospace; }
-.health-box { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; background: rgba(0,255,255,0.03); border: 1px solid rgba(0,255,255,0.14); }
-.health-label { font-size: 12px; color: rgba(0,255,255,0.72); }
-.health-desc { margin-top: 4px; font-size: 18px; font-weight: 700; color: #ffffff; font-family: 'Courier New', monospace; }
-.wave-chart { width: 100%; height: 320px; background: rgba(1, 12, 28, 0.78); border-radius: 10px; border: 1px solid rgba(0,255,255,0.12); box-shadow: 0 0 12px rgba(0,255,255,0.08), inset 0 0 18px rgba(0,255,255,0.03); }
-.log-card { margin-top: 12px; }
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-:deep(.monitoring-drawer) { background: transparent; }
-:deep(.monitoring-drawer .el-drawer__body) { height: 100%; }
-:deep(.el-table) { background: transparent; color: #ffffff; }
-:deep(.el-table th), :deep(.el-table tr), :deep(.el-table td) { background: transparent !important; }
-:deep(.el-table::before) { background-color: rgba(0,255,255,0.08); }
-:deep(.el-radio-button__inner) { background: #2b3340; color: #ffffff; border-color: rgba(255,255,255,0.12); }
-:deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) { background: #409eff; border-color: #409eff; }
+.monitoring-page{min-height:calc(100vh - 84px);padding:12px;background:#0b1219;color:#dce7ee;font-family:"Microsoft YaHei UI","PingFang SC",sans-serif}
+.kpi-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}.kpi-strip>div{padding:12px 14px;border:1px solid #273846;border-radius:9px;background:#15212c}.kpi-strip span,.kpi-strip small{display:block;color:#8195a6;font-size:12px}.kpi-strip strong{display:block;margin:5px 0 3px;font-family:"DIN Alternate",Consolas,monospace;font-size:26px}.kpi-strip .alarm{color:#e05252}.kpi-strip .warning{color:#e7a23b}
+.workbench-layout{display:grid;grid-template-columns:290px minmax(0,1fr) 330px;gap:12px;min-height:680px}.center-column{display:grid;align-content:start;gap:12px;min-width:0}
+.panel{min-width:0;padding:12px;border:1px solid #273846;border-radius:10px;background:#15212c}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.panel-head strong,.panel-head span{display:block}.panel-head span{margin-top:3px;color:#8195a6;font-size:12px}.actions{display:flex;gap:7px}
+.point-grid{display:grid;grid-template-columns:repeat(3,minmax(190px,1fr));gap:10px}.trend-panel{position:relative}.trend-chart{height:300px}.chart-empty{position:absolute;inset:90px 0 auto;color:#718696;text-align:center;pointer-events:none}
+.alarm-panel{min-height:0}.alarm-list{display:grid;gap:9px;max-height:calc(100vh - 235px);overflow:auto}.alarm-item{display:grid;gap:8px;padding:11px;border:1px solid #2b3d4b;border-left:3px solid #e7a23b;border-radius:8px;background:#101a23}.alarm-item.alarm{border-left-color:#e05252}.alarm-title,.alarm-meta,.alarm-actions{display:flex;align-items:center;justify-content:space-between;gap:8px}.alarm-item small,.alarm-meta{color:#8195a6;font-size:11px}.alarm-actions{justify-content:flex-start}
+.empty-state{display:grid;gap:5px;grid-column:1/-1;padding:30px;border:1px dashed #314654;border-radius:8px;color:#8195a6;text-align:center}.empty-state strong{color:#b8c7d2}.empty-state.compact{padding:20px}
+@media(max-width:1280px){.workbench-layout{grid-template-columns:250px minmax(0,1fr)}.alarm-panel{grid-column:1/-1}.alarm-list{grid-template-columns:repeat(2,minmax(0,1fr));max-height:none}.point-grid{grid-template-columns:repeat(2,minmax(180px,1fr))}}
+@media(max-width:850px){.kpi-strip,.workbench-layout,.point-grid,.alarm-list{grid-template-columns:1fr}.panel-head{align-items:flex-start;flex-direction:column}}
+</style>
 
-/* 浅色工业生产主题覆盖 */
-.monitoring-center-page {
-  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
-  color: #ffffff;
+<style>
+html body .monitoring-page .el-dialog,
+html body .monitoring-page ~ .el-dialog {
+  background: #15212c !important;
+  border: 1px solid #273846 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.52) !important;
 }
-.channel-card,
-.main-metric,
-.log-card,
-.wave-chart {
-  background: #1a1a1a;
-  border-color: #d7dee8;
-  color: #ffffff;
-  box-shadow: 0 8px 18px rgba(31, 41, 55, 0.08);
+html body .monitoring-page .el-dialog__header,
+html body .monitoring-page ~ .el-dialog__header {
+  background: #0d1a26 !important;
+  border-bottom: 1px solid #273846 !important;
+  padding: 14px 20px !important;
 }
-.channel-card.active {
-  border-color: #2563eb;
-  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.12);
+html body .monitoring-page .el-dialog__title,
+html body .monitoring-page ~ .el-dialog__title {
+  color: #dce7ee !important;
+  font-weight: 700 !important;
 }
-.channel-card.success { border-color: #bfd7f2; }
-.metric-block,
-.sub-item,
-.health-box {
-  background: #171717;
-  border-color: #b8b8b8;
+html body .monitoring-page .el-dialog__headerbtn .el-dialog__close,
+html body .monitoring-page ~ .el-dialog__headerbtn .el-dialog__close {
+  color: #8195a6 !important;
 }
-.metric-label,
-.health-label {
-  color: #ffffff;
+html body .monitoring-page .el-dialog__headerbtn .el-dialog__close:hover,
+html body .monitoring-page ~ .el-dialog__headerbtn .el-dialog__close:hover {
+  color: #38bdf8 !important;
 }
-.metric-value,
-.health-desc,
-.foot-time,
-.drawer-title,
-.sub-item strong {
-  color: #ffffff;
+html body .monitoring-page .el-dialog__body,
+html body .monitoring-page ~ .el-dialog__body {
+  background: #15212c !important;
+  color: #dce7ee !important;
+  padding: 20px !important;
 }
-.metric-unit,
-.channel-footer,
-.drawer-subtitle {
-  color: #ffffff;
+html body .monitoring-page .el-dialog__footer,
+html body .monitoring-page ~ .el-dialog__footer {
+  background: #0d1a26 !important;
+  border-top: 1px solid #273846 !important;
+  padding: 12px 20px !important;
 }
-.drawer-shell {
-  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
-  color: #ffffff;
+html body .monitoring-page .el-form-item__label,
+html body .monitoring-page ~ .el-form-item__label {
+  color: #8195a6 !important;
 }
-.drawer-topbar {
-  border-bottom-color: #d7dee8;
+html body .monitoring-page .el-input__inner,
+html body .monitoring-page ~ .el-input__inner,
+html body .monitoring-page .el-textarea__inner,
+html body .monitoring-page ~ .el-textarea__inner {
+  background: #0d1a26 !important;
+  border-color: #273846 !important;
+  color: #dce7ee !important;
+  border-radius: 6px !important;
 }
-:deep(.monitoring-drawer) { background: #121212; }
-:deep(.el-table) { background: #1a1a1a; color: #ffffff; }
-:deep(.el-table th) { background: #171717 !important; color: #ffffff !important; }
-:deep(.el-table tr),
-:deep(.el-table td) { background: #1a1a1a !important; color: #ffffff !important; }
-:deep(.el-table::before) { background-color: #d7dee8; }
-:deep(.el-radio-button__inner) {
-  background: #1a1a1a;
-  color: #ffffff;
-  border-color: #cbd5e1;
+html body .monitoring-page .el-input__inner:focus,
+html body .monitoring-page ~ .el-input__inner:focus,
+html body .monitoring-page .el-textarea__inner:focus,
+html body .monitoring-page ~ .el-textarea__inner:focus {
+  border-color: #38bdf8 !important;
 }
-:deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner) {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+html body .monitoring-page .el-input__inner::placeholder,
+html body .monitoring-page ~ .el-input__inner::placeholder,
+html body .monitoring-page .el-textarea__inner::placeholder,
+html body .monitoring-page ~ .el-textarea__inner::placeholder {
+  color: #5a6d7d !important;
 }
-.page-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: calc(100vh - 104px);
+html body .monitoring-page .el-button,
+html body .monitoring-page ~ .el-button {
+  border-radius: 6px !important;
 }
-.page-toolbar,
-.workflow-strip,
-.zone {
-  background: #1a1a1a;
-  border: 1px solid #d7dee8;
-  border-radius: 8px;
+html body .monitoring-page .el-button--default,
+html body .monitoring-page ~ .el-button--default {
+  background: #0d1a26 !important;
+  border-color: #273846 !important;
+  color: #dce7ee !important;
 }
-.page-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
+html body .monitoring-page .el-button--default:hover,
+html body .monitoring-page ~ .el-button--default:hover {
+  background: #1a2d3d !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
 }
-.page-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: #ffffff;
+html body .monitoring-page .el-button--primary,
+html body .monitoring-page ~ .el-button--primary {
+  background: rgba(56, 189, 248, 0.15) !important;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+  color: #38bdf8 !important;
 }
-.page-subtitle {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #ffffff;
-}
-.toolbar-actions,
-.zone-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.workflow-strip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding: 10px;
-}
-.workflow-step {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #ffffff;
-}
-.workflow-step span {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #333333;
-  color: #ffffff;
-  font-size: 12px;
-}
-.workflow-step.active span {
-  background: #2563eb;
-  color: #ffffff;
-}
-.monitor-layout {
-  display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(280px, 360px);
-  gap: 12px;
-  min-height: 620px;
-}
-.zone {
-  min-width: 0;
-  padding: 12px;
-}
-.zone-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-  font-weight: 700;
-  color: #ffffff;
-}
-.channel-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.channel-tile {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 8px;
-  min-height: 96px;
-  padding: 10px;
-  border: 1px solid #d7dee8;
-  border-radius: 8px;
-  background: #171717;
-  color: #ffffff;
-  text-align: left;
-  cursor: pointer;
-}
-.channel-tile.active {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
-}
-.channel-tile.warning { border-color: rgba(217, 119, 6, 0.46); }
-.channel-tile.danger { border-color: rgba(220, 38, 38, 0.46); }
-.channel-tile strong {
-  grid-column: 1 / -1;
-  font-size: 24px;
-  line-height: 1.1;
-}
-.channel-tile small {
-  color: #ffffff;
-}
-.kpi-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.kpi-item {
-  padding: 12px;
-  border: 1px solid #333333;
-  border-radius: 8px;
-  background: #171717;
-}
-.kpi-item span,
-.kpi-item small {
-  display: block;
-  color: #ffffff;
-  font-size: 12px;
-}
-.kpi-item strong {
-  display: block;
-  margin: 6px 0 2px;
-  font-size: 26px;
-  line-height: 1.1;
-  color: #ffffff;
-}
-.primary-chart {
-  width: 100%;
-  height: 420px;
-  border: 1px solid #333333;
-  border-radius: 8px;
-  background: #1a1a1a;
-}
-.log-zone,
-.drawer-log-zone {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.drawer-grid {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 360px;
-  gap: 12px;
-  padding: 12px;
-  min-height: 0;
-  flex: 1;
-}
-.metric-zone {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-}
-@media (max-width: 1200px) {
-  .page-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .monitor-layout,
-  .drawer-grid {
-    grid-template-columns: 1fr;
-  }
-  .workflow-strip,
-  .kpi-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .channel-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .metric-row { grid-template-columns: 1fr; }
-  .drawer-topbar { flex-direction: column; align-items: flex-start; }
-  .wave-chart { height: 260px; }
-  .primary-chart { height: 320px; }
-}
-@media (max-width: 768px) {
-  .workflow-strip,
-  .channel-grid,
-  .kpi-row {
-    grid-template-columns: 1fr;
-  }
+html body .monitoring-page .el-button--primary:hover,
+html body .monitoring-page ~ .el-button--primary:hover {
+  background: rgba(56, 189, 248, 0.25) !important;
+  border-color: #38bdf8 !important;
 }
 </style>

@@ -1,6 +1,6 @@
--- 清理侧边栏冗余业务菜单
--- 背景：监测与数据、诊断分析已由 ruoyi-ui/src/router/index.js 的 constantRoutes 管理；
---      数据库中旧的“监测中心”“专业分析工具包”动态菜单会造成侧边栏重复。
+-- Deprecated compatibility cleanup.
+-- New installations and upgrades should execute sensor_module_menu_migration.sql,
+-- because industrial monitoring, diagnosis and PHM menus are now backend-managed.
 
 START TRANSACTION;
 

@@ -7,21 +7,27 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <resultMap type="DeviceTemperatureData" id="DeviceTemperatureDataResult">
         <result property="dataId"    column="data_id"    />
         <result property="deviceCode"    column="device_code"    />
+        <result property="pointId"    column="point_id"    />
+        <result property="channelId"    column="channel_id"    />
         <result property="temperatureValue"    column="temperature_value"    />
         <result property="collectionTime"    column="collection_time"    />
+        <result property="quality"    column="quality"    />
+        <result property="receiveTime"    column="receive_time"    />
         <result property="createTime"    column="create_time"    />
         <result property="updateTime"    column="update_time"    />
         <result property="remark"    column="remark"    />
     </resultMap>
 
     <sql id="selectDeviceTemperatureDataVo">
-        select data_id, device_code, temperature_value, collection_time, create_time, update_time, remark from device_temperature_data
+        select data_id, device_code, point_id, channel_id, temperature_value, collection_time, quality, receive_time, create_time, update_time, remark from device_temperature_data
     </sql>
 
     <select id="selectDeviceTemperatureDataList" parameterType="DeviceTemperatureData" resultMap="DeviceTemperatureDataResult">
         <include refid="selectDeviceTemperatureDataVo"/>
         <where>
             <if test="deviceCode != null and deviceCode != ''"> and device_code = #{deviceCode}</if>
+            <if test="pointId != null"> and point_id = #{pointId}</if>
+            <if test="channelId != null"> and channel_id = #{channelId}</if>
             <if test="temperatureValue != null"> and temperature_value = #{temperatureValue}</if>
         </where>
         order by collection_time desc
@@ -42,15 +48,23 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         insert into device_temperature_data
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="deviceCode != null and deviceCode != ''">device_code,</if>
+            <if test="pointId != null">point_id,</if>
+            <if test="channelId != null">channel_id,</if>
             <if test="temperatureValue != null">temperature_value,</if>
             <if test="collectionTime != null">collection_time,</if>
+            <if test="quality != null">quality,</if>
+            <if test="receiveTime != null">receive_time,</if>
             <if test="createTime != null">create_time,</if>
             <if test="remark != null">remark,</if>
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="deviceCode != null and deviceCode != ''">#{deviceCode},</if>
+            <if test="pointId != null">#{pointId},</if>
+            <if test="channelId != null">#{channelId},</if>
             <if test="temperatureValue != null">#{temperatureValue},</if>
             <if test="collectionTime != null">#{collectionTime},</if>
+            <if test="quality != null">#{quality},</if>
+            <if test="receiveTime != null">#{receiveTime},</if>
             <if test="createTime != null">#{createTime},</if>
             <if test="remark != null">#{remark},</if>
         </trim>
@@ -60,8 +74,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         update device_temperature_data
         <trim prefix="SET" suffixOverrides=",">
             <if test="deviceCode != null and deviceCode != ''">device_code = #{deviceCode},</if>
+            <if test="pointId != null">point_id = #{pointId},</if>
+            <if test="channelId != null">channel_id = #{channelId},</if>
             <if test="temperatureValue != null">temperature_value = #{temperatureValue},</if>
             <if test="collectionTime != null">collection_time = #{collectionTime},</if>
+            <if test="quality != null">quality = #{quality},</if>
+            <if test="receiveTime != null">receive_time = #{receiveTime},</if>
             <if test="updateTime != null">update_time = #{updateTime},</if>
             <if test="remark != null">remark = #{remark},</if>
         </trim>

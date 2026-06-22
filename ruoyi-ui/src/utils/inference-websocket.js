@@ -10,8 +10,7 @@
  *   const unsub = inferenceWs.subscribe((event, payload) => {
  *     if (event === 'message') handleMessage(payload)
  *   })
- *   inferenceWs.connect()                    // default gear service (port 5000)
- *   inferenceWs.connect('http://127.0.0.1:5001')  // bearing service (port 5001)
+ *   inferenceWs.connect() // uses VUE_APP_INFERENCE_SERVICE_URL
  *
  *   // on destroy:
  *   unsub()
@@ -26,7 +25,10 @@ let listeners = []
 let currentBaseUrl = null
 
 function getWsUrl() {
-  const base = currentBaseUrl || process.env.VUE_APP_INFERENCE_SERVICE_URL || 'http://127.0.0.1:5000'
+  const base = currentBaseUrl || process.env.VUE_APP_INFERENCE_SERVICE_URL
+  if (!base) {
+    throw new Error('未配置推理 WebSocket 服务地址')
+  }
   return base.replace(/^http/, 'ws') + '/ws'
 }
 
@@ -58,8 +60,8 @@ function scheduleReconnect() {
 }
 
 /**
- * @param {string} [customUrl] - Optional base URL (e.g. 'http://127.0.0.1:5001').
- *   If omitted, uses VUE_APP_INFERENCE_SERVICE_URL default (port 5000).
+ * @param {string} [customUrl] - Optional base URL.
+ *   If omitted, uses VUE_APP_INFERENCE_SERVICE_URL.
  */
 function connect(customUrl) {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {

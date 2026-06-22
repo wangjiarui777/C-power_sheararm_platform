@@ -80,7 +80,7 @@ public class SensorSignalComputeService
         storageFeatureVo.setAlarmMessage(featureVo.getAlarmMessage());
 
         SensorSampleDto sample = new SensorSampleDto(packet.deviceCode, packet.sampleTime, packet.sampleRate, packet.waveform);
-        storageService.asyncSave(sample, storageFeatureVo, freqAmplitude, alarm, packet.channelId);
+        storageService.asyncSave(sample, storageFeatureVo, freqAmplitude, alarm, packet.channelId, null);
         pushService.pushFeature(featureVo);
     }
 

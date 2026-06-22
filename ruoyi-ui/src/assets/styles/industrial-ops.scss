@@ -1,0 +1,687 @@
+:root,
+.app-wrapper {
+  --ops-accent: var(--current-color, #22d3ee);
+  --ops-accent-soft: var(--current-color-light, rgba(34, 211, 238, 0.12));
+  --ops-accent-strong: var(--current-color-dark-bg, rgba(34, 211, 238, 0.24));
+  --ops-bg: #09111d;
+  --ops-bg-deep: #060d18;
+  --ops-surface: rgba(15, 25, 42, 0.92);
+  --ops-surface-2: rgba(18, 31, 50, 0.96);
+  --ops-surface-3: rgba(10, 19, 33, 0.96);
+  --ops-border: rgba(120, 153, 186, 0.22);
+  --ops-border-strong: rgba(120, 153, 186, 0.38);
+  --ops-shadow: 0 18px 40px rgba(2, 8, 20, 0.32);
+  --ops-shadow-soft: 0 10px 24px rgba(2, 8, 20, 0.2);
+  --ops-text: #d8e4ef;
+  --ops-heading: #f5fbff;
+  --ops-muted: #8ea4ba;
+  --ops-success: #10b981;
+  --ops-warning: #f59e0b;
+  --ops-danger: #ef4444;
+  --ops-violet: #8b5cf6;
+}
+
+html body #app {
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.11), transparent 28%),
+    linear-gradient(180deg, #0d1728 0%, #08111d 100%) !important;
+}
+
+html body #app .main-container,
+html body #app .app-main {
+  background: transparent !important;
+}
+
+html body #app .app-container,
+html body #app .monitoring-page,
+html body #app .analysis-page,
+html body #app .diagnosis-page,
+html body #app .diagnosis-dashboard-page,
+html body #app .brain-page,
+html body #app .alarm-page,
+html body #app .monitoring-data-page {
+  color: var(--ops-text) !important;
+}
+
+html body #app .app-container,
+html body #app .monitoring-page,
+html body #app .analysis-page,
+html body #app .diagnosis-page {
+  background: transparent !important;
+}
+
+html body #app .app-container {
+  padding-top: 16px;
+}
+
+html body #app .panel,
+html body #app .brain-panel,
+html body #app .sidebar-card,
+html body #app .diagnosis-card,
+html body #app .trend-box,
+html body #app .filter-bar,
+html body #app .page-head,
+html body #app .phm-header,
+html body #app .dashboard-topbar,
+html body #app .toolbar,
+html body #app .metric-strip > div,
+html body #app .kpi-strip > div,
+html body #app .metric-grid .metric-card,
+html body #app .summary-strip > div,
+html body #app .device-strip > div,
+html body #app .good-rate-panel,
+html body #app .event-panel,
+html body #app .month-card,
+html body #app .point-card,
+html body #app .feature-grid > div,
+html body #app .rule-values span,
+html body #app .rule-grid span,
+html body #app .alarm-item,
+html body #app .alarm-list button,
+html body #app .event-list article,
+html body #app .device-item,
+html body #app .morph-card {
+  background: linear-gradient(180deg, rgba(20, 34, 55, 0.96), rgba(11, 21, 37, 0.98)) !important;
+  border: 1px solid var(--ops-border) !important;
+  box-shadow: var(--ops-shadow-soft);
+}
+
+html body #app .panel,
+html body #app .brain-panel,
+html body #app .sidebar-card,
+html body #app .diagnosis-card,
+html body #app .trend-box,
+html body #app .filter-bar,
+html body #app .page-head,
+html body #app .phm-header,
+html body #app .dashboard-topbar,
+html body #app .toolbar {
+  border-radius: 16px !important;
+  position: relative;
+  overflow: hidden;
+}
+
+html body #app .panel::before,
+html body #app .brain-panel::before,
+html body #app .sidebar-card::before,
+html body #app .diagnosis-card::before,
+html body #app .trend-box::before,
+html body #app .filter-bar::before,
+html body #app .page-head::before,
+html body #app .phm-header::before,
+html body #app .dashboard-topbar::before,
+html body #app .toolbar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ops-accent), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+html body #app .page-title,
+html body #app .brand-title,
+html body #app .drawer-title,
+html body #app .panel-head strong,
+html body #app .panel-head h3,
+html body #app .page-head h2,
+html body #app .phm-header h2,
+html body #app .brain-hero h2,
+html body #app .dashboard-topbar .page-title {
+  color: var(--ops-heading) !important;
+  letter-spacing: 0.02em;
+}
+
+html body #app .page-subtitle,
+html body #app .brand-subtitle,
+html body #app .panel-head span,
+html body #app .page-head p,
+html body #app .phm-header p,
+html body #app .eyebrow,
+html body #app .brain-hero p,
+html body #app .legend-note,
+html body #app .topbar-time,
+html body #app .empty-tip,
+html body #app .empty-card,
+html body #app .empty-state,
+html body #app .chart-empty {
+  color: var(--ops-muted) !important;
+}
+
+html body #app .metric-strip strong,
+html body #app .kpi-strip strong,
+html body #app .metric-grid .metric-card strong,
+html body #app .summary-strip strong,
+html body #app .device-strip strong,
+html body #app .feature-grid strong,
+html body #app .brain-status strong,
+html body #app .diagnosis-card strong,
+html body #app .metric-value,
+html body #app .point-values b {
+  color: var(--ops-heading) !important;
+  font-family: "Bahnschrift SemiBold", "DIN Alternate", Consolas, monospace;
+}
+
+html body #app .metric-strip span,
+html body #app .metric-strip small,
+html body #app .kpi-strip span,
+html body #app .kpi-strip small,
+html body #app .metric-grid .metric-card span,
+html body #app .summary-strip span,
+html body #app .device-strip span,
+html body #app .feature-grid span,
+html body #app .feature-grid small,
+html body #app .point-sub,
+html body #app .alarm-item small,
+html body #app .alarm-meta,
+html body #app .event-list small,
+html body #app .event-list em {
+  color: var(--ops-muted) !important;
+}
+
+html body #app .quality-banner {
+  border: 1px solid var(--ops-border) !important;
+  border-left: 4px solid var(--ops-border-strong) !important;
+  border-radius: 12px;
+  background: rgba(8, 18, 31, 0.85) !important;
+}
+
+html body #app .quality-banner.good {
+  border-left-color: var(--ops-success) !important;
+}
+
+html body #app .quality-banner.stale,
+html body #app .quality-banner.warning {
+  border-left-color: var(--ops-warning) !important;
+}
+
+html body #app .quality-banner.bad,
+html body #app .quality-banner.offline,
+html body #app .quality-banner.alarm {
+  border-left-color: var(--ops-danger) !important;
+}
+
+html body #app .analysis-chart,
+html body #app .temperature-chart,
+html body #app .trend-chart {
+  background:
+    linear-gradient(180deg, rgba(8, 16, 28, 0.96), rgba(9, 18, 31, 0.86)) !important;
+  border: 1px solid var(--ops-border) !important;
+  border-radius: 14px !important;
+}
+
+html body #app .alarm-item,
+html body #app .alarm-list button {
+  border-left-width: 4px !important;
+}
+
+html body #app .alarm-item.warning,
+html body #app .alarm-list i.warning,
+html body #app .legend-note .gap {
+  color: var(--ops-warning) !important;
+  background: var(--ops-warning) !important;
+}
+
+html body #app .alarm-item.alarm,
+html body #app .alarm-list i.alarm {
+  color: var(--ops-danger) !important;
+  background: var(--ops-danger) !important;
+}
+
+html body #app .empty-state,
+html body #app .empty-card,
+html body #app .morphology-empty {
+  border: 1px dashed var(--ops-border-strong) !important;
+  border-radius: 14px !important;
+  background: rgba(8, 17, 30, 0.55) !important;
+}
+
+html body #app .brain-hero,
+html body #app .dashboard-shell,
+html body #app .workbench-layout,
+html body #app .analysis-layout,
+html body #app .temperature-layout {
+  gap: 16px !important;
+}
+
+html body #app .good-rate-panel {
+  padding: 16px 18px;
+}
+
+html body #app .good-rate-head strong,
+html body #app .good-rate-item strong,
+html body #app .month-card strong,
+html body #app .device-card h3,
+html body #app .event-card strong {
+  color: var(--ops-heading) !important;
+}
+
+html body #app .good-rate-head span,
+html body #app .good-rate-item,
+html body #app .good-rate-item small,
+html body #app .month-card span,
+html body #app .month-title,
+html body #app .device-card p,
+html body #app .mini-row span,
+html body #app .event-card p,
+html body #app .event-card small {
+  color: var(--ops-muted) !important;
+}
+
+html body #app .bar-track {
+  background: rgba(120, 153, 186, 0.14) !important;
+}
+
+html body #app .bar-fill {
+  background: linear-gradient(180deg, var(--ops-accent) 0%, #3b82f6 100%) !important;
+}
+
+html body #app .month-card.hasEvent {
+  background: linear-gradient(180deg, rgba(17, 48, 70, 0.92), rgba(11, 22, 37, 0.98)) !important;
+}
+
+html body #app .month-card.active {
+  border-color: var(--ops-accent) !important;
+  box-shadow: 0 14px 28px rgba(2, 8, 20, 0.26), 0 0 0 1px var(--ops-accent-soft) !important;
+}
+
+html body #app .event-dots i.access {
+  background: var(--ops-success) !important;
+}
+
+html body #app .event-dots i.repair {
+  background: var(--ops-danger) !important;
+}
+
+html body #app .event-dots i.maintenance {
+  background: var(--ops-warning) !important;
+}
+
+html body #app .event-dots i.diagnosis,
+html body #app .event-dots i.alarm_handle {
+  background: var(--ops-accent) !important;
+}
+
+html body #app .attachment-thumb,
+html body #app .config-logo-preview,
+html body #app .system-logo {
+  border: 1px solid var(--ops-border) !important;
+  border-radius: 10px !important;
+  background: rgba(9, 17, 29, 0.78) !important;
+}
+
+html body #app .el-tabs__nav-wrap::after {
+  background-color: rgba(120, 153, 186, 0.14) !important;
+}
+
+html body #app .el-tabs__item {
+  color: var(--ops-muted) !important;
+}
+
+html body #app .el-tabs__item.is-active,
+html body #app .el-tabs__item:hover {
+  color: var(--ops-heading) !important;
+}
+
+html body #app .el-tabs__active-bar {
+  background: linear-gradient(90deg, var(--ops-accent), #3b82f6) !important;
+}
+
+html body #app .config-page .el-tabs__content,
+html body #app .report-page .el-tabs__content {
+  margin-top: 10px;
+}
+
+html body #app .config-page .toolbar,
+html body #app .report-page .filter-bar,
+html body #app .event-page .filter-bar,
+html body #app .phm-page .filter-bar {
+  padding: 14px 16px;
+}
+
+html body #app .sidebar-brand .brand-icon,
+html body #app .brain-status strong,
+html body #app .diagnosis-card span,
+html body #app .metric-icon,
+html body #app .point-marker {
+  color: var(--ops-accent) !important;
+}
+
+html body #app .point-marker {
+  border: 1px solid var(--ops-accent-strong) !important;
+  box-shadow: 0 0 0 4px rgba(10, 18, 32, 0.7);
+}
+
+html body #app .device-item.active,
+html body #app .point-card:hover,
+html body #app .morph-card:hover,
+html body #app .alarm-item:hover,
+html body #app .alarm-list button:hover,
+html body #app .feature-grid > div:hover {
+  border-color: var(--ops-accent) !important;
+  box-shadow: 0 16px 32px rgba(3, 10, 18, 0.34), 0 0 0 1px var(--ops-accent-soft);
+}
+
+html body #app .el-button--primary,
+html body #app .el-button--primary.is-plain:hover,
+html body #app .el-button--primary.is-plain:focus {
+  background: linear-gradient(135deg, var(--ops-accent), #4da7ff) !important;
+  border-color: transparent !important;
+  color: #06101d !important;
+  box-shadow: 0 10px 20px rgba(34, 211, 238, 0.18);
+}
+
+html body #app .el-button.is-plain,
+html body #app .el-button:not(.el-button--primary) {
+  border-color: var(--ops-border-strong) !important;
+}
+
+html body #app .el-button:not(.el-button--primary):hover,
+html body #app .el-button:not(.el-button--primary):focus {
+  color: var(--ops-heading) !important;
+  border-color: var(--ops-accent) !important;
+  background: rgba(12, 21, 36, 0.92) !important;
+}
+
+html body #app .el-tag {
+  border-radius: 999px !important;
+  border-color: transparent !important;
+}
+
+html body #app .filter-bar,
+html body #app .toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+html body #app .filter-bar {
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+html body #app .page-head {
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+html body #app .dashboard-sidebar,
+html body #app .dashboard-main,
+html body #app .dashboard-shell,
+html body #app .brain-grid,
+html body #app .workbench-layout,
+html body #app .analysis-layout,
+html body #app .temperature-layout {
+  align-items: start;
+}
+
+html body #app .setting-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+html body #app .setting-preset {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 153, 186, 0.22);
+  background: linear-gradient(180deg, rgba(19, 31, 52, 0.92), rgba(10, 19, 33, 0.98));
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+html body #app .setting-preset:hover {
+  transform: translateY(-1px);
+  border-color: var(--ops-accent);
+}
+
+html body #app .setting-preset.active {
+  border-color: var(--ops-accent);
+  box-shadow: 0 0 0 1px var(--ops-accent-soft);
+}
+
+html body #app .setting-preset-chip {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+  background: linear-gradient(90deg, var(--preset-color), rgba(255, 255, 255, 0.18));
+}
+
+html body #app .setting-preset-title {
+  color: var(--ops-heading);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+html body #app .setting-preset-desc {
+  margin-top: 4px;
+  color: var(--ops-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+html body .phm-page .el-dialog,
+html body .brain-page .el-dialog,
+html body .alarm-page .el-dialog,
+html body .event-page .el-dialog,
+html body .config-page .el-dialog,
+html body .report-page .el-dialog,
+html body .dark-dialog {
+  background: linear-gradient(180deg, rgba(16, 28, 46, 0.98), rgba(9, 17, 29, 0.98)) !important;
+  border: 1px solid var(--ops-border) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 24px 56px rgba(2, 8, 20, 0.44) !important;
+  overflow: hidden !important;
+}
+
+html body .phm-page .el-dialog__header,
+html body .brain-page .el-dialog__header,
+html body .alarm-page .el-dialog__header,
+html body .event-page .el-dialog__header,
+html body .config-page .el-dialog__header,
+html body .report-page .el-dialog__header,
+html body .dark-dialog .el-dialog__header {
+  background: rgba(8, 16, 28, 0.94) !important;
+  border-bottom: 1px solid var(--ops-border) !important;
+  padding: 18px 20px 14px !important;
+}
+
+html body .phm-page .el-dialog__title,
+html body .brain-page .el-dialog__title,
+html body .alarm-page .el-dialog__title,
+html body .event-page .el-dialog__title,
+html body .config-page .el-dialog__title,
+html body .report-page .el-dialog__title,
+html body .dark-dialog .el-dialog__title {
+  color: var(--ops-heading) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
+}
+
+html body .phm-page .el-dialog__body,
+html body .brain-page .el-dialog__body,
+html body .alarm-page .el-dialog__body,
+html body .event-page .el-dialog__body,
+html body .config-page .el-dialog__body,
+html body .report-page .el-dialog__body,
+html body .dark-dialog .el-dialog__body {
+  color: var(--ops-text) !important;
+  background: transparent !important;
+}
+
+html body .phm-page .el-dialog__footer,
+html body .brain-page .el-dialog__footer,
+html body .alarm-page .el-dialog__footer,
+html body .event-page .el-dialog__footer,
+html body .config-page .el-dialog__footer,
+html body .report-page .el-dialog__footer,
+html body .dark-dialog .el-dialog__footer {
+  background: rgba(8, 16, 28, 0.94) !important;
+  border-top: 1px solid var(--ops-border) !important;
+  padding: 14px 20px 18px !important;
+}
+
+html body .dark-dialog .el-dialog__headerbtn .el-dialog__close,
+html body .dark-dialog .el-range-separator,
+html body .dark-dialog .el-date-editor .el-range__icon,
+html body .dark-dialog .el-date-editor .el-range__close-icon,
+html body .dark-dialog .el-input__prefix,
+html body .dark-dialog .el-input__suffix {
+  color: var(--ops-muted) !important;
+}
+
+html body .dark-dialog .el-dialog__headerbtn .el-dialog__close:hover {
+  color: var(--ops-accent) !important;
+}
+
+html body .dark-dialog .el-input__inner,
+html body .dark-dialog .el-date-editor .el-range-input {
+  background: rgba(9, 17, 29, 0.86) !important;
+  border-color: var(--ops-border) !important;
+  color: var(--ops-heading) !important;
+}
+
+html body .dark-dialog .el-input__inner::placeholder {
+  color: var(--ops-muted) !important;
+}
+
+html body .dark-dialog .el-input__inner:hover,
+html body .dark-dialog .el-input__inner:focus {
+  border-color: var(--ops-accent) !important;
+  box-shadow: 0 0 0 1px var(--ops-accent-soft) !important;
+}
+
+html body .dark-dialog .el-button {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+
+html body .dark-dialog .el-button--default {
+  background: rgba(9, 17, 29, 0.92) !important;
+  border-color: var(--ops-border) !important;
+  color: var(--ops-text) !important;
+}
+
+html body .dark-dialog .el-button--primary {
+  background: var(--ops-accent-soft) !important;
+  border-color: var(--ops-accent) !important;
+  color: var(--ops-accent) !important;
+}
+
+html body .dark-date-picker,
+html body .dark-select-dropdown.el-select-dropdown {
+  background: linear-gradient(180deg, rgba(16, 28, 46, 0.98), rgba(9, 17, 29, 0.98)) !important;
+  border: 1px solid var(--ops-border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 24px 56px rgba(2, 8, 20, 0.44) !important;
+  color: var(--ops-text) !important;
+}
+
+html body .dark-select-dropdown .el-select-dropdown__item {
+  color: var(--ops-text) !important;
+}
+
+html body .dark-select-dropdown .el-select-dropdown__item.hover,
+html body .dark-select-dropdown .el-select-dropdown__item:hover {
+  background: rgba(34, 211, 238, 0.1) !important;
+}
+
+html body .dark-select-dropdown .el-select-dropdown__item.selected {
+  color: var(--ops-accent) !important;
+  font-weight: 700 !important;
+}
+
+html body .dark-select-dropdown .el-select-dropdown__empty {
+  color: var(--ops-muted) !important;
+}
+
+html body .dark-date-picker .el-picker-panel__body-wrapper,
+html body .dark-date-picker .el-picker-panel__content,
+html body .dark-date-picker .el-picker-panel__footer,
+html body .dark-date-picker .el-time-panel {
+  background: transparent !important;
+}
+
+html body .dark-date-picker .el-date-range-picker__header,
+html body .dark-date-picker .el-date-range-picker__header button,
+html body .dark-date-picker .el-time-spinner__item {
+  color: var(--ops-muted) !important;
+}
+
+html body .dark-date-picker .el-date-table th {
+  color: var(--ops-muted) !important;
+  border-bottom-color: var(--ops-border) !important;
+}
+
+html body .dark-date-picker .el-date-table td {
+  color: var(--ops-text) !important;
+}
+
+html body .dark-date-picker .el-date-table td.available:hover,
+html body .dark-date-picker .el-date-table td.today span,
+html body .dark-date-picker .el-time-spinner__item.active:not(.disabled) {
+  color: var(--ops-accent) !important;
+}
+
+html body .dark-date-picker .el-date-table td.in-range div {
+  background: rgba(34, 211, 238, 0.1) !important;
+}
+
+html body .dark-date-picker .el-date-table td.current:not(.disabled) span,
+html body .dark-date-picker .el-date-table td.start-date span,
+html body .dark-date-picker .el-date-table td.end-date span {
+  background: var(--ops-accent) !important;
+  color: #06111d !important;
+}
+
+html body .dark-date-picker .el-date-table td.disabled div,
+html body .dark-date-picker .el-date-table td.next-month,
+html body .dark-date-picker .el-date-table td.prev-month {
+  background: transparent !important;
+  color: rgba(142, 164, 186, 0.45) !important;
+}
+
+html body #app .el-empty__description p,
+html body #app .el-empty__description {
+  color: var(--ops-muted) !important;
+}
+
+html body #app .el-link--default,
+html body #app .el-link--primary,
+html body #app .table-link {
+  color: var(--ops-accent) !important;
+}
+
+html body #app .el-link--danger {
+  color: var(--ops-danger) !important;
+}
+
+html body #app .el-link:hover,
+html body #app .table-link:hover {
+  opacity: 0.88;
+}
+
+html body #app .el-pagination__total,
+html body #app .el-pagination__jump,
+html body #app .el-pagination__sizes {
+  color: var(--ops-muted) !important;
+}
+
+html body #app .el-pagination button,
+html body #app .el-pagination .el-pager li {
+  background: rgba(10, 18, 31, 0.86) !important;
+  border: 1px solid var(--ops-border) !important;
+  color: var(--ops-text) !important;
+  border-radius: 10px !important;
+}
+
+html body #app .el-pagination .el-pager li.active,
+html body #app .el-pagination .el-pager li:hover,
+html body #app .el-pagination button:hover {
+  border-color: var(--ops-accent) !important;
+  color: var(--ops-heading) !important;
+  box-shadow: 0 0 0 1px var(--ops-accent-soft);
+}

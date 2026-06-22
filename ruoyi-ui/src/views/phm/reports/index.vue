@@ -242,17 +242,17 @@ export default {
 </script>
 
 <style scoped>
-.report-page { background: #f6f8fb; min-height: calc(100vh - 84px); }
+.report-page { min-height: calc(100vh - 84px); }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.page-head h2 { margin: 0 0 6px; color: #0f172a; }
-.page-head p { margin: 0; color: #64748b; }
+.page-head h2 { margin: 0 0 6px; }
+.page-head p { margin: 0; }
 .filter-bar { display: flex; gap: 10px; margin-bottom: 14px; }
 .filter-bar .el-input, .filter-bar .el-select { width: 220px; }
 .table-link { margin-left: 10px; }
 .summary-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-.summary-strip div { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
-.summary-strip span { color: #64748b; font-size: 12px; }
-.summary-strip strong { display: block; margin-top: 6px; color: #0f172a; font-size: 22px; }
+.summary-strip div { padding: 12px 14px; border-radius: 14px; }
+.summary-strip span { font-size: 12px; }
+.summary-strip strong { display: block; margin-top: 6px; font-size: 22px; }
 @media (max-width: 780px) {
   .page-head, .filter-bar { flex-direction: column; align-items: stretch; }
   .filter-bar .el-input, .filter-bar .el-select { width: 100%; }

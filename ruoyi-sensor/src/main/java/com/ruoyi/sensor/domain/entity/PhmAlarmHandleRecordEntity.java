@@ -18,6 +18,7 @@ public class PhmAlarmHandleRecordEntity
     private String ignoreReason;
     private String beforeStatus;
     private String afterStatus;
+    private String assignee;
     private String remark;
     private Date createTime;
 }

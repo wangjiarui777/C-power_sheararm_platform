@@ -12,6 +12,8 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import com.ruoyi.common.core.domain.model.LoginUser;
+import com.ruoyi.common.core.domain.model.WebSocketTicketPrincipal;
+import com.ruoyi.common.core.security.WebSocketTicketService;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.framework.web.service.TokenService;
@@ -27,6 +29,9 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter
     @Autowired
     private TokenService tokenService;
 
+    @Autowired
+    private WebSocketTicketService webSocketTicketService;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException
@@ -39,6 +44,25 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter
             authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authenticationToken);
         }
+        else if (StringUtils.isNull(SecurityUtils.getAuthentication()) && isWebSocketHandshake(request))
+        {
+            WebSocketTicketPrincipal principal = webSocketTicketService.peek(request.getParameter("ticket"));
+            if (principal != null)
+            {
+                UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+                        principal.getUsername(), null, principal.getPermissions().stream()
+                                .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+                                .toList());
+                authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+            }
+        }
         chain.doFilter(request, response);
+    }
+
+    private boolean isWebSocketHandshake(HttpServletRequest request)
+    {
+        String uri = request.getRequestURI();
+        return uri != null && (uri.endsWith("/ws/sensor") || uri.endsWith("/ws/monitoring"));
     }
 }

@@ -15,22 +15,18 @@ import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
 import com.ruoyi.sensor.service.ChannelFrameIngestService;
 import com.ruoyi.sensor.service.SensorStorageService;
 import com.ruoyi.sensor.service.SensorWebSocketPushService;
-import com.ruoyi.sensor.tdengine.SensorTdengineWriter;
 
 @Service
 public class ChannelFrameIngestServiceImpl implements ChannelFrameIngestService
 {
     private static final int MAX_BATCH_LINES = 2000;
 
-    private final SensorTdengineWriter tdengineWriter;
     private final SensorStorageService storageService;
     private final SensorWebSocketPushService webSocketPushService;
 
-    public ChannelFrameIngestServiceImpl(SensorTdengineWriter tdengineWriter,
-                                         SensorStorageService storageService,
+    public ChannelFrameIngestServiceImpl(SensorStorageService storageService,
                                          SensorWebSocketPushService webSocketPushService)
     {
-        this.tdengineWriter = tdengineWriter;
         this.storageService = storageService;
         this.webSocketPushService = webSocketPushService;
     }
@@ -71,15 +67,13 @@ public class ChannelFrameIngestServiceImpl implements ChannelFrameIngestService
 
         Db.saveBatch(rawEntities);
         VibrationCsvRow last = rows.get(rows.size() - 1);
-        tdengineWriter.writeRawWave(dto.getDeviceCode(), last.getChannelId(), SensorSampleDtoAdapter.sample(dto.getDeviceCode(), rows, dto.getCollectTime()));
-        tdengineWriter.writeFftPoints(dto.getDeviceCode(), last.getChannelId(), SensorSampleDtoAdapter.amplitudes(rows));
-        tdengineWriter.writeCsvRecord(dto.getDeviceCode(), last.getChannelId(), last.getRecord(), last.getSampleTime());
         storageService.asyncSave(
             SensorSampleDtoAdapter.sample(dto.getDeviceCode(), rows, dto.getCollectTime()),
             SensorSampleDtoAdapter.feature(dto.getDeviceCode(), last),
             SensorSampleDtoAdapter.amplitudes(rows),
             last.getRecord().getFaultSize() != null && last.getRecord().getFaultSize() >= 5.0d,
-            last.getChannelId()
+            last.getChannelId(),
+            last.getRecord()
         );
     }
 
