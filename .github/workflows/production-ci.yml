@@ -1,0 +1,43 @@
+name: production-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ruoyi-ui/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Java tests and package
+        run: mvn --batch-mode clean test package
+      - name: Frontend audit and build
+        working-directory: ruoyi-ui
+        run: |
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          npm run build:prod
+      - name: Python syntax validation
+        run: python -m compileall -q ruoyi-sensor/inference
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phm-build
+          path: |
+            ruoyi-admin/target/ruoyi-admin.jar
+            ruoyi-ui/dist

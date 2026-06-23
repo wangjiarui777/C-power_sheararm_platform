@@ -1,0 +1,37 @@
+groups:
+  - name: phm-platform
+    rules:
+      - alert: PhmJavaDown
+        expr: up{job="phm-java"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "PHM Java platform is unavailable" }
+      - alert: PhmInferenceDown
+        expr: up{job="phm-inference"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "PHM inference service is unavailable" }
+      - alert: TelemetryDeadLetterIncreasing
+        expr: increase(phm_telemetry_dead_letter_total[10m]) > 0
+        labels: { severity: critical }
+        annotations: { summary: "Telemetry messages entered the dead-letter stream" }
+      - alert: TelemetryRetryRateHigh
+        expr: rate(phm_telemetry_retry_total[5m]) > 1
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Telemetry persistence retry rate is high" }
+      - alert: InferenceFailureRateHigh
+        expr: sum(rate(phm_inference_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(phm_inference_requests_total[5m])), 0.001) > 0.05
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Inference HTTP failure rate exceeds 5%" }
+      - alert: WindowsDiskSpaceLow
+        expr: windows_logical_disk_free_bytes{volume!~"HarddiskVolume.*"} / windows_logical_disk_size_bytes < 0.2
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "A Windows volume has less than 20% free space" }
+      - alert: WindowsDiskSpaceCritical
+        expr: windows_logical_disk_free_bytes{volume!~"HarddiskVolume.*"} / windows_logical_disk_size_bytes < 0.1
+        for: 5m
+        labels: { severity: critical }
+        annotations: { summary: "A Windows volume has less than 10% free space" }
