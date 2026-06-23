@@ -30,6 +30,9 @@ jobs:
           npm ci
           npm audit --omit=dev --audit-level=high
           npm run build:prod
+          npm run check:bundle
+          npx playwright install --with-deps chromium
+          npm run test:e2e
       - name: Python syntax validation
         run: python -m compileall -q ruoyi-sensor/inference
       - name: Secret scan
