@@ -9,11 +9,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.utils.DateUtils;
+import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.sensor.domain.entity.EnhancedInferenceRecordEntity;
+import com.ruoyi.sensor.domain.entity.InferenceTaskEntity;
+import com.ruoyi.sensor.mapper.InferenceTaskMapper;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisBatchEntity;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisRecordEntity;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
@@ -30,6 +35,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -58,6 +65,13 @@ public class VibrationDiagnosisController
     private final int connectTimeoutMs;
     private final int readTimeoutMs;
     private final RestClient restClient;
+
+    @Autowired
+    private InferenceTaskMapper inferenceTaskMapper;
+
+    @Autowired
+    @Qualifier("vibrationExecutor")
+    private Executor diagnosisExecutor;
 
     public VibrationDiagnosisController(TimeSeriesAnalysisService timeSeriesAnalysisService,
         VibrationAnalysisBatchService batchService,
@@ -141,6 +155,143 @@ public class VibrationDiagnosisController
             pushDiagnosis(failure);
             return AjaxResult.error("推理失败: " + ex.getMessage()).put("data", failure);
         }
+    }
+
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
+    @PostMapping("/tasks")
+    public AjaxResult createTask(@RequestBody Map<String, Object> payload)
+    {
+        if (payload == null || !hasText(payload.get("filePath")))
+        {
+            return AjaxResult.error("filePath 为必填项");
+        }
+        if (!hasText(payload.get("deviceCode")))
+        {
+            return AjaxResult.error("deviceCode 为必填项");
+        }
+        String modelType = stringValue(payload.get("modelType"), defaultModelType);
+        if (!Arrays.asList("gear", "bearing").contains(modelType))
+        {
+            return AjaxResult.error("modelType 仅支持 gear 或 bearing");
+        }
+
+        String idempotencyKey = stringValue(payload.get("idempotencyKey"), null);
+        if (idempotencyKey != null && !idempotencyKey.isBlank())
+        {
+            InferenceTaskEntity existing = inferenceTaskMapper.selectOne(
+                new LambdaQueryWrapper<InferenceTaskEntity>()
+                    .eq(InferenceTaskEntity::getIdempotencyKey, idempotencyKey)
+                    .last("limit 1"));
+            if (existing != null)
+            {
+                return AjaxResult.success(taskSummary(existing));
+            }
+        }
+
+        Date now = new Date();
+        InferenceTaskEntity task = new InferenceTaskEntity();
+        task.setRequestId(UUID.randomUUID().toString());
+        task.setIdempotencyKey(idempotencyKey);
+        task.setDeviceCode(String.valueOf(payload.get("deviceCode")).trim());
+        task.setPointId(toLong(payload.get("pointId"), null));
+        task.setChannelId(payload.get("channelId") == null ? null : (int) toNumber(payload.get("channelId"), 0));
+        task.setModelType(modelType);
+        task.setRequestedModelVersion(stringValue(payload.get("modelVersion"), null));
+        task.setInputType("FILE_PATH");
+        task.setInputRef(String.valueOf(payload.get("filePath")));
+        task.setInputSha256(stringValue(payload.get("inputSha256"), null));
+        task.setStatus("PENDING");
+        task.setInputJson(JSON.toJSONString(payload));
+        task.setCreatedBy(SecurityUtils.getUsername());
+        task.setCreateTime(now);
+        task.setUpdateTime(now);
+        inferenceTaskMapper.insert(task);
+
+        diagnosisExecutor.execute(() -> executeTask(task.getId()));
+        return AjaxResult.success(taskSummary(task));
+    }
+
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
+    @GetMapping("/tasks/{id}")
+    public AjaxResult getTask(@org.springframework.web.bind.annotation.PathVariable Long id)
+    {
+        InferenceTaskEntity task = inferenceTaskMapper.selectById(id);
+        return task == null ? AjaxResult.error("诊断任务不存在") : AjaxResult.success(task);
+    }
+
+    private void executeTask(Long taskId)
+    {
+        InferenceTaskEntity task = inferenceTaskMapper.selectById(taskId);
+        if (task == null || !"PENDING".equals(task.getStatus()))
+        {
+            return;
+        }
+        task.setStatus("RUNNING");
+        task.setStartTime(new Date());
+        task.setUpdateTime(new Date());
+        inferenceTaskMapper.updateById(task);
+
+        Map<String, Object> payload = JSON.parseObject(task.getInputJson(), Map.class);
+        payload.put("taskId", String.valueOf(task.getId()));
+        payload.put("requestId", task.getRequestId());
+        payload.put("modelType", task.getModelType());
+        payload.put("deviceCode", task.getDeviceCode());
+        payload.put("sampleTime", DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, new Date()));
+
+        Map<String, Object> pythonResult;
+        try
+        {
+            pythonResult = callPythonInfer(payload);
+        }
+        catch (Exception ex)
+        {
+            finishTask(task, "FAILED", "INFERENCE_UNAVAILABLE", ex.getMessage(), null);
+            pushDiagnosis(buildFailureResult(task.getDeviceCode(), task.getInputRef(), ex.getMessage()));
+            return;
+        }
+
+        try
+        {
+            validatePythonResult(pythonResult);
+            Map<String, Object> normalized = normalizePythonResult(
+                pythonResult, task.getDeviceCode(), task.getInputRef(), payload);
+            persistDiagnosis(normalized);
+            phmService.syncDiagnosisResult(normalized);
+            pushDiagnosis(normalized);
+            finishTask(task, "SUCCEEDED", null, null, normalized);
+        }
+        catch (Exception ex)
+        {
+            finishTask(task, "INVALID", "INVALID_RESULT", ex.getMessage(), pythonResult);
+        }
+    }
+
+    private void finishTask(InferenceTaskEntity task, String status, String errorCode,
+        String errorMessage, Object result)
+    {
+        task.setStatus(status);
+        task.setErrorCode(errorCode);
+        task.setErrorMessage(errorMessage == null ? null
+            : errorMessage.substring(0, Math.min(errorMessage.length(), 1000)));
+        task.setResultJson(result == null ? null : JSON.toJSONString(result));
+        task.setFinishTime(new Date());
+        task.setUpdateTime(new Date());
+        inferenceTaskMapper.updateById(task);
+    }
+
+    private Map<String, Object> taskSummary(InferenceTaskEntity task)
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", task.getId());
+        result.put("requestId", task.getRequestId());
+        result.put("status", task.getStatus());
+        result.put("createdAt", task.getCreateTime());
+        return result;
+    }
+
+    private boolean hasText(Object value)
+    {
+        return value != null && !String.valueOf(value).isBlank();
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")

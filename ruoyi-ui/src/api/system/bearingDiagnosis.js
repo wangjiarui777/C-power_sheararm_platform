@@ -56,13 +56,39 @@ export function uploadDiagnosisToInferenceService(formData, modelType = 'gear') 
   })
 }
 
-export function inferWithFilePath(data, modelType = 'gear') {
-  return request({
-    url: '/sensor/diagnosis/receiver/analyze',
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export async function inferWithFilePath(data, modelType = 'gear') {
+  const created = await request({
+    url: '/sensor/diagnosis/tasks',
     method: 'post',
     timeout: INFER_TIMEOUT,
-    data: Object.assign({}, data, { modelType })
+    data: Object.assign({}, data, {
+      modelType,
+      idempotencyKey: data.idempotencyKey ||
+        `${modelType}:${data.deviceCode || ''}:${data.filePath || ''}:${Date.now()}`
+    })
   })
+  const task = created.data || created
+  const deadline = Date.now() + INFER_TIMEOUT
+  while (Date.now() < deadline) {
+    const response = await request({
+      url: `/sensor/diagnosis/tasks/${task.id}`,
+      method: 'get',
+      timeout: 10000
+    })
+    const current = response.data || response
+    if (current.status === 'SUCCEEDED') {
+      return current.resultJson ? JSON.parse(current.resultJson) : {}
+    }
+    if (current.status === 'FAILED' || current.status === 'INVALID') {
+      throw new Error(current.errorMessage || `诊断任务${current.status}`)
+    }
+    await sleep(1000)
+  }
+  throw new Error('诊断任务执行超时')
 }
 
 export function fetchHistory(params) {

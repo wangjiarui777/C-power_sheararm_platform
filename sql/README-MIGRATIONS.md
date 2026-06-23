@@ -14,6 +14,7 @@
 1. 若缺少 `enhanced_inference_record` 表，先执行 `enhanced_inference_record.sql`
 2. `industrial_monitoring_upgrade.sql`
 3. `sensor_module_menu_migration.sql`
+4. `inference_task_upgrade.sql`
 
 两个脚本均可重复执行。升级脚本不会删除业务表；发现测点通道、设备编码或收藏记录存在重复数据时，会保留数据并跳过对应唯一索引，需先处理脚本末尾校验结果后再执行一次。
 
