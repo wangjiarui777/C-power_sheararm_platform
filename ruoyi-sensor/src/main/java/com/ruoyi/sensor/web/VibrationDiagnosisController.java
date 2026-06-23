@@ -23,13 +23,11 @@ import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
 import com.ruoyi.sensor.service.PhmDataScopeService;
 import com.ruoyi.sensor.service.PhmAttachmentStorageService;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisBatchEntity;
-import com.ruoyi.sensor.domain.entity.VibrationAnalysisRecordEntity;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
 import com.ruoyi.sensor.domain.vo.SensorWebSocketMessageVo;
 import com.ruoyi.sensor.service.SensorWebSocketPushService;
 import com.ruoyi.sensor.service.PhmService;
 import com.ruoyi.sensor.service.VibrationAnalysisBatchService;
-import com.ruoyi.sensor.service.VibrationAnalysisPersistenceService;
 import com.ruoyi.sensor.service.timeseries.TimeSeriesAnalysisService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,6 +43,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.MDC;
 
 @RestController
 @RequestMapping({"/sensor/diagnosis", "/sensor/vibration"})
@@ -55,7 +54,6 @@ public class VibrationDiagnosisController
 
     private final TimeSeriesAnalysisService timeSeriesAnalysisService;
     private final VibrationAnalysisBatchService batchService;
-    private final VibrationAnalysisPersistenceService persistenceService;
     private final SensorWebSocketPushService webSocketPushService;
     private final PhmService phmService;
     private final PhmAttachmentStorageService attachmentStorageService;
@@ -80,7 +78,6 @@ public class VibrationDiagnosisController
 
     public VibrationDiagnosisController(TimeSeriesAnalysisService timeSeriesAnalysisService,
         VibrationAnalysisBatchService batchService,
-        VibrationAnalysisPersistenceService persistenceService,
         SensorWebSocketPushService webSocketPushService,
         PhmService phmService,
         PhmAttachmentStorageService attachmentStorageService,
@@ -94,7 +91,6 @@ public class VibrationDiagnosisController
     {
         this.timeSeriesAnalysisService = timeSeriesAnalysisService;
         this.batchService = batchService;
-        this.persistenceService = persistenceService;
         this.webSocketPushService = webSocketPushService;
         this.phmService = phmService;
         this.attachmentStorageService = attachmentStorageService;
@@ -154,7 +150,6 @@ public class VibrationDiagnosisController
             validatePythonResult(pythonResult);
             Map<String, Object> normalized = normalizePythonResult(pythonResult, deviceCode,
                 stringValue(trustedPayload.get("filename"), null), trustedPayload);
-            persistDiagnosis(normalized);
             phmService.syncDiagnosisResult(normalized);
             pushDiagnosis(normalized);
             return AjaxResult.success(normalized);
@@ -262,6 +257,11 @@ public class VibrationDiagnosisController
         {
             return;
         }
+        MDC.put("taskId", String.valueOf(task.getId()));
+        MDC.put("requestId", task.getRequestId());
+        MDC.put("deviceCode", task.getDeviceCode());
+        try
+        {
         task.setStatus("RUNNING");
         task.setStartTime(new Date());
         task.setUpdateTime(new Date());
@@ -310,7 +310,6 @@ public class VibrationDiagnosisController
             validatePythonResult(pythonResult);
             Map<String, Object> normalized = normalizePythonResult(
                 pythonResult, task.getDeviceCode(), attachment.getFileName(), payload);
-            persistDiagnosis(normalized);
             phmService.syncDiagnosisResult(normalized);
             pushDiagnosis(normalized);
             finishTask(task, "SUCCEEDED", null, null, normalized);
@@ -318,6 +317,13 @@ public class VibrationDiagnosisController
         catch (Exception ex)
         {
             finishTask(task, "INVALID", "INVALID_RESULT", ex.getMessage(), pythonResult);
+        }
+        }
+        finally
+        {
+            MDC.remove("taskId");
+            MDC.remove("requestId");
+            MDC.remove("deviceCode");
         }
     }
 
@@ -565,6 +571,8 @@ public class VibrationDiagnosisController
     {
         deviceCode = normalizeDeviceCode(deviceCode);
         EnhancedInferenceRecordEntity record = phmService.getLatestDiagnosis(deviceCode);
+        Map<String, Object> frame = timeSeriesAnalysisService.loadDiagnosisData(
+            deviceCode, channelId, 120, 64);
         Map<String, Object> latest = new LinkedHashMap<>();
         latest.put("deviceCode", deviceCode);
         latest.put("channelId", channelId);
@@ -582,9 +590,11 @@ public class VibrationDiagnosisController
         latest.put("latestRms", record == null ? null : record.getRms());
         latest.put("latestPeak", record == null ? null : record.getPeak());
         latest.put("batchId", record == null ? null : record.getBatchId());
-        latest.put("waveform", record == null ? new ArrayList<>() : parseJsonList(record.getWaveJson()));
-        latest.put("frequencyAxis", new ArrayList<>());
-        latest.put("spectrum", record == null ? new ArrayList<>() : parseJsonList(record.getSpectrumJson()));
+        latest.put("waveform", frame.getOrDefault("waveform", new ArrayList<>()));
+        latest.put("frequencyAxis", frame.getOrDefault("frequencyAxis", new ArrayList<>()));
+        latest.put("spectrum", frame.getOrDefault("spectrum", new ArrayList<>()));
+        latest.put("timeseriesRef", record == null ? null : record.getTimeseriesRef());
+        latest.put("timeseriesDataStatus", frame.getOrDefault("dataStatus", "no_data"));
         latest.put("evidence", record == null ? new ArrayList<>() : parseJsonList(record.getEvidence()));
         return AjaxResult.success(latest);
     }
@@ -966,20 +976,6 @@ public class VibrationDiagnosisController
         } catch (Exception ignored) {
             return defaultValue;
         }
-    }
-
-    private void persistDiagnosis(Map<String, Object> diagnosis)
-    {
-        VibrationAnalysisRecordEntity record = new VibrationAnalysisRecordEntity();
-        record.setBatchId(toLong(diagnosis.get("batchId"), null));
-        record.setDeviceCode(firstRequiredText(diagnosis, "deviceCode"));
-        record.setRms(optionalNumber(diagnosis, "latestRms", "rms"));
-        record.setPeak(optionalNumber(diagnosis, "latestPeak", "peak"));
-        record.setDiagnosisResult(firstRequiredText(diagnosis, "diagnosisResult", "diagnosisName"));
-        record.setWaveJson(JSON.toJSONString(diagnosis.getOrDefault("waveform", new ArrayList<>())));
-        record.setSpectrumJson(JSON.toJSONString(diagnosis.getOrDefault("spectrum", new ArrayList<>())));
-        record.setCreateTime(new Date());
-        persistenceService.saveAsync(record);
     }
 
     private void pushDiagnosis(Map<String, Object> diagnosis)

@@ -478,6 +478,9 @@ Start-Service Memurai*
 | CwruMatReceiver | 8888 | TCP |
 | TCP 传感器 | 8890 | TCP |
 | 通道帧 TCP | 8891 | TCP |
+
+生产环境不得启用 8890 旧接收器。若确需 TCP 采集，仅在专用工业网卡启用 8891，
+协议、签名和网关缓冲要求见 `deployment/TCP-COLLECTOR-PROTOCOL.md`。
 | 齿轮推理服务 | 5000 | HTTP |
 | 轴承推理服务 | 5001 | HTTP |
 

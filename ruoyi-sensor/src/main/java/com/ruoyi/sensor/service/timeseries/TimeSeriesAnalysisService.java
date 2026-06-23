@@ -35,13 +35,12 @@ public class TimeSeriesAnalysisService
         result.put("frequencyAxis", buildFrequencyAxis(spectrum.size(), freqStep));
         result.put("spectrum", spectrum);
         result.put("waterfall", buildWaterfall(recent, fftLimit));
-        result.put("dataStatus", latest == null && recent.isEmpty() ? "noData" : "available");
-        result.put("confidence", calcConfidence(waveform, spectrum));
-        result.put("diagnosis", waveform.isEmpty() && spectrum.isEmpty()
-                ? null : (spectrum.size() > 0 && max(spectrum) > 10 ? "状态异常" : "状态正常"));
-        result.put("diagnosisDetail", waveform.isEmpty() ? "当前未采集原始波形数据" : "已从时序库读取时域与频域数据");
-        result.put("rms", rms(waveform));
-        result.put("peak", peak(waveform));
+        result.put("dataStatus", latest == null && recent.isEmpty() ? "no_data" : "available");
+        result.put("confidence", null);
+        result.put("diagnosis", null);
+        result.put("diagnosisDetail", waveform.isEmpty() ? null : "时域与频域数据来自时序存储，未执行模型诊断");
+        result.put("rms", waveform.isEmpty() ? null : rms(waveform));
+        result.put("peak", waveform.isEmpty() ? null : peak(waveform));
         return result;
     }
 
@@ -84,15 +83,6 @@ public class TimeSeriesAnalysisService
         return new ArrayList<>(values.subList(0, Math.min(values.size(), safeLimit)));
     }
 
-    private double calcConfidence(List<Double> waveform, List<Double> spectrum)
-    {
-        if ((waveform == null || waveform.isEmpty()) && (spectrum == null || spectrum.isEmpty()))
-        {
-            return 0D;
-        }
-        return Math.min(99D, 60D + Math.max(rms(waveform), max(spectrum)));
-    }
-
     private double rms(List<Double> waveform)
     {
         if (waveform == null || waveform.isEmpty())
@@ -122,17 +112,4 @@ public class TimeSeriesAnalysisService
         return peak;
     }
 
-    private double max(List<Double> values)
-    {
-        double max = 0D;
-        if (values == null)
-        {
-            return max;
-        }
-        for (Double value : values)
-        {
-            max = Math.max(max, value == null ? 0D : value);
-        }
-        return max;
-    }
 }

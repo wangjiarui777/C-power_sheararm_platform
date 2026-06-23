@@ -45,6 +45,27 @@ class ModelReleaseControllerTest
         assertTrue(String.valueOf(result.get("msg")).contains("precision"));
     }
 
+    @Test
+    void rejectsManuallyEnteredShadowDaysWithoutAuditedShadowRun()
+    {
+        ModelReleaseMapper mapper = mock(ModelReleaseMapper.class);
+        ModelReleaseEntity release = baseRelease();
+        release.setPrecisionScore(new BigDecimal("0.95"));
+        release.setRecallScore(new BigDecimal("0.95"));
+        release.setSevereRecallScore(new BigDecimal("0.97"));
+        release.setFalsePositivePerDeviceDay(new BigDecimal("0.5"));
+        release.setShadowDays(14);
+        release.setConfidenceThreshold(new BigDecimal("90"));
+        release.setConsecutiveHits(3);
+        release.setShadowResultStatus(null);
+        when(mapper.selectById(1L)).thenReturn(release);
+
+        AjaxResult result = new ModelReleaseController(mapper).activate(1L);
+
+        assertEquals(500, result.get("code"));
+        assertTrue(String.valueOf(result.get("msg")).contains("影子运行"));
+    }
+
     private ModelReleaseEntity baseRelease()
     {
         ModelReleaseEntity release = new ModelReleaseEntity();

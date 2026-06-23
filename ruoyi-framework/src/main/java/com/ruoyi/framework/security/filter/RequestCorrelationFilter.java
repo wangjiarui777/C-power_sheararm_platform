@@ -26,6 +26,9 @@ public class RequestCorrelationFilter extends OncePerRequestFilter
             requestId = UUID.randomUUID().toString();
         }
         MDC.put("requestId", requestId);
+        putSafeHeader(request, "X-Task-Id", "taskId");
+        putSafeHeader(request, "X-Event-Id", "eventId");
+        putSafeHeader(request, "X-Device-Code", "deviceCode");
         response.setHeader("X-Request-Id", requestId);
         try
         {
@@ -33,7 +36,16 @@ public class RequestCorrelationFilter extends OncePerRequestFilter
         }
         finally
         {
-            MDC.remove("requestId");
+            MDC.clear();
+        }
+    }
+
+    private void putSafeHeader(HttpServletRequest request, String header, String mdcKey)
+    {
+        String value = request.getHeader(header);
+        if (value != null && value.matches("[A-Za-z0-9._:-]{1,128}"))
+        {
+            MDC.put(mdcKey, value);
         }
     }
 }

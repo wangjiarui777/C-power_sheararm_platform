@@ -20,6 +20,7 @@ import importlib.util
 import json
 import hashlib
 import logging
+from datetime import datetime, timezone
 import os
 import secrets
 import threading
@@ -63,10 +64,27 @@ _v6_spec.loader.exec_module(v6)
 # =============================================================================
 # 日志配置
 # =============================================================================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-)
+class _JsonLogFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "service": "phm-inference",
+        }
+        for key in ("requestId", "taskId", "eventId", "deviceCode", "modelType"):
+            value = getattr(record, key, None)
+            if value is not None:
+                payload[key] = value
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+_log_handler = logging.StreamHandler()
+_log_handler.setFormatter(_JsonLogFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_log_handler], force=True)
 logger = logging.getLogger("inference_service")
 
 # =============================================================================
@@ -1009,6 +1027,13 @@ def metrics() -> Response:
 @app.post("/internal/infer", dependencies=[Depends(require_internal_token)])
 def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     model_type = _normalize_model_type(payload.get("modelType") or payload.get("model_type") or "gear")
+    log_context = {
+        "requestId": payload.get("requestId"),
+        "taskId": payload.get("taskId"),
+        "deviceCode": payload.get("deviceCode"),
+        "modelType": model_type,
+    }
+    logger.info("Inference request accepted", extra=log_context)
 
     file_path = str(payload.get("filePath") or "")
     if not file_path:
@@ -1049,6 +1074,7 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     result = _get_cached_or_compute(source_path, model_type, _compute)
+    logger.info("Inference request completed", extra=log_context)
     return {"success": True, "data": result}
 
 

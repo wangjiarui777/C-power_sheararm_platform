@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.dao.DuplicateKeyException;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Gauge;
+import org.slf4j.MDC;
 
 @Service
 public class TelemetryStreamConsumer
@@ -56,6 +58,12 @@ public class TelemetryStreamConsumer
         this.processedCounter = meterRegistry.counter("phm.telemetry.processed");
         this.retryCounter = meterRegistry.counter("phm.telemetry.retry");
         this.deadLetterCounter = meterRegistry.counter("phm.telemetry.dead_letter");
+        Gauge.builder("phm.telemetry.stream.length", redisTemplate,
+            template -> streamSize(template, TelemetryPipelineService.STREAM_KEY))
+            .register(meterRegistry);
+        Gauge.builder("phm.telemetry.dead_letter.length", redisTemplate,
+            template -> streamSize(template, TelemetryPipelineService.DLQ_STREAM_KEY))
+            .register(meterRegistry);
     }
 
     @Scheduled(fixedDelayString = "${sensor.stream.poll-delay-ms:500}")
@@ -83,6 +91,8 @@ public class TelemetryStreamConsumer
         try
         {
             TelemetryEnvelope envelope = JSON.parseObject(payload, TelemetryEnvelope.class);
+            MDC.put("eventId", envelope.getEventId());
+            MDC.put("deviceCode", envelope.getDeviceCode());
             persist(envelope);
             acknowledge(record.getId());
             redisTemplate.opsForValue().increment("monitoring:telemetry:processed");
@@ -108,6 +118,11 @@ public class TelemetryStreamConsumer
             {
                 retryCounter.increment();
             }
+        }
+        finally
+        {
+            MDC.remove("eventId");
+            MDC.remove("deviceCode");
         }
     }
 
@@ -189,6 +204,19 @@ public class TelemetryStreamConsumer
         catch (Exception ignored)
         {
             return 0;
+        }
+    }
+
+    private static double streamSize(StringRedisTemplate template, String key)
+    {
+        try
+        {
+            Long size = template.opsForStream().size(key);
+            return size == null ? 0D : size.doubleValue();
+        }
+        catch (Exception ignored)
+        {
+            return Double.NaN;
         }
     }
 }

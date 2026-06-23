@@ -56,10 +56,11 @@ sensor:
   netty:
     port: 9000
   tcp:
-    enabled: true
+    enabled: false
     port: 8890
   channel-tcp:
-    enabled: true
+    enabled: false
+    bind-address: 127.0.0.1
     port: 8891
   store-type: iotdb
   iotdb:

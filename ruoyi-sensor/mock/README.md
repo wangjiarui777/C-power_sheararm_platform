@@ -1,87 +1,40 @@
-# Mock 振动数据采集模拟器
+# 可靠边缘采集网关参考实现
 
-这是一个独立的 Netty 振动传感器数据模拟程序，用于向本地后端 Netty 服务发送心跳与三轴振动采样数据。
+该独立 JAR 演示生产采集端的关键语义：
 
-## 功能
+- 每帧先原子写入本地磁盘，再尝试发送；
+- 使用每网关独立凭据、时间戳、nonce 和 HMAC-SHA256 完成 TCP 认证；
+- 保持原 `frameId` 与 `sequence` 重传，平台据此幂等；
+- 仅在平台返回 `PERSISTED` 或 `DUPLICATE` 后删除本地帧；
+- 断网恢复后按 sequence 顺序补传；
+- 磁盘达到预算时，24 小时内的数据仍不会被删除。
 
-- 使用 Netty Client 连接到 `127.0.0.1:8088`
-- 每 5 秒发送一次心跳包
-- 每 1 秒发送一次三轴振动采样数据
-- 使用正弦函数叠加随机噪声，模拟真实传感器波形
-- 支持断线重连，服务端重启后可自动恢复连接
-- 使用 `LengthFieldPrepender + StringEncoder` 封装消息
-
-## 消息格式
-
-当前发送的数据按 CSV 字符串组织，对齐如下字段：
-
-```text
-'__header__','__version__','__globals__',DE_time,sr,rpm,load,fault_type,fault_size
-```
-
-实际发送示例：
-
-```text
-'[\'__header__\', \'__version__\', \'__globals__\', \'DE_time\', \'sr\', \'rpm\', \'load\', \'fault_type\', \'fault_size\']','1.0','[]',0.512,25600.000,1500.000,0.750,'HEARTBEAT',0.000
-```
-
-其中：
-
-- `DE_time`：振动信号采样值，使用正弦波叠加噪声模拟
-- `sr`：采样率，默认 `25600`
-- `rpm`：转速，默认 `1500`
-- `load`：负载，默认 `0.75`
-- `fault_type`：当前样本类型，心跳为 `HEARTBEAT`，振动样本为 `VIBRATION`
-- `fault_size`：用作故障强度/幅值的模拟值
-
-如果后端协议字段有固定的 CSV 解析规则，只需要同步修改 `src/main/java/com/ruoyi/mock/VibrationSimulatorApplication.java` 中的 `buildMessage` 方法即可。
-
-## 目录结构
-
-```text
-mock/
-├── pom.xml
-├── README.md
-└── src/main/java/com/ruoyi/mock/VibrationSimulatorApplication.java
-```
-
-## 编译与运行
-
-### 1. 进入目录
+## 构建
 
 ```powershell
-cd mock
-```
-
-### 2. 打包
-
-```powershell
+cd ruoyi-sensor\mock
 mvn clean package
 ```
 
-打包后会生成一个包含依赖的可执行 JAR。
+## 运行
 
-### 3. 启动
-
-```powershell
-java -jar target/vibration-simulator-1.0.0.jar
-```
-
-## 自定义连接地址
-
-默认连接：
-
-- Host: `127.0.0.1`
-- Port: `8088`
-
-也可以在启动时传入参数：
+先在平台创建采集凭据，并配置环境变量：
 
 ```powershell
-java -jar target/vibration-simulator-1.0.0.jar 127.0.0.1 8088
+$env:PHM_COLLECTOR_ID='GW-01'
+$env:PHM_COLLECTOR_SECRET='<创建凭据时一次性显示的明文>'
+$env:PHM_DEVICE_CODE='DEV-001'
+$env:PHM_HOST='10.10.0.20'
+$env:PHM_PORT='8891'
+$env:PHM_BUFFER_DIR='D:\phm-gateway-buffer'
+java -jar target\vibration-simulator-1.0.0.jar
 ```
 
-## 说明
+可选配置：
 
-- 如果你的后端 Netty 端口不是 `8088`，请修改启动参数或代码中的默认端口。
-- 为了和后端接收逻辑保持一致，建议先确认 `ruoyi-netty` 或对应服务端模块实际解析的消息格式，再同步调整 `buildMessage`。
-- 当前实现采用基础字符串协议，便于快速联调与验证。
+- `PHM_MAX_BUFFER_BYTES`：磁盘缓冲预算，默认 10 GiB；
+- `PHM_SAMPLE_INTERVAL_MS`：示例采样帧间隔，默认 1000 ms；
+- `PHM_SAMPLE_RATE`：采样率，默认 25600 Hz；
+- `PHM_CONNECT_TIMEOUT_MS` / `PHM_READ_TIMEOUT_MS`：连接与响应超时。
+
+平台端仅应在工业网卡上开启 `sensor.channel-tcp`，并通过 Windows 防火墙限制网关来源。

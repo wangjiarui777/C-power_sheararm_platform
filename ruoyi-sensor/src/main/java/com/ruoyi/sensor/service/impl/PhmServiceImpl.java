@@ -650,8 +650,18 @@ public class PhmServiceImpl implements PhmService
         record.setRms(toNullableDouble(diagnosis.get("latestRms"), diagnosis.get("rms")));
         record.setPeak(toNullableDouble(diagnosis.get("latestPeak"), diagnosis.get("peak")));
         record.setEvidence(JSON.toJSONString(diagnosis.getOrDefault("evidence", new ArrayList<>())));
-        record.setWaveJson(JSON.toJSONString(diagnosis.getOrDefault("waveform", new ArrayList<>())));
-        record.setSpectrumJson(JSON.toJSONString(diagnosis.getOrDefault("spectrum", new ArrayList<>())));
+        record.setWaveJson(null);
+        record.setSpectrumJson(null);
+        record.setTimeseriesRef(timeseriesReference(diagnosis, sampleTime));
+        String modelType = stringValue(diagnosis.get("modelType"), "");
+        String modelVersion = stringValue(diagnosis.get("modelVersion"), "");
+        ModelReleaseEntity release = modelReleaseMapper.selectOne(
+            new LambdaQueryWrapper<ModelReleaseEntity>()
+                .eq(ModelReleaseEntity::getModelType, modelType)
+                .eq(ModelReleaseEntity::getSemanticVersion, modelVersion)
+                .orderByDesc(ModelReleaseEntity::getId)
+                .last("limit 1"));
+        record.setModelReleaseId(release == null ? null : release.getId());
         record.setSampleTime(sampleTime);
         record.setCreateTime(new Date());
         record.setUpdateTime(new Date());
@@ -663,6 +673,14 @@ public class PhmServiceImpl implements PhmService
         record.setRemark(JSON.toJSONString(metadata));
         enhancedInferenceRecordMapper.insert(record);
         return record;
+    }
+
+    private String timeseriesReference(Map<String, Object> diagnosis, Date sampleTime)
+    {
+        String deviceCode = stringValue(diagnosis.get("deviceCode"), "");
+        Integer channelId = toInteger(diagnosis.get("channelId"), 1);
+        long timestamp = sampleTime == null ? 0L : sampleTime.getTime();
+        return "iotdb://vibration_frame/" + deviceCode + "?channel=" + channelId + "&sampleTime=" + timestamp;
     }
 
     private boolean isEligibleForFormalAlarm(Map<String, Object> diagnosis, EnhancedInferenceRecordEntity current)

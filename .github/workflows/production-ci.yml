@@ -24,6 +24,9 @@ jobs:
           python-version: "3.11"
       - name: Java tests and package
         run: mvn --batch-mode clean test package
+      - name: Reliable edge gateway tests and package
+        working-directory: ruoyi-sensor/mock
+        run: mvn --batch-mode clean test package
       - name: Frontend audit and build
         working-directory: ruoyi-ui
         run: |
@@ -49,3 +52,4 @@ jobs:
           path: |
             ruoyi-admin/target/ruoyi-admin.jar
             ruoyi-ui/dist
+            ruoyi-sensor/mock/target/vibration-simulator-1.0.0.jar

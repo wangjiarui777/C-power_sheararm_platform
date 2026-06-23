@@ -29,10 +29,12 @@ class ProductionHardeningMigrationTest
             .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
             .baselineOnMigrate(true)
             .baselineVersion("2026041700")
-            .javaMigrations(new V2026062301__ProductionHardening())
+            .javaMigrations(new V2026062301__ProductionHardening(),
+                new V2026062302__InferenceRecordReferences(),
+                new V2026062303__ModelShadowRun())
             .load();
 
-        assertEquals(1, flyway.migrate().migrationsExecuted);
+        assertEquals(3, flyway.migrate().migrationsExecuted);
         flyway.validate();
         assertEquals(0, flyway.migrate().migrationsExecuted);
 
@@ -41,6 +43,8 @@ class ProductionHardeningMigrationTest
             assertTrue(exists(statement, "SELECT 1 FROM sensor_inference_task LIMIT 1"));
             assertTrue(exists(statement, "SELECT dept_id FROM phm_device WHERE id=1"));
             assertTrue(exists(statement, "SELECT event_id FROM device_vibration_data LIMIT 1"));
+            assertTrue(exists(statement, "SELECT timeseries_ref, model_release_id FROM enhanced_inference_record LIMIT 1"));
+            assertTrue(exists(statement, "SELECT shadow_start_time, shadow_result_status FROM sensor_model_release LIMIT 1"));
             try (ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM phm_device WHERE id=1"))
             {
                 result.next();
@@ -59,6 +63,7 @@ class ProductionHardeningMigrationTest
             statement.execute("CREATE TABLE phm_attachment(id BIGINT PRIMARY KEY, file_url VARCHAR(255), file_ext VARCHAR(32))");
             statement.execute("CREATE TABLE device_vibration_data(data_id BIGINT PRIMARY KEY)");
             statement.execute("CREATE TABLE device_temperature_data(data_id BIGINT PRIMARY KEY)");
+            statement.execute("CREATE TABLE enhanced_inference_record(id BIGINT PRIMARY KEY, spectrum_json LONGTEXT)");
         }
     }
 

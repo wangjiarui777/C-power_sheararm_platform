@@ -18,11 +18,22 @@ sensor:
     internal-token: ${SENSOR_INFERENCE_INTERNAL_TOKEN}
     default-device-code: ""
     default-model-type: gear
+  health:
+    inference-required: true
   startup:
     inference:
       enabled: false
     receiver:
       enabled: false
+  tcp:
+    enabled: false
+  channel-tcp:
+    enabled: ${SENSOR_TCP_ENABLED:false}
+    bind-address: ${SENSOR_TCP_BIND_ADDRESS:127.0.0.1}
+    port: ${SENSOR_TCP_PORT:8891}
+    socket-timeout-ms: ${SENSOR_TCP_SOCKET_TIMEOUT_MS:30000}
+    max-frame-bytes: ${SENSOR_TCP_MAX_FRAME_BYTES:8388608}
+    worker-threads: ${SENSOR_TCP_WORKER_THREADS:8}
   iotdb:
     enabled: true
     node-urls: ${IOTDB_NODE_URLS}

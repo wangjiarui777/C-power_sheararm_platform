@@ -2,13 +2,10 @@
 <configuration>
     <!-- 日志存放路径 -->
 	<property name="log.path" value="${LOG_PATH:-D:/ruoyi/logs}" />
-    <!-- 日志输出格式 -->
-	<property name="log.pattern" value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%level thread=%thread logger=%logger{40} requestId=%X{requestId:-} message=%msg%n" />
-
 	<!-- 控制台输出 -->
 	<appender name="console" class="ch.qos.logback.core.ConsoleAppender">
-		<encoder>
-			<pattern>${log.pattern}</pattern>
+		<encoder class="net.logstash.logback.encoder.LogstashEncoder">
+			<customFields>{"service":"phm-platform"}</customFields>
 		</encoder>
 	</appender>
 	
@@ -16,14 +13,16 @@
 	<appender name="file_info" class="ch.qos.logback.core.rolling.RollingFileAppender">
 	    <file>${log.path}/sys-info.log</file>
         <!-- 循环政策：基于时间创建日志文件 -->
-		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+		<rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- 日志文件名格式 -->
-			<fileNamePattern>${log.path}/sys-info.%d{yyyy-MM-dd}.log</fileNamePattern>
+			<fileNamePattern>${log.path}/sys-info.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+			<maxFileSize>100MB</maxFileSize>
+			<totalSizeCap>20GB</totalSizeCap>
 			<!-- 日志最大的历史 60天 -->
 			<maxHistory>60</maxHistory>
 		</rollingPolicy>
-		<encoder>
-			<pattern>${log.pattern}</pattern>
+		<encoder class="net.logstash.logback.encoder.LogstashEncoder">
+			<customFields>{"service":"phm-platform","stream":"application"}</customFields>
 		</encoder>
 		<filter class="ch.qos.logback.classic.filter.LevelFilter">
             <!-- 过滤的级别 -->
@@ -38,14 +37,16 @@
 	<appender name="file_error" class="ch.qos.logback.core.rolling.RollingFileAppender">
 	    <file>${log.path}/sys-error.log</file>
         <!-- 循环政策：基于时间创建日志文件 -->
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- 日志文件名格式 -->
-            <fileNamePattern>${log.path}/sys-error.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${log.path}/sys-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <totalSizeCap>10GB</totalSizeCap>
 			<!-- 日志最大的历史 60天 -->
 			<maxHistory>60</maxHistory>
         </rollingPolicy>
-        <encoder>
-            <pattern>${log.pattern}</pattern>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"phm-platform","stream":"error"}</customFields>
         </encoder>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
             <!-- 过滤的级别 -->
@@ -60,14 +61,16 @@
 	<!-- 用户访问日志输出  -->
     <appender name="sys-user" class="ch.qos.logback.core.rolling.RollingFileAppender">
 		<file>${log.path}/sys-user.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- 按天回滚 daily -->
-            <fileNamePattern>${log.path}/sys-user.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${log.path}/sys-user.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <totalSizeCap>10GB</totalSizeCap>
             <!-- 日志最大的历史 60天 -->
             <maxHistory>60</maxHistory>
         </rollingPolicy>
-        <encoder>
-            <pattern>${log.pattern}</pattern>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"phm-platform","stream":"audit"}</customFields>
         </encoder>
     </appender>
 	

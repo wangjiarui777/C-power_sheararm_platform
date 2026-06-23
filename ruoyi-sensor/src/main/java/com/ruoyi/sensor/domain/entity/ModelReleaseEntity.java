@@ -27,6 +27,9 @@ public class ModelReleaseEntity
     private BigDecimal confidenceThreshold;
     private Integer consecutiveHits;
     private Integer shadowDays;
+    private Date shadowStartTime;
+    private Date shadowEndTime;
+    private String shadowResultStatus;
     private Integer cooldownMinutes;
     private String status;
     private String artifactUri;

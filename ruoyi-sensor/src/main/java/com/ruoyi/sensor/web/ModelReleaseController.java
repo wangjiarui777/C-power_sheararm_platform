@@ -3,6 +3,8 @@ package com.ruoyi.sensor.web;
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
+import java.time.Duration;
+import java.time.Instant;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
@@ -94,6 +96,70 @@ public class ModelReleaseController extends BaseController
         return success(release);
     }
 
+    @PreAuthorize("@ss.hasPermi('phm:config:edit')")
+    @Log(title = "开始模型影子运行", businessType = BusinessType.UPDATE)
+    @PostMapping("/{id}/shadow/start")
+    public AjaxResult startShadow(@PathVariable Long id)
+    {
+        ModelReleaseEntity release = mapper.selectById(id);
+        if (release == null)
+        {
+            return error("模型发布记录不存在");
+        }
+        if ("ACTIVE".equals(release.getStatus()))
+        {
+            return error("已激活模型不能重新开始影子运行");
+        }
+        Date now = new Date();
+        release.setStatus("SHADOW");
+        release.setShadowStartTime(now);
+        release.setShadowEndTime(null);
+        release.setShadowDays(0);
+        release.setShadowResultStatus("RUNNING");
+        release.setUpdateTime(now);
+        mapper.updateById(release);
+        return success(release);
+    }
+
+    @PreAuthorize("@ss.hasPermi('phm:config:edit')")
+    @Log(title = "完成模型影子验收", businessType = BusinessType.UPDATE)
+    @PostMapping("/{id}/shadow/complete")
+    public AjaxResult completeShadow(@PathVariable Long id, @RequestBody ModelReleaseEntity metrics)
+    {
+        ModelReleaseEntity release = mapper.selectById(id);
+        if (release == null || release.getShadowStartTime() == null
+            || !"RUNNING".equals(release.getShadowResultStatus()))
+        {
+            return error("模型尚未开始影子运行");
+        }
+        long elapsedDays = Duration.between(
+            release.getShadowStartTime().toInstant(), Instant.now()).toDays();
+        if (elapsedDays < 14)
+        {
+            return error("影子运行尚未达到 14 天");
+        }
+        release.setPrecisionScore(metrics.getPrecisionScore());
+        release.setRecallScore(metrics.getRecallScore());
+        release.setSevereRecallScore(metrics.getSevereRecallScore());
+        release.setFalsePositivePerDeviceDay(metrics.getFalsePositivePerDeviceDay());
+        release.setConfidenceThreshold(metrics.getConfidenceThreshold());
+        release.setConsecutiveHits(metrics.getConsecutiveHits());
+        release.setCooldownMinutes(metrics.getCooldownMinutes());
+        String error = validateQualityMetrics(release);
+        if (error != null)
+        {
+            return error(error);
+        }
+        Date now = new Date();
+        release.setShadowDays((int) elapsedDays);
+        release.setShadowEndTime(now);
+        release.setShadowResultStatus("PASSED");
+        release.setStatus("VALIDATED");
+        release.setUpdateTime(now);
+        mapper.updateById(release);
+        return success(release);
+    }
+
     private String validateMetadata(ModelReleaseEntity release, boolean activation)
     {
         if (release == null || isBlank(release.getModelName()) || isBlank(release.getModelType())
@@ -111,6 +177,23 @@ public class ModelReleaseController extends BaseController
         {
             return null;
         }
+        String metricsError = validateQualityMetrics(release);
+        if (metricsError != null)
+        {
+            return metricsError;
+        }
+        if (!"PASSED".equals(release.getShadowResultStatus())
+            || release.getShadowStartTime() == null || release.getShadowEndTime() == null
+            || Duration.between(release.getShadowStartTime().toInstant(),
+                release.getShadowEndTime().toInstant()).toDays() < 14)
+        {
+            return "模型必须完成至少 14 天且验收通过的影子运行";
+        }
+        return null;
+    }
+
+    private String validateQualityMetrics(ModelReleaseEntity release)
+    {
         if (below(release.getPrecisionScore(), "0.90") || below(release.getRecallScore(), "0.90"))
         {
             return "主要故障类别 precision 和 recall 必须均不低于 90%";
@@ -123,10 +206,6 @@ public class ModelReleaseController extends BaseController
             || release.getFalsePositivePerDeviceDay().compareTo(BigDecimal.ONE) > 0)
         {
             return "正常工况误报率必须不高于每台设备每天 1 次";
-        }
-        if (release.getShadowDays() == null || release.getShadowDays() < 14)
-        {
-            return "模型必须完成至少 14 天影子运行";
         }
         if (release.getConfidenceThreshold() == null
             || release.getConfidenceThreshold().compareTo(BigDecimal.ZERO) < 0

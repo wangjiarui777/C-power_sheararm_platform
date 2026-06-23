@@ -26,4 +26,10 @@ The signed offline bundle must contain:
 - `ruoyi-admin.jar`, frontend `dist`, Nginx and WinSW;
 - the unified inference service and model artifacts;
 - Flyway migrations, model SHA-256 manifest and SBOM;
+- the reliable edge gateway reference JAR and its deployment guide;
+
+`build-offline-package.ps1` requires explicit JRE 17, embeddable Python, Nginx,
+fixed wheelhouse, WinSW and a code-signing certificate with a private key. It emits
+`phm-<version>.zip`, detached `p7s` signature and the public signing certificate.
+Run `verify-offline-package.ps1` before extracting or installing the package.
 - these service definitions, backup scripts and smoke tests.

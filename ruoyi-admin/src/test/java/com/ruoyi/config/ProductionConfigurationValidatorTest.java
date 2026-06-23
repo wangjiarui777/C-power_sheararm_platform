@@ -44,6 +44,18 @@ class ProductionConfigurationValidatorTest
         assertTrue(errors.stream().anyMatch(item -> item.contains("production origins")));
     }
 
+    @Test
+    void rejectsWildcardTcpBindingWhenCollectorPortIsEnabled()
+    {
+        MockEnvironment environment = validEnvironment()
+                .withProperty("sensor.channel-tcp.enabled", "true")
+                .withProperty("sensor.channel-tcp.bind-address", "0.0.0.0");
+
+        List<String> errors = ProductionConfigurationValidator.validate(environment);
+
+        assertTrue(errors.stream().anyMatch(item -> item.contains("dedicated industrial interface")));
+    }
+
     private MockEnvironment validEnvironment()
     {
         return new MockEnvironment()

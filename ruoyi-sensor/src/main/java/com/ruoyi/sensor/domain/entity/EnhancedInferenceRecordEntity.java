@@ -36,6 +36,8 @@ public class EnhancedInferenceRecordEntity
     private String evidence;
     private String waveJson;
     private String spectrumJson;
+    private String timeseriesRef;
+    private Long modelReleaseId;
     private Date sampleTime;
     private Date createTime;
     private Date updateTime;

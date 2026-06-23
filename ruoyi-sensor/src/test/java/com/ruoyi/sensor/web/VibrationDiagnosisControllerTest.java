@@ -8,7 +8,6 @@ import com.ruoyi.sensor.service.PhmService;
 import com.ruoyi.sensor.service.PhmAttachmentStorageService;
 import com.ruoyi.sensor.service.SensorWebSocketPushService;
 import com.ruoyi.sensor.service.VibrationAnalysisBatchService;
-import com.ruoyi.sensor.service.VibrationAnalysisPersistenceService;
 import com.ruoyi.sensor.service.timeseries.TimeSeriesAnalysisService;
 import static org.mockito.ArgumentMatchers.any;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -25,19 +24,17 @@ class VibrationDiagnosisControllerTest
     {
         TimeSeriesAnalysisService timeSeries = mock(TimeSeriesAnalysisService.class);
         VibrationAnalysisBatchService batches = mock(VibrationAnalysisBatchService.class);
-        VibrationAnalysisPersistenceService persistence = mock(VibrationAnalysisPersistenceService.class);
         SensorWebSocketPushService push = mock(SensorWebSocketPushService.class);
         PhmService phm = mock(PhmService.class);
 
         VibrationDiagnosisController controller = new VibrationDiagnosisController(
-                timeSeries, batches, persistence, push, phm,
+                timeSeries, batches, push, phm,
                 mock(PhmAttachmentStorageService.class),
                 "http://127.0.0.1:1/infer", "http://127.0.0.1:1/infer",
                 "test-internal-token-at-least-32-bytes", "DEV-001", "gear", 50, 50);
 
         controller.receiverAnalyze(Map.of("deviceCode", "DEV-001", "modelType", "gear"));
 
-        verify(persistence, never()).saveAsync(any());
         verify(phm, never()).syncDiagnosisResult(any());
     }
 
@@ -46,7 +43,7 @@ class VibrationDiagnosisControllerTest
     {
         VibrationDiagnosisController controller = new VibrationDiagnosisController(
                 mock(TimeSeriesAnalysisService.class), mock(VibrationAnalysisBatchService.class),
-                mock(VibrationAnalysisPersistenceService.class), mock(SensorWebSocketPushService.class),
+                mock(SensorWebSocketPushService.class),
                 mock(PhmService.class), mock(PhmAttachmentStorageService.class),
                 "", "", "test-internal-token-at-least-32-bytes",
                 "", "gear", 50, 50);
@@ -65,7 +62,7 @@ class VibrationDiagnosisControllerTest
     {
         VibrationDiagnosisController controller = new VibrationDiagnosisController(
                 mock(TimeSeriesAnalysisService.class), mock(VibrationAnalysisBatchService.class),
-                mock(VibrationAnalysisPersistenceService.class), mock(SensorWebSocketPushService.class),
+                mock(SensorWebSocketPushService.class),
                 mock(PhmService.class), mock(PhmAttachmentStorageService.class),
                 "", "", "test-internal-token-at-least-32-bytes",
                 "", "gear", 50, 50);

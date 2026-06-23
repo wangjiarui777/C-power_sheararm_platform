@@ -22,7 +22,10 @@ class TimeSeriesAnalysisServiceTest
                 .thenReturn(Collections.emptyList());
 
         TimeSeriesAnalysisService service = new TimeSeriesAnalysisService(emptyStore);
-        assertEquals("noData", service.loadDiagnosisData("DEV-001", 1, 120, 64).get("dataStatus"));
+        java.util.Map<String, Object> noData = service.loadDiagnosisData("DEV-001", 1, 120, 64);
+        assertEquals("no_data", noData.get("dataStatus"));
+        assertEquals(null, noData.get("diagnosis"));
+        assertEquals(null, noData.get("confidence"));
 
         TimeSeriesStore unavailableStore = mock(TimeSeriesStore.class);
         when(unavailableStore.loadLatestVibrationFrame(anyString(), anyInt()))

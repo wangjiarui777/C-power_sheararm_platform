@@ -20,6 +20,25 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations: { summary: "Telemetry persistence retry rate is high" }
+      - alert: VibrationFrameDeadLetterIncreasing
+        expr: increase(phm_vibration_frame_dead_letter_total[10m]) > 0
+        labels: { severity: critical }
+        annotations: { summary: "Vibration frames entered the dead-letter stream" }
+      - alert: VibrationFrameRetryRateHigh
+        expr: rate(phm_vibration_frame_retry_total[5m]) > 0.2
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Vibration frame persistence retry rate is high" }
+      - alert: TelemetryStreamBacklogHigh
+        expr: phm_telemetry_stream_length > 100000
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Telemetry Redis Stream backlog is high" }
+      - alert: VibrationFrameStreamBacklogHigh
+        expr: phm_vibration_frame_stream_length > 1000
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Vibration frame Redis Stream backlog is high" }
       - alert: InferenceFailureRateHigh
         expr: sum(rate(phm_inference_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(phm_inference_requests_total[5m])), 0.001) > 0.05
         for: 10m
