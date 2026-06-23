@@ -96,10 +96,13 @@ Thumbs.db
 *.mat
 **/*.mat
 *.ckpt
+*.pth
 models/
 outputs/
 target_unlabeled/
 get/got/
+.local-models/
+ruoyi-ui/test-results/
 
 ######################################################################
 # Generated files kept intentionally by the project

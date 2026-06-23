@@ -263,19 +263,14 @@
           <div class="el-upload__text">将文件拖到这里，或<em>点击选择文件</em></div>
           <div class="el-upload__tip">只接受 .mat / .npy 文件</div>
         </div>
-        <!-- 本地路径输入行：手动输入文件路径后点击提交 -->
-        <div class="path-upload-row">
-          <el-input v-model="localFilePath" placeholder="或直接输入本地文件路径" clearable />
-          <el-button type="primary" :loading="uploading" @click="uploadByPath(localFilePath)">提交分析</el-button>
-        </div>
-        <!-- 后端文件下拉选择：列出 DATA_DIR 中的 .mat/.npy 文件 -->
+        <!-- 已通过 Java 安全存储和权限校验的诊断输入附件 -->
         <div class="mat-file-row">
           <el-select v-model="selectedMatFile" filterable clearable placeholder="自动选择后端最新文件" popper-class="dark-select-dropdown" style="width: 100%" :disabled="polling || uploading" @change="handleSelectedMatFileChange">
             <el-option
               v-for="item in matFileList"
-              :key="item.source_name || item.name"
+              :key="item.id"
               :label="(item.label || item.name) + (item.modelType ? ' / ' + (item.modelType === 'gear' ? '齿轮' : '轴承') : '')"
-              :value="item.source_name || item.name"
+              :value="item.id"
             />
           </el-select>
         </div>

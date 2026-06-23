@@ -12,6 +12,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.List;
+import java.util.Comparator;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruoyi.sensor.domain.entity.PhmAttachmentEntity;
 import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
 import com.ruoyi.sensor.mapper.PhmAttachmentMapper;
@@ -152,6 +155,57 @@ public class PhmAttachmentStorageService
             return null;
         }
         return entity;
+    }
+
+    public PhmAttachmentEntity getAccessibleDiagnosisInput(Long id)
+    {
+        PhmAttachmentEntity entity = getAccessible(id);
+        return entity != null && "DIAGNOSIS_INPUT".equals(entity.getPurpose()) ? entity : null;
+    }
+
+    /**
+     * Resolves an attachment already authorized when a diagnosis task was created.
+     * The immutable SHA-256 binding prevents a queued task from being redirected
+     * to a different stored object while running outside the request security context.
+     */
+    public PhmAttachmentEntity getDiagnosisInputForTask(Long id, String expectedSha256)
+    {
+        PhmAttachmentEntity entity = mapper.selectById(id);
+        if (entity == null || !"DIAGNOSIS_INPUT".equals(entity.getPurpose())
+            || expectedSha256 == null || !expectedSha256.equalsIgnoreCase(entity.getSha256()))
+        {
+            return null;
+        }
+        return entity;
+    }
+
+    public List<PhmAttachmentEntity> listAccessibleDiagnosisInputs()
+    {
+        return mapper.selectList(new LambdaQueryWrapper<PhmAttachmentEntity>()
+                .eq(PhmAttachmentEntity::getPurpose, "DIAGNOSIS_INPUT")
+                .orderByDesc(PhmAttachmentEntity::getCreateTime))
+            .stream()
+            .filter(entity -> entity.getBizId() == null || canAccessDevice(entity.getBizId()))
+            .sorted(Comparator.comparing(PhmAttachmentEntity::getCreateTime,
+                Comparator.nullsLast(Comparator.reverseOrder())))
+            .toList();
+    }
+
+    public List<PhmAttachmentEntity> listAccessibleDiagnosisInputsForDevice(Long deviceId)
+    {
+        if (deviceId == null || !canAccessDevice(deviceId))
+        {
+            return List.of();
+        }
+        return mapper.selectList(new LambdaQueryWrapper<PhmAttachmentEntity>()
+                .eq(PhmAttachmentEntity::getPurpose, "DIAGNOSIS_INPUT")
+                .eq(PhmAttachmentEntity::getBizId, deviceId)
+                .orderByDesc(PhmAttachmentEntity::getCreateTime));
+    }
+
+    public Path trustedContentPath(PhmAttachmentEntity entity) throws IOException
+    {
+        return content(entity).getFile().toPath().toAbsolutePath().normalize();
     }
 
     public FileSystemResource content(PhmAttachmentEntity entity) throws IOException

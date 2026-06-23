@@ -9,10 +9,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PhmAttachmentStorageServiceTest
 {
@@ -56,5 +58,23 @@ class PhmAttachmentStorageServiceTest
 
         assertThrows(IllegalArgumentException.class,
             () -> service.store(file, "REPORT", "report", null, null, "tester"));
+    }
+
+    @Test
+    void queuedTaskCannotResolveAttachmentWhenSha256BindingChanges()
+    {
+        PhmAttachmentMapper mapper = mock(PhmAttachmentMapper.class);
+        PhmAttachmentEntity entity = new PhmAttachmentEntity();
+        entity.setId(12L);
+        entity.setPurpose("DIAGNOSIS_INPUT");
+        entity.setSha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        when(mapper.selectById(12L)).thenReturn(entity);
+        PhmAttachmentStorageService service = new PhmAttachmentStorageService(
+            tempDir.toString(), new AttachmentVirusScanner(false, "", "", 30),
+            mapper, mock(PhmDataScopeService.class));
+
+        assertNotNull(service.getDiagnosisInputForTask(12L, entity.getSha256()));
+        assertNull(service.getDiagnosisInputForTask(12L,
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     }
 }

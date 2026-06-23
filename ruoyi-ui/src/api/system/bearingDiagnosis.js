@@ -16,21 +16,28 @@ export function getInferenceHealth(modelType = 'gear') {
   })
 }
 
-export function listMatFiles(modelType = 'gear') {
+export function listDiagnosisDevices() {
   return request({
-    url: '/sensor/diagnosis/inference/files',
-    method: 'get',
-    params: { modelType }
+    url: '/sensor/diagnosis/device/list',
+    method: 'get'
   })
 }
 
-export function analyzeLatestFile(fileName, context = {}, modelType = 'gear') {
+export function listMatFiles(modelType = 'gear', deviceCode) {
+  return request({
+    url: '/sensor/diagnosis/inference/files',
+    method: 'get',
+    params: { modelType, deviceCode: deviceCode || undefined }
+  })
+}
+
+export function analyzeLatestFile(attachmentId, context = {}, modelType = 'gear') {
   return request({
     url: '/sensor/diagnosis/inference/analyze',
     method: 'get',
     timeout: INFER_TIMEOUT,
     params: {
-      fileName: fileName || undefined,
+      attachmentId: attachmentId || undefined,
       modelType,
       deviceCode: context.deviceCode || undefined,
       channelId: context.channelId || undefined,
@@ -60,7 +67,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-export async function inferWithFilePath(data, modelType = 'gear') {
+export async function inferWithAttachment(data, modelType = 'gear') {
   const created = await request({
     url: '/sensor/diagnosis/tasks',
     method: 'post',
@@ -68,7 +75,7 @@ export async function inferWithFilePath(data, modelType = 'gear') {
     data: Object.assign({}, data, {
       modelType,
       idempotencyKey: data.idempotencyKey ||
-        `${modelType}:${data.deviceCode || ''}:${data.filePath || ''}:${Date.now()}`
+        `${modelType}:${data.deviceCode || ''}:${data.attachmentId || ''}:${Date.now()}`
     })
   })
   const task = created.data || created

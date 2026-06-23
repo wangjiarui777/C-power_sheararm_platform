@@ -1,9 +1,13 @@
 param(
     [Parameter(Mandatory = $true)][string]$Version,
+    [Parameter(Mandatory = $true)][string]$ModelSourceRoot,
     [string]$OutputRoot = ".\offline-packages"
 )
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
+$modelSource = (Resolve-Path $ModelSourceRoot).Path
+$modelManifestPath = Join-Path $repo "ruoyi-sensor\inference\models-manifest.json"
+$modelManifest = Get-Content -LiteralPath $modelManifestPath -Raw | ConvertFrom-Json
 if (-not (Test-Path $OutputRoot)) { New-Item -ItemType Directory -Path $OutputRoot | Out-Null }
 $output = (Resolve-Path $OutputRoot).Path
 $stage = Join-Path $output $Version
@@ -22,12 +26,27 @@ try {
         npm sbom --sbom-format cyclonedx | Set-Content -LiteralPath "frontend-sbom.json" -Encoding UTF8
     } finally { Pop-Location }
 
-    New-Item -ItemType Directory -Path "$stage\backend","$stage\frontend","$stage\inference","$stage\deployment" | Out-Null
+    New-Item -ItemType Directory -Path "$stage\backend","$stage\frontend","$stage\inference","$stage\models","$stage\deployment" | Out-Null
     Copy-Item "ruoyi-admin\target\ruoyi-admin.jar" "$stage\backend\ruoyi-admin.jar"
     Copy-Item "target\backend-sbom.json" "$stage\backend\backend-sbom.json"
     Copy-Item "ruoyi-ui\dist\*" "$stage\frontend" -Recurse
     Copy-Item "ruoyi-ui\frontend-sbom.json" "$stage\frontend\frontend-sbom.json"
-    Copy-Item "ruoyi-sensor\inference\*" "$stage\inference" -Recurse
+    Copy-Item "ruoyi-sensor\inference\*.py" "$stage\inference"
+    Copy-Item "ruoyi-sensor\inference\requirements.txt" "$stage\inference"
+    Copy-Item $modelManifestPath "$stage\inference\models-manifest.json"
+    Copy-Item "ruoyi-sensor\inference\models" "$stage\inference\models" -Recurse
+    Copy-Item "ruoyi-sensor\inference\utils" "$stage\inference\utils" -Recurse
+    foreach ($model in $modelManifest.models) {
+        $source = Join-Path $modelSource $model.artifact
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "缺少模型制品: $source"
+        }
+        $actualHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualHash -ne $model.sha256) {
+            throw "模型制品哈希不匹配: $($model.artifact)"
+        }
+        Copy-Item -LiteralPath $source -Destination (Join-Path "$stage\models" $model.artifact)
+    }
     Copy-Item "deployment\*" "$stage\deployment" -Recurse
 
     $manifest = Get-ChildItem -LiteralPath $stage -Recurse -File | ForEach-Object {

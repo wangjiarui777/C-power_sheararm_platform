@@ -8,20 +8,15 @@
 ## 全新安装基线
 
 - `ry_20260417.sql`：若依系统库基线。
-- `vibration_data.sql`、`temperature_data.sql`、`vibration_analysis.sql`、`enhanced_inference_record.sql`：传感器与推理业务表。
+- `vibration_data.sql`、`temperature_data.sql`、`vibration_analysis.sql`、`enhanced_inference_record.sql`：历史空库基线，禁止用于生产升级。
 - `phm_platform.sql`：PHM 业务表。该文件包含 `DROP TABLE`，仅允许空库安装使用。
 - `sensor_monitoring_module.sql`：监测模块基线补充。
 
 ## 现有数据库无损升级
 
-按以下顺序执行：
-
-1. 若缺少 `enhanced_inference_record` 表，先执行 `enhanced_inference_record.sql`
-2. `industrial_monitoring_upgrade.sql`
-3. `sensor_module_menu_migration.sql`
-4. `inference_task_upgrade.sql`
-5. `model_release_upgrade.sql`
-6. `phm_data_scope_upgrade.sql`
+生产环境不再手工串行执行这些脚本。应用启动前由 Flyway 按版本执行
+`ruoyi-admin/src/main/resources/db/migration`，现有数据库须先完成结构预检并 baseline。
+历史 SQL 只用于溯源或空库开发安装。
 7. `attachment_security_upgrade.sql`
 8. `telemetry_stream_upgrade.sql`
 9. `collector_credential_upgrade.sql`

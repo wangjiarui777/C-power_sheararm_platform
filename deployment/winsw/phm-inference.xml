@@ -7,6 +7,11 @@
   <workingdirectory>%BASE%\..\current\inference</workingdirectory>
   <env name="INFERENCE_BIND_HOST" value="127.0.0.1"/>
   <env name="INFERENCE_INTERNAL_TOKEN" value="%INFERENCE_INTERNAL_TOKEN%"/>
+  <env name="GEAR_MODEL_PATH" value="%BASE%\..\models\best_model_classwise_maha.pth"/>
+  <env name="BEARING_MODEL_PATH" value="%BASE%\..\models\best_model.pth"/>
+  <env name="GEAR_MODEL_SHA256" value="%GEAR_MODEL_SHA256%"/>
+  <env name="BEARING_MODEL_SHA256" value="%BEARING_MODEL_SHA256%"/>
+  <env name="INFERENCE_ALLOWED_INPUT_ROOTS" value="%SENSOR_ATTACHMENT_ROOT%\objects"/>
   <env name="GEAR_MODEL_VERSION" value="%GEAR_MODEL_VERSION%"/>
   <env name="BEARING_MODEL_VERSION" value="%BEARING_MODEL_VERSION%"/>
   <startmode>Automatic</startmode>

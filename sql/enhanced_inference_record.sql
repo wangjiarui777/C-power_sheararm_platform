@@ -1,5 +1,5 @@
 -- 增强推理诊断结果记录表
--- 存储 enhanced_inference_service.py 中 map_result_to_frontend() 的完整输出
+-- 仅用于全新空库安装；生产结果由 Java 平台统一写入，Python 不直接访问数据库
 -- 数据库: ry-yue
 
 SET NAMES utf8mb4;

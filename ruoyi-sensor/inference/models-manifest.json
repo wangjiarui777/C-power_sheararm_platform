@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "type": "gear",
+      "version": "gear-unregistered",
+      "artifact": "best_model_classwise_maha.pth",
+      "sha256": "b315315a5af91421813c5f452cff1f0315b0029a22158d5f2fa44d59a4d870aa",
+      "size": 7602619,
+      "environmentPath": "GEAR_MODEL_PATH",
+      "environmentSha256": "GEAR_MODEL_SHA256"
+    },
+    {
+      "type": "bearing",
+      "version": "bearing-unregistered",
+      "artifact": "best_model.pth",
+      "sha256": "5773424dba27357bbcf756172b3cb8e19c6eebc1510c29169b7e638b3a6fdc30",
+      "size": 15458955,
+      "environmentPath": "BEARING_MODEL_PATH",
+      "environmentSha256": "BEARING_MODEL_SHA256"
+    }
+  ]
+}

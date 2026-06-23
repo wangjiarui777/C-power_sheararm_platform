@@ -5,10 +5,10 @@
 使用 04.4 原生的 compute_fft_full_curve / downsample_curve / compute_industrial_metrics
 等函数，仅保留一层薄映射将结果适配为前端期望的字段名。
 
-与 enhanced_inference_service.py 的区别：
-- 不再重复实现 FFT/降采样/工业指标（改用 04.4 原生函数）
-- map_result_to_frontend 替换为 _build_frontend_payload (~90行)
-- _extract_signal_from_dict / load_signal 改用 utils_signal 中的版本
+生产边界：
+- 仅暴露受内部令牌保护的推理、存活、就绪和指标接口
+- 不直接访问业务数据库，诊断任务、结果和告警均由 Java 平台写入
+- 只读取 Java 已完成鉴权、校验和病毒扫描的受信附件目录
 """
 
 from __future__ import annotations
@@ -16,9 +16,9 @@ from __future__ import annotations
 # =============================================================================
 # 标准库
 # =============================================================================
-import asyncio
 import importlib.util
 import json
+import hashlib
 import logging
 import os
 import secrets
@@ -26,7 +26,6 @@ import threading
 import time
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -38,7 +37,7 @@ import scipy.io
 import torch
 import torch.nn as nn
 import uvicorn
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException
 from starlette.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
@@ -73,9 +72,23 @@ logger = logging.getLogger("inference_service")
 # =============================================================================
 # 路径与常量
 # =============================================================================
-GEAR_MODEL_PATH = BASE_DIR / "get" / "best_model_classwise_maha.pth"
-BEARING_MODEL_PATH = BASE_DIR / "get" / "best_model.pth"
+GEAR_MODEL_PATH = Path(os.environ.get(
+    "GEAR_MODEL_PATH", str(BASE_DIR / "get" / "best_model_classwise_maha.pth")
+)).expanduser().resolve()
+BEARING_MODEL_PATH = Path(os.environ.get(
+    "BEARING_MODEL_PATH", str(BASE_DIR / "get" / "best_model.pth")
+)).expanduser().resolve()
+GEAR_MODEL_SHA256 = os.environ.get("GEAR_MODEL_SHA256", "").strip().lower()
+BEARING_MODEL_SHA256 = os.environ.get("BEARING_MODEL_SHA256", "").strip().lower()
+ALLOW_UNVERIFIED_MODELS = os.environ.get(
+    "INFERENCE_ALLOW_UNVERIFIED_MODELS", "false"
+).strip().lower() == "true"
 DATA_DIR = BASE_DIR / "get" / "got"
+ALLOWED_INPUT_ROOTS = tuple(
+    Path(value.strip()).expanduser().resolve()
+    for value in os.environ.get("INFERENCE_ALLOWED_INPUT_ROOTS", str(DATA_DIR)).split(os.pathsep)
+    if value.strip()
+)
 
 DEFAULT_PORT = int(os.environ.get("PORT", 5000))
 INFERENCE_BIND_HOST = os.environ.get("INFERENCE_BIND_HOST", "127.0.0.1")
@@ -88,8 +101,6 @@ CONFIDENCE_MIN = 1.0
 CONFIDENCE_MAX = 99.0
 CACHE_MAX_SIZE = 32
 VALID_MODEL_TYPES = {"gear", "bearing"}
-MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(128 * 1024 * 1024)))
-UPLOAD_CHUNK_BYTES = 1024 * 1024
 INFERENCE_WORKERS = max(1, int(os.environ.get("INFERENCE_WORKERS", "1")))
 BEARING_CLASS_CN_MAP = {
     "N": "正常",
@@ -256,6 +267,23 @@ def _resolve_analysis_file(file_name: Optional[str]) -> Path:
     return file_path
 
 
+def _resolve_trusted_input_path(file_path: str) -> Path:
+    source_path = Path(file_path)
+    if not source_path.is_absolute():
+        raise HTTPException(status_code=400, detail="filePath must be an absolute trusted storage path.")
+    resolved = source_path.expanduser().resolve()
+    if not any(resolved == root or root in resolved.parents for root in ALLOWED_INPUT_ROOTS):
+        raise HTTPException(status_code=403, detail="filePath is outside configured inference input roots.")
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {resolved}")
+    if resolved.suffix.lower() not in {".mat", ".npy"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {resolved.suffix.lower()}. Only .mat and .npy are supported.",
+        )
+    return resolved
+
+
 def _load_signal_from_path(
     file_path: Path,
     preferred_signal_key: Optional[str] = None,
@@ -304,94 +332,6 @@ def _load_signal_from_path(
     return sig, file_path.name, meta
 
 
-def _load_signal_from_bytes(
-    filename: str,
-    content: bytes,
-    preferred_signal_key: Optional[str] = None,
-) -> Tuple[np.ndarray, str, Dict[str, Any]]:
-    """从上传字节流加载振动信号（.mat / .npy）。
-
-    Returns
-    -------
-    (signal, filename, metadata)
-    """
-    from utils_signal import _extract_mat_metadata
-
-    suffix = Path(filename).suffix.lower()
-    meta: Dict[str, Any] = {"sample_rate": None, "rpm": None}
-
-    if suffix == ".mat":
-        payload = scipy.io.loadmat(BytesIO(content))
-        sig = _extract_signal_from_dict(
-            payload,
-            source_name=filename,
-            preferred_signal_key=preferred_signal_key,
-        )
-        meta = _extract_mat_metadata(payload)
-    elif suffix == ".npy":
-        payload = np.load(BytesIO(content), allow_pickle=True)
-        if isinstance(payload, np.lib.npyio.NpzFile):
-            try:
-                if not payload.files:
-                    raise ValueError("No arrays found in uploaded npz file.")
-                arrays = {name: payload[name] for name in payload.files}
-                sig = _extract_signal_from_dict(
-                    arrays,
-                    source_name=filename,
-                    preferred_signal_key=preferred_signal_key,
-                )
-            finally:
-                payload.close()
-        elif isinstance(payload, np.ndarray) and payload.dtype == object:
-            if payload.size == 1 and isinstance(payload.reshape(-1)[0], dict):
-                sig = _extract_signal_from_dict(
-                    payload.reshape(-1)[0],
-                    source_name=filename,
-                    preferred_signal_key=preferred_signal_key,
-                )
-            else:
-                sig = np.concatenate([np.asarray(item).reshape(-1) for item in payload.flat])
-        else:
-            sig = np.asarray(payload, dtype=np.float32).reshape(-1)
-    else:
-        raise ValueError(f"Unsupported file type: {suffix}. Only .mat and .npy are supported.")
-
-    sig = np.nan_to_num(np.asarray(sig, dtype=np.float32).reshape(-1),
-                        nan=0.0, posinf=0.0, neginf=0.0)
-    return sig, filename, meta
-
-
-async def _read_upload_limited(file: UploadFile) -> bytes:
-    """Read an upload in chunks, rejecting oversized files before memory spikes."""
-    chunks: List[bytes] = []
-    total = 0
-    while True:
-        chunk = await file.read(UPLOAD_CHUNK_BYTES)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > MAX_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Uploaded file is too large. Limit is {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
-            )
-        chunks.append(chunk)
-    return b"".join(chunks)
-
-
-def _analyze_uploaded_content(model_type: str, filename: str, content: bytes) -> Dict[str, Any]:
-    preferred_key = (
-        bearing_model_params.get("signal_key", "DE_time") if model_type == "bearing"
-        else gear_model_params.get("signal_key", "sig_acc_5120")
-    )
-    raw_signal, _, file_meta = _load_signal_from_bytes(filename, content, preferred_key)
-    extra: Dict[str, Any] = {"filename": filename}
-    if model_type == "bearing" and file_meta.get("sample_rate"):
-        extra["sampleRate"] = float(file_meta["sample_rate"])
-        extra["sample_rate"] = float(file_meta["sample_rate"])
-    return _run_analysis(model_type, raw_signal, filename, f"{model_type}_upload", extra=extra)
-
-
 # =============================================================================
 # 缓存辅助
 # =============================================================================
@@ -438,9 +378,27 @@ def _clean_state_dict(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Te
     return cleaned
 
 
+def _verify_model_artifact(path: Path, expected_sha256: str, model_type: str) -> None:
+    if not path.is_file():
+        raise FileNotFoundError(f"{model_type} model checkpoint not found: {path}")
+    if not expected_sha256:
+        if ALLOW_UNVERIFIED_MODELS:
+            logger.warning("%s model hash verification is explicitly disabled", model_type)
+            return
+        raise RuntimeError(f"{model_type.upper()}_MODEL_SHA256 must be configured")
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    actual = digest.hexdigest()
+    if not secrets.compare_digest(actual, expected_sha256):
+        raise RuntimeError(
+            f"{model_type} model SHA-256 mismatch: expected {expected_sha256}, got {actual}"
+        )
+
+
 def load_gear_model() -> Tuple[WDCNNMechDG, Dict[str, Any], List[str], Dict[str, Any]]:
-    if not GEAR_MODEL_PATH.exists():
-        raise FileNotFoundError(f"Gear model checkpoint not found: {GEAR_MODEL_PATH}")
+    _verify_model_artifact(GEAR_MODEL_PATH, GEAR_MODEL_SHA256, "gear")
 
     ckpt = v6.safe_torch_load(GEAR_MODEL_PATH, map_location=DEVICE)
     params = ckpt["params"]
@@ -471,8 +429,7 @@ def load_bearing_model() -> Tuple[nn.Module, Dict[str, Any], List[str]]:
         classes     — list of class label strings, e.g. ['N', 'OR', 'B']
         window_size / stride / signal_key / normalize — preprocessing config
     """
-    if not BEARING_MODEL_PATH.exists():
-        raise FileNotFoundError(f"Bearing model checkpoint not found: {BEARING_MODEL_PATH}")
+    _verify_model_artifact(BEARING_MODEL_PATH, BEARING_MODEL_SHA256, "bearing")
 
     ckpt = v6.safe_torch_load(BEARING_MODEL_PATH, map_location=DEVICE)
 
@@ -1049,110 +1006,6 @@ def metrics() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@app.get("/internal/files", dependencies=[Depends(require_internal_token)])
-def mat_files() -> JSONResponse:
-    items: List[Dict[str, Any]] = []
-    if DATA_DIR.exists():
-        all_files = list(DATA_DIR.glob("*.mat")) + list(DATA_DIR.glob("*.npy"))
-        all_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        for p in all_files:
-            items.append({
-                "name": p.stem,
-                "label": p.stem,
-                "source_name": p.name,
-            })
-    return JSONResponse(
-        content={"success": True, "data": items},
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
-    )
-
-
-@app.get("/internal/analyze", dependencies=[Depends(require_internal_token)])
-def analyze(
-    file_name: Optional[str] = Query(default=None, min_length=1),
-    model_type: str = Query(default="gear"),
-) -> Dict[str, Any]:
-    model_type = _normalize_model_type(model_type)
-
-    try:
-        file_path = _resolve_analysis_file(file_name)
-        if model_type == "gear" and gear_model is None:
-            raise HTTPException(status_code=503, detail=model_load_errors.get("gear", "Gear model is not loaded."))
-        if model_type == "bearing" and bearing_model is None:
-            raise HTTPException(status_code=503, detail=model_load_errors.get("bearing", "Bearing model is not loaded."))
-
-        def _compute() -> Dict[str, Any]:
-            preferred_key = (
-                bearing_model_params.get("signal_key", "DE_time") if model_type == "bearing"
-                else gear_model_params.get("signal_key", "sig_acc_5120")
-            )
-            raw_signal, _, file_meta = _load_signal_from_path(file_path, preferred_key)
-            extra: Dict[str, Any] = {}
-            if file_meta.get("sample_rate"):
-                extra["sample_rate"] = float(file_meta["sample_rate"])
-                extra["sampleRate"] = float(file_meta["sample_rate"])
-            return _run_analysis(
-                model_type,
-                raw_signal,
-                file_path.name,
-                f"{model_type}_{'latest' if file_name is None else 'specified'}",
-                extra=extra,
-            )
-
-        result = _get_cached_or_compute(file_path, model_type, _compute)
-        logger.info(
-            "analyze: file=%s model=%s diagnosis=%s",
-            file_path.name,
-            model_type,
-            result.get("diagnosisResult"),
-        )
-        return JSONResponse(
-            content={"success": True, "data": result},
-            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
-        )
-
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.exception("analyze failed")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post("/internal/analyze/upload", dependencies=[Depends(require_internal_token)])
-async def analyze_upload(
-    file: UploadFile = File(...),
-    model_type: str = Form(default="gear"),
-) -> Dict[str, Any]:
-    model_type = _normalize_model_type(model_type)
-
-    suffix = Path(file.filename).suffix.lower()
-    if suffix not in {".mat", ".npy"}:
-        raise HTTPException(status_code=400, detail="Only .mat and .npy files are supported.")
-
-    content = await _read_upload_limited(file)
-    try:
-        if model_type == "gear" and gear_model is None:
-            raise HTTPException(status_code=503, detail=model_load_errors.get("gear", "Gear model is not loaded."))
-        if model_type == "bearing" and bearing_model is None:
-            raise HTTPException(status_code=503, detail=model_load_errors.get("bearing", "Bearing model is not loaded."))
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            _inference_executor,
-            _analyze_uploaded_content,
-            model_type,
-            file.filename,
-            content,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to analyze file: {exc}") from exc
-
-    return {"success": True, "data": result}
-
-
 @app.post("/internal/infer", dependencies=[Depends(require_internal_token)])
 def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     model_type = _normalize_model_type(payload.get("modelType") or payload.get("model_type") or "gear")
@@ -1161,16 +1014,7 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not file_path:
         raise HTTPException(status_code=400, detail="filePath is required.")
 
-    source_path = Path(file_path)
-    if not source_path.is_absolute():
-        source_path = DATA_DIR / source_path
-
-    if not source_path.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {source_path}")
-
-    suffix = source_path.suffix.lower()
-    if suffix not in {".mat", ".npy"}:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}. Only .mat and .npy are supported.")
+    source_path = _resolve_trusted_input_path(file_path)
 
     if model_type == "gear" and gear_model is None:
         raise HTTPException(status_code=503, detail=model_load_errors.get("gear", "Gear model is not loaded."))

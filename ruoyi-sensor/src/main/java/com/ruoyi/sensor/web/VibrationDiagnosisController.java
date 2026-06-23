@@ -1,7 +1,6 @@
 package com.ruoyi.sensor.web;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -18,9 +17,11 @@ import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.sensor.domain.entity.EnhancedInferenceRecordEntity;
 import com.ruoyi.sensor.domain.entity.InferenceTaskEntity;
+import com.ruoyi.sensor.domain.entity.PhmAttachmentEntity;
 import com.ruoyi.sensor.mapper.InferenceTaskMapper;
 import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
 import com.ruoyi.sensor.service.PhmDataScopeService;
+import com.ruoyi.sensor.service.PhmAttachmentStorageService;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisBatchEntity;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisRecordEntity;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
@@ -40,10 +41,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -59,6 +58,7 @@ public class VibrationDiagnosisController
     private final VibrationAnalysisPersistenceService persistenceService;
     private final SensorWebSocketPushService webSocketPushService;
     private final PhmService phmService;
+    private final PhmAttachmentStorageService attachmentStorageService;
     private final String gearInferUrl;
     private final String bearingInferUrl;
     private final String internalToken;
@@ -83,6 +83,7 @@ public class VibrationDiagnosisController
         VibrationAnalysisPersistenceService persistenceService,
         SensorWebSocketPushService webSocketPushService,
         PhmService phmService,
+        PhmAttachmentStorageService attachmentStorageService,
         @Value("${sensor.inference.gear-url:}") String gearInferUrl,
         @Value("${sensor.inference.bearing-url:}") String bearingInferUrl,
         @Value("${sensor.inference.internal-token:}") String internalToken,
@@ -96,6 +97,7 @@ public class VibrationDiagnosisController
         this.persistenceService = persistenceService;
         this.webSocketPushService = webSocketPushService;
         this.phmService = phmService;
+        this.attachmentStorageService = attachmentStorageService;
         this.gearInferUrl = gearInferUrl;
         this.bearingInferUrl = bearingInferUrl;
         this.internalToken = internalToken;
@@ -145,18 +147,19 @@ public class VibrationDiagnosisController
     public AjaxResult receiverAnalyze(@RequestBody Map<String, Object> payload)
     {
         String deviceCode = resolveDeviceCode(payload);
-        String filePath = payload == null ? null : String.valueOf(payload.get("filePath"));
 
         try {
-            Map<String, Object> pythonResult = callPythonInfer(payload);
+            Map<String, Object> trustedPayload = withTrustedAttachment(payload);
+            Map<String, Object> pythonResult = callPythonInfer(trustedPayload);
             validatePythonResult(pythonResult);
-            Map<String, Object> normalized = normalizePythonResult(pythonResult, deviceCode, filePath, payload);
+            Map<String, Object> normalized = normalizePythonResult(pythonResult, deviceCode,
+                stringValue(trustedPayload.get("filename"), null), trustedPayload);
             persistDiagnosis(normalized);
             phmService.syncDiagnosisResult(normalized);
             pushDiagnosis(normalized);
             return AjaxResult.success(normalized);
         } catch (Exception ex) {
-            Map<String, Object> failure = buildFailureResult(deviceCode, filePath, ex.getMessage());
+            Map<String, Object> failure = buildFailureResult(deviceCode, null, ex.getMessage());
             pushDiagnosis(failure);
             return AjaxResult.error("推理失败: " + ex.getMessage()).put("data", failure);
         }
@@ -166,9 +169,9 @@ public class VibrationDiagnosisController
     @PostMapping("/tasks")
     public AjaxResult createTask(@RequestBody Map<String, Object> payload)
     {
-        if (payload == null || !hasText(payload.get("filePath")))
+        if (payload == null || payload.get("attachmentId") == null)
         {
-            return AjaxResult.error("filePath 为必填项");
+            return AjaxResult.error("attachmentId 为必填项，禁止提交任意服务器文件路径");
         }
         if (!hasText(payload.get("deviceCode")))
         {
@@ -176,7 +179,8 @@ public class VibrationDiagnosisController
         }
         PhmDeviceScopeQuery deviceQuery = new PhmDeviceScopeQuery();
         deviceQuery.setDeviceCode(String.valueOf(payload.get("deviceCode")).trim());
-        if (dataScopeService.getDevice(deviceQuery) == null)
+        com.ruoyi.sensor.domain.entity.PhmDeviceEntity device = dataScopeService.getDevice(deviceQuery);
+        if (device == null)
         {
             return AjaxResult.error("无权访问指定设备");
         }
@@ -184,6 +188,16 @@ public class VibrationDiagnosisController
         if (!Arrays.asList("gear", "bearing").contains(modelType))
         {
             return AjaxResult.error("modelType 仅支持 gear 或 bearing");
+        }
+        Long attachmentId = toLong(payload.get("attachmentId"), null);
+        PhmAttachmentEntity attachment = attachmentStorageService.getAccessibleDiagnosisInput(attachmentId);
+        if (attachment == null)
+        {
+            return AjaxResult.error("诊断输入附件不存在或无权访问");
+        }
+        if (attachment.getBizId() != null && !attachment.getBizId().equals(device.getId()))
+        {
+            return AjaxResult.error("诊断输入附件与设备不匹配");
         }
 
         String idempotencyKey = stringValue(payload.get("idempotencyKey"), null);
@@ -195,6 +209,10 @@ public class VibrationDiagnosisController
                     .last("limit 1"));
             if (existing != null)
             {
+                if (!taskBelongsTo(existing, device.getDeviceCode(), attachmentId))
+                {
+                    return AjaxResult.error("幂等键已被其他诊断任务占用");
+                }
                 return AjaxResult.success(taskSummary(existing));
             }
         }
@@ -208,9 +226,9 @@ public class VibrationDiagnosisController
         task.setChannelId(payload.get("channelId") == null ? null : (int) toNumber(payload.get("channelId"), 0));
         task.setModelType(modelType);
         task.setRequestedModelVersion(stringValue(payload.get("modelVersion"), null));
-        task.setInputType("FILE_PATH");
-        task.setInputRef(String.valueOf(payload.get("filePath")));
-        task.setInputSha256(stringValue(payload.get("inputSha256"), null));
+        task.setInputType("ATTACHMENT");
+        task.setInputRef(String.valueOf(attachmentId));
+        task.setInputSha256(attachment.getSha256());
         task.setStatus("PENDING");
         task.setInputJson(JSON.toJSONString(payload));
         task.setCreatedBy(SecurityUtils.getUsername());
@@ -255,6 +273,25 @@ public class VibrationDiagnosisController
         payload.put("modelType", task.getModelType());
         payload.put("deviceCode", task.getDeviceCode());
         payload.put("sampleTime", DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, new Date()));
+        PhmAttachmentEntity attachment = attachmentStorageService.getDiagnosisInputForTask(
+            toLong(task.getInputRef(), null), task.getInputSha256());
+        if (attachment == null)
+        {
+            finishTask(task, "INVALID", "INPUT_NOT_ACCESSIBLE",
+                "诊断输入附件不存在或已失去访问权限", null);
+            return;
+        }
+        try
+        {
+            payload.put("attachmentId", attachment.getId());
+            payload.put("filePath", attachmentStorageService.trustedContentPath(attachment).toString());
+            payload.put("filename", attachment.getFileName());
+        }
+        catch (IOException ex)
+        {
+            finishTask(task, "INVALID", "INPUT_UNAVAILABLE", ex.getMessage(), null);
+            return;
+        }
 
         Map<String, Object> pythonResult;
         try
@@ -264,7 +301,7 @@ public class VibrationDiagnosisController
         catch (Exception ex)
         {
             finishTask(task, "FAILED", "INFERENCE_UNAVAILABLE", ex.getMessage(), null);
-            pushDiagnosis(buildFailureResult(task.getDeviceCode(), task.getInputRef(), ex.getMessage()));
+            pushDiagnosis(buildFailureResult(task.getDeviceCode(), attachment.getFileName(), ex.getMessage()));
             return;
         }
 
@@ -272,7 +309,7 @@ public class VibrationDiagnosisController
         {
             validatePythonResult(pythonResult);
             Map<String, Object> normalized = normalizePythonResult(
-                pythonResult, task.getDeviceCode(), task.getInputRef(), payload);
+                pythonResult, task.getDeviceCode(), attachment.getFileName(), payload);
             persistDiagnosis(normalized);
             phmService.syncDiagnosisResult(normalized);
             pushDiagnosis(normalized);
@@ -312,6 +349,43 @@ public class VibrationDiagnosisController
         return value != null && !String.valueOf(value).isBlank();
     }
 
+    private Map<String, Object> withTrustedAttachment(Map<String, Object> source) throws IOException
+    {
+        if (source == null)
+        {
+            throw new IOException("请求体不能为空");
+        }
+        Long attachmentId = toLong(source.get("attachmentId"), null);
+        PhmAttachmentEntity attachment = attachmentStorageService.getAccessibleDiagnosisInput(attachmentId);
+        if (attachment == null)
+        {
+            throw new IOException("attachmentId 无效或无权访问");
+        }
+        String deviceCode = stringValue(source.get("deviceCode"), null);
+        PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+        query.setDeviceCode(deviceCode);
+        com.ruoyi.sensor.domain.entity.PhmDeviceEntity device = dataScopeService.getDevice(query);
+        if (device == null || (attachment.getBizId() != null && !attachment.getBizId().equals(device.getId())))
+        {
+            throw new IOException("诊断输入附件与授权设备不匹配");
+        }
+        Map<String, Object> payload = new LinkedHashMap<>(source);
+        payload.remove("filePath");
+        payload.put("attachmentId", attachment.getId());
+        payload.put("filePath", attachmentStorageService.trustedContentPath(attachment).toString());
+        payload.put("filename", attachment.getFileName());
+        return payload;
+    }
+
+    private boolean taskBelongsTo(InferenceTaskEntity task, String deviceCode, Long attachmentId)
+    {
+        return task != null
+            && deviceCode != null
+            && deviceCode.equals(task.getDeviceCode())
+            && attachmentId != null
+            && String.valueOf(attachmentId).equals(task.getInputRef());
+    }
+
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
     @GetMapping("/inference/health")
     public AjaxResult inferenceHealth(@RequestParam(defaultValue = "gear") String modelType)
@@ -329,31 +403,81 @@ public class VibrationDiagnosisController
 
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
     @GetMapping("/inference/files")
-    public AjaxResult inferenceFiles(@RequestParam(defaultValue = "gear") String modelType)
+    public AjaxResult inferenceFiles(@RequestParam(defaultValue = "gear") String modelType,
+        @RequestParam(required = false) String deviceCode)
     {
-        try
+        List<PhmAttachmentEntity> inputs;
+        if (hasText(deviceCode))
         {
-            return AjaxResult.success(extractPythonData(proxyGet(modelType, "/internal/files")));
+            PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+            query.setDeviceCode(deviceCode.trim());
+            com.ruoyi.sensor.domain.entity.PhmDeviceEntity device = dataScopeService.getDevice(query);
+            inputs = device == null
+                ? List.of()
+                : attachmentStorageService.listAccessibleDiagnosisInputsForDevice(device.getId());
         }
-        catch (Exception ex)
+        else
         {
-            return AjaxResult.error("获取诊断文件失败: " + ex.getMessage());
+            inputs = attachmentStorageService.listAccessibleDiagnosisInputs();
         }
+        List<Map<String, Object>> files = inputs.stream()
+            .map(item -> {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("id", item.getId());
+                result.put("name", item.getFileName());
+                result.put("label", item.getFileName());
+                result.put("source_name", item.getFileName());
+                result.put("sha256", item.getSha256());
+                result.put("createdAt", item.getCreateTime());
+                result.put("modelType", modelType);
+                return result;
+            })
+            .collect(java.util.stream.Collectors.toList());
+        return AjaxResult.success(files);
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @GetMapping("/inference/analyze")
-    public AjaxResult inferenceAnalyze(@RequestParam(required = false) String fileName,
-        @RequestParam(defaultValue = "gear") String modelType)
+    public AjaxResult inferenceAnalyze(@RequestParam(required = false) Long attachmentId,
+        @RequestParam(defaultValue = "gear") String modelType,
+        @RequestParam String deviceCode,
+        @RequestParam(required = false) Integer channelId,
+        @RequestParam(required = false) Long pointId)
     {
         try
         {
-            String path = "/internal/analyze?model_type=" + modelType;
-            if (fileName != null && !fileName.isBlank())
+            PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+            query.setDeviceCode(deviceCode);
+            com.ruoyi.sensor.domain.entity.PhmDeviceEntity device = dataScopeService.getDevice(query);
+            if (device == null)
             {
-                path += "&file_name=" + java.net.URLEncoder.encode(fileName, StandardCharsets.UTF_8);
+                return AjaxResult.error("无权访问指定设备");
             }
-            Map<String, Object> response = proxyGet(modelType, path);
+            PhmAttachmentEntity attachment = attachmentId == null
+                ? attachmentStorageService.listAccessibleDiagnosisInputsForDevice(device.getId())
+                    .stream().findFirst().orElse(null)
+                : attachmentStorageService.getAccessibleDiagnosisInput(attachmentId);
+            if (attachment == null)
+            {
+                return AjaxResult.error("暂无可分析的诊断输入附件");
+            }
+            if (attachment.getBizId() == null || !attachment.getBizId().equals(device.getId()))
+            {
+                return AjaxResult.error("诊断输入附件与授权设备不匹配");
+            }
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("attachmentId", attachment.getId());
+            payload.put("filePath", attachmentStorageService.trustedContentPath(attachment).toString());
+            payload.put("filename", attachment.getFileName());
+            payload.put("deviceCode", deviceCode);
+            payload.put("channelId", channelId);
+            payload.put("pointId", pointId);
+            payload.put("modelType", modelType);
+            payload.put("taskId", UUID.randomUUID().toString());
+            payload.put("requestId", UUID.randomUUID().toString());
+            payload.put("sampleTime", DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, new Date()));
+            Map<String, Object> response = callPythonInfer(payload);
+            validatePythonResult(response);
             return AjaxResult.success(extractPythonData(response));
         }
         catch (Exception ex)
@@ -365,29 +489,39 @@ public class VibrationDiagnosisController
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @PostMapping(value = "/inference/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public AjaxResult inferenceUpload(@RequestParam("file") MultipartFile file,
-        @RequestParam(defaultValue = "gear") String modelType)
+        @RequestParam(defaultValue = "gear", name = "model_type") String modelType,
+        @RequestParam(name = "device_code") String deviceCode,
+        @RequestParam(required = false, name = "channel_id") Integer channelId,
+        @RequestParam(required = false, name = "point_id") Long pointId)
     {
         try
         {
-            MultipartBodyBuilder builder = new MultipartBodyBuilder();
-            builder.part("model_type", modelType);
-            builder.part("file", new ByteArrayResource(file.getBytes())
+            PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+            query.setDeviceCode(deviceCode);
+            com.ruoyi.sensor.domain.entity.PhmDeviceEntity device = dataScopeService.getDevice(query);
+            if (device == null)
             {
-                @Override
-                public String getFilename()
-                {
-                    return file.getOriginalFilename();
-                }
-            }).contentType(MediaType.APPLICATION_OCTET_STREAM);
-            String response = restClient.post()
-                .uri(inferenceBaseUrl(modelType) + "/internal/analyze/upload")
-                .header("X-Internal-Token", internalToken)
-                .header("X-Request-Id", UUID.randomUUID().toString())
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(builder.build())
-                .retrieve()
-                .body(String.class);
-            return AjaxResult.success(extractPythonData(JSON.parseObject(response, Map.class)));
+                return AjaxResult.error("无权访问指定设备");
+            }
+            PhmAttachmentEntity attachment = attachmentStorageService.store(file, "DIAGNOSIS_INPUT",
+                "device", device.getId(), modelType, SecurityUtils.getUsername());
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("attachmentId", attachment.getId());
+            payload.put("filePath", attachmentStorageService.trustedContentPath(attachment).toString());
+            payload.put("filename", attachment.getFileName());
+            payload.put("deviceCode", deviceCode);
+            payload.put("channelId", channelId);
+            payload.put("pointId", pointId);
+            payload.put("modelType", modelType);
+            payload.put("taskId", UUID.randomUUID().toString());
+            payload.put("requestId", UUID.randomUUID().toString());
+            payload.put("sampleTime", DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, new Date()));
+            Map<String, Object> response = callPythonInfer(payload);
+            validatePythonResult(response);
+            Map<String, Object> result = (Map<String, Object>) extractPythonData(response);
+            result.put("attachmentId", attachment.getId());
+            result.put("inputSha256", attachment.getSha256());
+            return AjaxResult.success(result);
         }
         catch (Exception ex)
         {

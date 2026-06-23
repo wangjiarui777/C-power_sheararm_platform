@@ -124,7 +124,9 @@ mysql -u root -p"$MYSQL_PWD" ry-yue -e "SELECT status, COUNT(*) AS alarm_count F
 mysql -u root -p"$MYSQL_PWD" ry-yue -e "SHOW TABLES LIKE 'enhanced_inference_record';"
 ```
 
-其中 `enhanced_inference_record.sql` 用于 Python 推理服务写入诊断历史，`phm_platform.sql` 用于设备资产、测点、告警闭环、报表和系统配置，`industrial_monitoring_upgrade.sql` 用于统一测点、数据质量、告警流程状态和工业监测读模型。三者都需要导入，监测闭环才能完整运行。
+上述逐文件导入方式仅用于历史开发环境。生产环境必须由 Flyway 执行
+`ruoyi-admin/src/main/resources/db/migration` 下的版本化迁移；诊断历史由 Java 平台统一写入，
+Python 推理服务不得持有数据库凭据。
 
 #### 2.2 安装 Redis
 
@@ -339,12 +341,8 @@ cd <项目根目录>
 .\run-all.ps1
 ```
 
-或分别启动：
-```powershell
-cd <项目根目录>
-.\run-gear.ps1
-.\run-bearing.ps1
-```
+开发环境只启动统一推理服务；生产环境通过
+`deployment/winsw/phm-inference.xml` 注册独立 Windows 服务，不由 Java 或脚本拉起子进程。
 
 如需自定义端口，需要同步修改前端环境变量：
 ```env

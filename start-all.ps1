@@ -145,26 +145,25 @@ npm run dev
 Start-Sleep -Seconds 1
 
 # =============================================================================
-# 3. Python 推理服务（齿轮 5000 + 轴承 5001）
+# 3. Python 统一内部推理服务（齿轮 + 轴承）
 # =============================================================================
 Start-InNewWindow `
-    -Title 'Gear Diagnosis (齿轮推理 :5000)' `
+    -Title 'PHM Internal Inference (:5000)' `
     -WorkingDir "$projectRoot\ruoyi-sensor\inference" `
     -Command @"
 `$pythonExe = '$pythonExe'
-Write-Host 'Starting Gear Diagnosis Service on port 5000...' -ForegroundColor Cyan
+if ([string]::IsNullOrWhiteSpace(`$env:INFERENCE_INTERNAL_TOKEN)) {
+    throw 'INFERENCE_INTERNAL_TOKEN 未设置，拒绝启动内部推理服务。'
+}
+`$env:GEAR_MODEL_PATH = '$projectRoot\.local-models\best_model_classwise_maha.pth'
+`$env:BEARING_MODEL_PATH = '$projectRoot\.local-models\best_model.pth'
+`$env:GEAR_MODEL_SHA256 = 'b315315a5af91421813c5f452cff1f0315b0029a22158d5f2fa44d59a4d870aa'
+`$env:BEARING_MODEL_SHA256 = '5773424dba27357bbcf756172b3cb8e19c6eebc1510c29169b7e638b3a6fdc30'
+`$attachmentRoot = if (`$env:SENSOR_ATTACHMENT_ROOT) { `$env:SENSOR_ATTACHMENT_ROOT } else { 'D:\ruoyi-secure\attachments' }
+`$env:INFERENCE_ALLOWED_INPUT_ROOTS = Join-Path `$attachmentRoot 'objects'
+Write-Host 'Starting unified internal inference service on 127.0.0.1:5000...' -ForegroundColor Cyan
 Write-Host "Using Python: `$pythonExe" -ForegroundColor DarkCyan
-& `$pythonExe gear_service.py
-"@
-
-Start-InNewWindow `
-    -Title 'Bearing Diagnosis (轴承推理 :5001)' `
-    -WorkingDir "$projectRoot\ruoyi-sensor\inference" `
-    -Command @"
-`$pythonExe = '$pythonExe'
-Write-Host 'Starting Bearing Diagnosis Service on port 5001...' -ForegroundColor Cyan
-Write-Host "Using Python: `$pythonExe" -ForegroundColor DarkCyan
-& `$pythonExe bearing_service.py
+& `$pythonExe inference_service.py
 "@
 
 Write-Host ''
@@ -174,8 +173,7 @@ Write-Host '========================================' -ForegroundColor Green
 Write-Host ''
 Write-Host '  后端:        http://localhost:8080' -ForegroundColor White
 Write-Host '  前端:        http://localhost:80'   -ForegroundColor White
-Write-Host '  齿轮推理:    http://localhost:5000 (齿轮诊断)' -ForegroundColor Cyan
-Write-Host '  轴承推理:    http://localhost:5001 (轴承诊断)' -ForegroundColor Cyan
+Write-Host '  内部推理:    http://127.0.0.1:5000/internal/*' -ForegroundColor Cyan
 Write-Host ''
 
 Read-Host '按 Enter 键退出此启动器窗口（不影响其他服务）'
