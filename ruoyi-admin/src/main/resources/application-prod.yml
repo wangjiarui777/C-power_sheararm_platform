@@ -37,6 +37,13 @@ spring:
     multipart:
       max-file-size: 128MB
       max-request-size: 130MB
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 2026041700
+    validate-on-migrate: true
+    clean-disabled: true
+    out-of-order: false
   datasource:
     druid:
       master:
@@ -58,10 +65,6 @@ spring:
     database: ${REDIS_DATABASE:0}
     password: ${REDIS_PASSWORD}
     timeout: 10s
-  servlet:
-    multipart:
-      max-file-size: 128MB
-      max-request-size: 128MB
 
 springdoc:
   api-docs:
