@@ -1,9 +1,14 @@
 package com.ruoyi.framework.web.service;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.crypto.SecretKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +26,7 @@ import com.ruoyi.common.utils.ip.IpUtils;
 import com.ruoyi.common.utils.uuid.IdUtils;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
@@ -41,6 +46,10 @@ public class TokenService
     // 令牌秘钥
     @Value("${token.secret}")
     private String secret;
+
+    // 旧签名密钥，逗号分隔，仅用于平滑轮换期间验证已有令牌
+    @Value("${token.previous-secrets:}")
+    private String previousSecrets;
 
     // 令牌有效期（默认30分钟）
     @Value("${token.expireTime}")
@@ -178,10 +187,10 @@ public class TokenService
      */
     private String createToken(Map<String, Object> claims)
     {
-        String token = Jwts.builder()
-                .setClaims(claims)
-                .signWith(SignatureAlgorithm.HS512, secret).compact();
-        return token;
+        return Jwts.builder()
+                .claims(claims)
+                .signWith(signingKey(secret))
+                .compact();
     }
 
     /**
@@ -192,10 +201,23 @@ public class TokenService
      */
     private Claims parseToken(String token)
     {
-        return Jwts.parser()
-                .setSigningKey(secret)
-                .parseClaimsJws(token)
-                .getBody();
+        RuntimeException lastError = null;
+        for (SecretKey key : verificationKeys())
+        {
+            try
+            {
+                return Jwts.parser()
+                        .verifyWith(key)
+                        .build()
+                        .parseSignedClaims(token)
+                        .getPayload();
+            }
+            catch (RuntimeException ex)
+            {
+                lastError = ex;
+            }
+        }
+        throw lastError == null ? new IllegalArgumentException("JWT verification key is not configured") : lastError;
     }
 
     /**
@@ -229,6 +251,26 @@ public class TokenService
     private String getTokenKey(String uuid)
     {
         return CacheConstants.LOGIN_TOKEN_KEY + uuid;
+    }
+
+    private SecretKey signingKey(String value)
+    {
+        return Keys.hmacShaKeyFor(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private List<SecretKey> verificationKeys()
+    {
+        List<SecretKey> keys = new ArrayList<>();
+        keys.add(signingKey(secret));
+        if (StringUtils.isNotEmpty(previousSecrets))
+        {
+            Arrays.stream(previousSecrets.split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::isNotEmpty)
+                    .map(this::signingKey)
+                    .forEach(keys::add);
+        }
+        return keys;
     }
 
     /**

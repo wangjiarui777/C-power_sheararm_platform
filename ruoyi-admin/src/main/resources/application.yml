@@ -74,7 +74,7 @@ sensor:
 
 spring:
   profiles:
-    active: dev
+    active: ${SPRING_PROFILES_ACTIVE:prod}
   config:
     import: optional:classpath:application-druid.yml
   datasource:
@@ -126,6 +126,7 @@ sys:
 token:
   header: Authorization
   secret: ${JWT_SECRET:}
+  previous-secrets: ${JWT_PREVIOUS_SECRETS:}
   expireTime: 30
 
 # 开发环境配置

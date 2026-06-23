@@ -1,0 +1,85 @@
+ruoyi:
+  profile: ${RUOYI_PROFILE}
+
+sensor:
+  default-device-code: ""
+  collector:
+    token: ${SENSOR_COLLECTOR_TOKEN}
+    master-key: ${SENSOR_COLLECTOR_MASTER_KEY}
+  websocket:
+    allowed-origins: ${SENSOR_WS_ALLOWED_ORIGINS}
+  inference:
+    gear-url: ${SENSOR_INFER_URL}
+    bearing-url: ${SENSOR_INFER_URL}
+    internal-token: ${SENSOR_INFERENCE_INTERNAL_TOKEN}
+    default-device-code: ""
+    default-model-type: gear
+  startup:
+    inference:
+      enabled: false
+    receiver:
+      enabled: false
+  iotdb:
+    enabled: true
+    node-urls: ${IOTDB_NODE_URLS}
+    username: ${IOTDB_USERNAME}
+    password: ${IOTDB_PASSWORD}
+    use-ssl: ${IOTDB_USE_SSL:false}
+    trust-store: ${IOTDB_TRUST_STORE:}
+    trust-store-password: ${IOTDB_TRUST_STORE_PASSWORD:}
+
+spring:
+  datasource:
+    druid:
+      master:
+        url: ${MYSQL_URL}
+        username: ${MYSQL_USERNAME}
+        password: ${MYSQL_PASSWORD}
+      stat-view-servlet:
+        enabled: false
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      password: ${REDIS_PASSWORD}
+      timeout: 10s
+  redis:
+    host: ${REDIS_HOST}
+    port: ${REDIS_PORT:6379}
+    database: ${REDIS_DATABASE:0}
+    password: ${REDIS_PASSWORD}
+    timeout: 10s
+  servlet:
+    multipart:
+      max-file-size: 128MB
+      max-request-size: 128MB
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoints:
+    enabled-by-default: false
+
+xss:
+  enabled: true
+
+referer:
+  enabled: true
+  allowed-domains: ${REFERER_ALLOWED_DOMAINS}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+logging:
+  file:
+    path: ${LOG_PATH}
+
+token:
+  secret: ${JWT_SECRET}
+  previous-secrets: ${JWT_PREVIOUS_SECRETS:}
+
