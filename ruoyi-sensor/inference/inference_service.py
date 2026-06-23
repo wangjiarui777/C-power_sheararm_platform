@@ -78,6 +78,8 @@ DATA_DIR = BASE_DIR / "get" / "got"
 DEFAULT_PORT = int(os.environ.get("PORT", 5000))
 INFERENCE_BIND_HOST = os.environ.get("INFERENCE_BIND_HOST", "127.0.0.1")
 INTERNAL_TOKEN = os.environ.get("INFERENCE_INTERNAL_TOKEN", "")
+GEAR_MODEL_VERSION = os.environ.get("GEAR_MODEL_VERSION", "gear-unregistered")
+BEARING_MODEL_VERSION = os.environ.get("BEARING_MODEL_VERSION", "bearing-unregistered")
 DISPLAY_POINTS = 2048
 DISPLAY_SPECTRUM_POINTS = 512
 CONFIDENCE_MIN = 1.0
@@ -959,14 +961,14 @@ def _run_analysis(
             fs = float(extra_payload.get("sample_rate") or extra_payload.get("sampleRate")
                        or gear_model_params.get("fs", 5120.0))
             v6_result = _diagnose_gear(raw_signal, source_name=source_name)
-            extra_payload.setdefault("modelVersion", "best_model_classwise_maha.pth (v6)")
+            extra_payload.setdefault("modelVersion", GEAR_MODEL_VERSION)
             extra_payload["analysis_mode"] = mode
             return _build_frontend_payload(v6_result, raw_signal, source_name, sample_rate=fs, extra=extra_payload)
 
         fs = float(extra_payload.get("sample_rate") or extra_payload.get("sampleRate")
                    or bearing_model_params.get("fs", 16000.0))
         bearing_result = _diagnose_bearing(raw_signal, source_name=source_name)
-        extra_payload.setdefault("modelVersion", "best_model.pth (ResNet1D18)")
+        extra_payload.setdefault("modelVersion", BEARING_MODEL_VERSION)
         extra_payload["analysis_mode"] = mode
         return _build_bearing_frontend_payload(
             bearing_result,

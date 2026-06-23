@@ -37,6 +37,7 @@ import com.ruoyi.sensor.domain.entity.PhmDeviceFavoriteEntity;
 import com.ruoyi.sensor.domain.entity.PhmFeatureConfigEntity;
 import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
 import com.ruoyi.sensor.domain.entity.PhmSystemConfigEntity;
+import com.ruoyi.sensor.domain.entity.ModelReleaseEntity;
 import com.ruoyi.sensor.domain.vo.PhmTrendPointVo;
 import com.ruoyi.sensor.domain.vo.PhmHistoryReportVo;
 import com.ruoyi.sensor.domain.vo.PhmRealtimeReportVo;
@@ -51,6 +52,7 @@ import com.ruoyi.sensor.mapper.PhmDeviceMapper;
 import com.ruoyi.sensor.mapper.PhmFeatureConfigMapper;
 import com.ruoyi.sensor.mapper.PhmMeasurePointMapper;
 import com.ruoyi.sensor.mapper.PhmSystemConfigMapper;
+import com.ruoyi.sensor.mapper.ModelReleaseMapper;
 import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
 import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 import com.ruoyi.sensor.service.PhmService;
@@ -79,6 +81,9 @@ public class PhmServiceImpl implements PhmService
 
     @Autowired
     private EnhancedInferenceRecordMapper enhancedInferenceRecordMapper;
+
+    @Autowired
+    private ModelReleaseMapper modelReleaseMapper;
 
     @Autowired
     private PhmDeviceMapper deviceMapper;
@@ -581,7 +586,7 @@ public class PhmServiceImpl implements PhmService
 
         device.setHealthIndex(healthIndex);
         device.setFaultType(abnormal ? diagnosisResult : null);
-        if (abnormal && autoAlarmEnabled)
+        if (abnormal && isEligibleForFormalAlarm(diagnosis, record))
         {
             int alarmLevel = PhmDiagnosisLinkagePolicy.diagnosisAlarmLevel(riskLevel, alarmLevelText, healthIndex);
             device.setStatus("level" + alarmLevel);
@@ -629,12 +634,60 @@ public class PhmServiceImpl implements PhmService
         return record;
     }
 
+    private boolean isEligibleForFormalAlarm(Map<String, Object> diagnosis, EnhancedInferenceRecordEntity current)
+    {
+        if (!autoAlarmEnabled)
+        {
+            return false;
+        }
+        String modelType = stringValue(diagnosis.get("modelType"), "");
+        String modelVersion = stringValue(diagnosis.get("modelVersion"), "");
+        ModelReleaseEntity release = modelReleaseMapper.selectOne(
+            new LambdaQueryWrapper<ModelReleaseEntity>()
+                .eq(ModelReleaseEntity::getModelType, modelType)
+                .eq(ModelReleaseEntity::getSemanticVersion, modelVersion)
+                .eq(ModelReleaseEntity::getStatus, "ACTIVE")
+                .last("limit 1"));
+        if (release == null || release.getConfidenceThreshold() == null)
+        {
+            return false;
+        }
+        BigDecimal confidence = toBigDecimal(diagnosis.get("confidence"));
+        if (confidence == null || confidence.compareTo(release.getConfidenceThreshold()) < 0)
+        {
+            return false;
+        }
+        int requiredHits = Math.max(1, Optional.ofNullable(release.getConsecutiveHits()).orElse(1));
+        List<EnhancedInferenceRecordEntity> recent = enhancedInferenceRecordMapper.selectList(
+            new LambdaQueryWrapper<EnhancedInferenceRecordEntity>()
+                .eq(EnhancedInferenceRecordEntity::getDeviceCode, current.getDeviceCode())
+                .eq(EnhancedInferenceRecordEntity::getAnalysisMode, modelType)
+                .orderByDesc(EnhancedInferenceRecordEntity::getCreateTime)
+                .last("limit " + requiredHits));
+        if (recent.size() < requiredHits)
+        {
+            return false;
+        }
+        for (EnhancedInferenceRecordEntity item : recent)
+        {
+            if (!current.getDiagnosisResult().equals(item.getDiagnosisResult())
+                || item.getConfidence() == null
+                || item.getConfidence().compareTo(release.getConfidenceThreshold()) < 0)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private void createDiagnosisAlarm(PhmDeviceEntity device, PhmMeasurePointEntity point, EnhancedInferenceRecordEntity record,
                                       String diagnosisResult, String diagnosisDetail, String riskLevel, int alarmLevel, Date sampleTime)
     {
         Long openCount = alarmEventMapper.selectCount(new LambdaQueryWrapper<PhmAlarmEventEntity>()
                 .eq(PhmAlarmEventEntity::getDeviceCode, device.getDeviceCode())
                 .eq(PhmAlarmEventEntity::getAlarmType, "diagnosis")
+                .eq(PhmAlarmEventEntity::getDiagnosisResult, diagnosisResult)
+                .eq(point != null, PhmAlarmEventEntity::getPointId, point == null ? null : point.getId())
                 .eq(PhmAlarmEventEntity::getStatus, STATUS_UNHANDLED));
         if (openCount != null && openCount > 0)
         {
