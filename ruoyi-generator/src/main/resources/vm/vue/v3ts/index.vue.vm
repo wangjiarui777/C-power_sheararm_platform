@@ -637,7 +637,7 @@ function handleViewData(row: ${ClassName}) {
 function handleExport() {
   proxy.download('${moduleName}/${businessName}/export', {
     ...queryParams.value
-  }, `${businessName}_#[[${new Date().getTime()}]]#.xlsx`)
+  }, `${businessName}_#[[${new Date().getTime()}]]#.csv`)
 }
 
 getList()

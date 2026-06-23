@@ -50,7 +50,7 @@ public class SysDictTypeController extends BaseController
     {
         List<SysDictType> list = dictTypeService.selectDictTypeList(dictType);
         ExcelUtil<SysDictType> util = new ExcelUtil<SysDictType>(SysDictType.class);
-        util.exportExcel(response, list, "瀛楀吀绫诲瀷");
+        util.exportCsv(response, list, "字典类型");
     }
 
     /**

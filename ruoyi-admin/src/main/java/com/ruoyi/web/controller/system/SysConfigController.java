@@ -53,7 +53,7 @@ public class SysConfigController extends BaseController
     {
         List<SysConfig> list = configService.selectConfigList(config);
         ExcelUtil<SysConfig> util = new ExcelUtil<SysConfig>(SysConfig.class);
-        util.exportExcel(response, list, "鍙傛暟鏁版嵁");
+        util.exportCsv(response, list, "参数数据");
     }
 
     /**

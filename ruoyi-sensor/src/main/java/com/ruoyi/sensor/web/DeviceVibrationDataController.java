@@ -501,7 +501,7 @@ public class DeviceVibrationDataController extends BaseController
     {
         List<DeviceVibrationData> list = deviceVibrationDataService.selectDeviceVibrationDataList(deviceVibrationData);
         ExcelUtil<DeviceVibrationData> util = new ExcelUtil<DeviceVibrationData>(DeviceVibrationData.class);
-        util.exportExcel(response, list, "vibration data");
+        util.exportCsv(response, list, "vibration_data");
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:vibration:query')")

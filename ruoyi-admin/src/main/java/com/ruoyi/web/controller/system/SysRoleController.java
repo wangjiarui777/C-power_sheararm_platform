@@ -69,7 +69,7 @@ public class SysRoleController extends BaseController
     {
         List<SysRole> list = roleService.selectRoleList(role);
         ExcelUtil<SysRole> util = new ExcelUtil<SysRole>(SysRole.class);
-        util.exportExcel(response, list, "瑙掕壊鏁版嵁");
+        util.exportCsv(response, list, "角色数据");
     }
 
     /**

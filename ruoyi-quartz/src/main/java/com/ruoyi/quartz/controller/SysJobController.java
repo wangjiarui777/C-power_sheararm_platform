@@ -61,7 +61,7 @@ public class SysJobController extends BaseController
     {
         List<SysJob> list = jobService.selectJobList(sysJob);
         ExcelUtil<SysJob> util = new ExcelUtil<SysJob>(SysJob.class);
-        util.exportExcel(response, list, "定时任务");
+        util.exportCsv(response, list, "定时任务");
     }
 
     /**

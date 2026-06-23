@@ -51,7 +51,7 @@ public class SysLogininforController extends BaseController
     {
         List<SysLogininfor> list = logininforService.selectLogininforList(logininfor);
         ExcelUtil<SysLogininfor> util = new ExcelUtil<SysLogininfor>(SysLogininfor.class);
-        util.exportExcel(response, list, "鐧诲綍鏃ュ織");
+        util.exportCsv(response, list, "登录日志");
     }
 
     @PreAuthorize("@ss.hasPermi('monitor:logininfor:remove')")

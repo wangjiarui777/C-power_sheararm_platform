@@ -464,7 +464,7 @@ export default {
     handleExport() {
       this.download('monitor/job/export', {
         ...this.queryParams
-      }, `job_${new Date().getTime()}.xlsx`)
+      }, `job_${new Date().getTime()}.csv`)
     }
   }
 }

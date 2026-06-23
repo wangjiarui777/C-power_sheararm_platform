@@ -85,7 +85,7 @@ public class DeviceTemperatureDataController extends BaseController
     {
         List<DeviceTemperatureData> list = deviceTemperatureDataService.selectDeviceTemperatureDataList(deviceTemperatureData);
         ExcelUtil<DeviceTemperatureData> util = new ExcelUtil<DeviceTemperatureData>(DeviceTemperatureData.class);
-        util.exportExcel(response, list, "temperature data");
+        util.exportCsv(response, list, "temperature_data");
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:temperature:query')")

@@ -280,7 +280,7 @@ public class PhmController extends BaseController
     {
         List<PhmRealtimeReportVo> list = phmService.getRealtimeReportRows(deviceCode);
         ExcelUtil<PhmRealtimeReportVo> util = new ExcelUtil<>(PhmRealtimeReportVo.class);
-        util.exportExcel(response, list, "PHM实时报表");
+        util.exportCsv(response, list, "PHM实时报表");
     }
 
     @PreAuthorize("@ss.hasPermi('phm:report:view')")
@@ -299,7 +299,7 @@ public class PhmController extends BaseController
     {
         List<PhmHistoryReportVo> list = phmService.getHistoryReportRows(orgName, deviceCode);
         ExcelUtil<PhmHistoryReportVo> util = new ExcelUtil<>(PhmHistoryReportVo.class);
-        util.exportExcel(response, list, "PHM历史报表");
+        util.exportCsv(response, list, "PHM历史报表");
     }
 
     @PreAuthorize("@ss.hasPermi('phm:report:view')")

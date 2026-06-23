@@ -196,10 +196,10 @@ export default {
     },
     exportCurrent() {
       if (this.activeTab === 'realtime') {
-        return this.download('/phm/reports/realtime/export', { deviceCode: this.query.deviceCode }, `PHM实时报表_${Date.now()}.xlsx`)
+        return this.download('/phm/reports/realtime/export', { deviceCode: this.query.deviceCode }, `PHM实时报表_${Date.now()}.csv`)
       }
       if (this.activeTab === 'history') {
-        return this.download('/phm/reports/history/export', { orgName: this.query.orgName, deviceCode: this.query.deviceCode }, `PHM历史报表_${Date.now()}.xlsx`)
+        return this.download('/phm/reports/history/export', { orgName: this.query.orgName, deviceCode: this.query.deviceCode }, `PHM历史报表_${Date.now()}.csv`)
       }
       const rows = this.activeTab === 'history' ? this.historyRows : this.activeTab === 'service' ? this.reports : this.realtimeRows
       if (!rows.length) return this.$message.warning('当前无可导出数据')

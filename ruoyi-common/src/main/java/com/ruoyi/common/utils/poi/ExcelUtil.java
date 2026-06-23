@@ -2,9 +2,11 @@ package com.ruoyi.common.utils.poi;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
@@ -23,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.nio.charset.StandardCharsets;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.RegExUtils;
@@ -583,6 +586,116 @@ public class ExcelUtil<T>
         response.setCharacterEncoding("utf-8");
         this.init(list, sheetName, title, Type.EXPORT);
         exportExcel(response);
+    }
+
+    /**
+     * 将数据导出为 UTF-8 CSV。
+     *
+     * CSV 列定义继续复用实体上的 {@link Excel} 注解，包括列名、排序、日期格式、
+     * 字典转换、表达式转换、精度和后缀。输出包含 UTF-8 BOM，便于 Excel
+     * 正确识别中文，同时对公式触发字符进行转义以避免 CSV 注入。
+     *
+     * @param response HTTP 响应
+     * @param list 导出数据集合
+     * @param fileName 下载文件名（不含扩展名）
+     */
+    public void exportCsv(HttpServletResponse response, List<T> list, String fileName)
+    {
+        this.list = list == null ? new ArrayList<T>() : list;
+        this.type = Type.EXPORT;
+        createExcelField();
+        response.setContentType("text/csv;charset=UTF-8");
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        try
+        {
+            FileUtils.setAttachmentResponseHeader(response, fileName + ".csv");
+            BufferedWriter writer = new BufferedWriter(
+                    new OutputStreamWriter(response.getOutputStream(), StandardCharsets.UTF_8));
+            writer.write('\ufeff');
+            writeCsvRow(writer, fields.stream()
+                    .map(item -> ((Excel) item[1]).name())
+                    .collect(Collectors.toList()));
+            for (T item : this.list)
+            {
+                List<String> row = new ArrayList<String>(fields.size());
+                for (Object[] fieldEntry : fields)
+                {
+                    row.add(formatCsvValue(item, (Field) fieldEntry[0], (Excel) fieldEntry[1]));
+                }
+                writeCsvRow(writer, row);
+            }
+            writer.flush();
+        }
+        catch (Exception e)
+        {
+            log.error("导出CSV失败", e);
+            throw new UtilException("导出CSV失败: " + e.getMessage());
+        }
+    }
+
+    private String formatCsvValue(T item, Field field, Excel attr) throws Exception
+    {
+        Object value = getTargetValue(item, field, attr);
+        String text;
+        if (StringUtils.isNotEmpty(attr.dateFormat()) && StringUtils.isNotNull(value))
+        {
+            text = parseDateToStr(attr.dateFormat(), value);
+        }
+        else if (StringUtils.isNotEmpty(attr.readConverterExp()) && StringUtils.isNotNull(value))
+        {
+            text = convertByExp(Convert.toStr(value), attr.readConverterExp(), attr.separator());
+        }
+        else if (StringUtils.isNotEmpty(attr.dictType()) && StringUtils.isNotNull(value))
+        {
+            text = convertDictByExp(Convert.toStr(value), attr.dictType(), attr.separator());
+        }
+        else if (value instanceof BigDecimal && attr.scale() >= 0)
+        {
+            text = ((BigDecimal) value).setScale(attr.scale(), attr.roundingMode()).toPlainString();
+        }
+        else if (!attr.handler().equals(ExcelHandlerAdapter.class))
+        {
+            ExcelHandlerAdapter handler = (ExcelHandlerAdapter) attr.handler().getDeclaredConstructor().newInstance();
+            text = Convert.toStr(handler.format(value, attr.args(), null, null));
+        }
+        else
+        {
+            text = Convert.toStr(value, attr.defaultValue());
+            if (value instanceof Collection && "[]".equals(text))
+            {
+                text = StringUtils.EMPTY;
+            }
+            text += attr.suffix();
+        }
+        if (StringUtils.startsWithAny(text, FORMULA_STR))
+        {
+            text = "\t" + text;
+        }
+        return text;
+    }
+
+    private void writeCsvRow(BufferedWriter writer, List<String> values) throws IOException
+    {
+        for (int index = 0; index < values.size(); index++)
+        {
+            if (index > 0)
+            {
+                writer.write(',');
+            }
+            writer.write(escapeCsv(values.get(index)));
+        }
+        writer.write("\r\n");
+    }
+
+    private String escapeCsv(String value)
+    {
+        String text = value == null ? StringUtils.EMPTY : value;
+        if (text.indexOf(',') >= 0 || text.indexOf('"') >= 0
+                || text.indexOf('\r') >= 0 || text.indexOf('\n') >= 0)
+        {
+            return "\"" + text.replace("\"", "\"\"") + "\"";
+        }
+        return text;
     }
 
     /**

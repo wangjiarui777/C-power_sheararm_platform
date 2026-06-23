@@ -53,7 +53,7 @@ public class SysPostController extends BaseController
     {
         List<SysPost> list = postService.selectPostList(post);
         ExcelUtil<SysPost> util = new ExcelUtil<SysPost>(SysPost.class);
-        util.exportExcel(response, list, "宀椾綅鏁版嵁");
+        util.exportCsv(response, list, "岗位数据");
     }
 
     /**

@@ -72,7 +72,7 @@ public class SysUserController extends BaseController
     {
         List<SysUser> list = userService.selectUserList(user);
         ExcelUtil<SysUser> util = new ExcelUtil<SysUser>(SysUser.class);
-        util.exportExcel(response, list, "鐢ㄦ埛鏁版嵁");
+        util.exportCsv(response, list, "用户数据");
     }
 
     @Log(title = "鐢ㄦ埛绠＄悊", businessType = BusinessType.IMPORT)

@@ -238,7 +238,7 @@ export default {
     handleExport() {
       this.download('monitor/logininfor/export', {
         ...this.queryParams
-      }, `logininfor_${new Date().getTime()}.xlsx`)
+      }, `logininfor_${new Date().getTime()}.csv`)
     }
   }
 }

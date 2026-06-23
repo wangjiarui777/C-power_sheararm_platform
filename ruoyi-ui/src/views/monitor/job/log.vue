@@ -258,7 +258,7 @@ export default {
     handleExport() {
       this.download('/monitor/jobLog/export', {
         ...this.queryParams
-      }, `log_${new Date().getTime()}.xlsx`)
+      }, `log_${new Date().getTime()}.csv`)
     }
   }
 }
