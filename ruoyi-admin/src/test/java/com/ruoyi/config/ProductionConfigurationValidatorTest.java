@@ -14,12 +14,12 @@ class ProductionConfigurationValidatorTest
     {
         MockEnvironment environment = validEnvironment()
                 .withProperty("token.secret", "short")
-                .withProperty("sensor.collector.token", "dev-collector-token");
+                .withProperty("sensor.collector.master-key", "dev-collector-key");
 
         List<String> errors = ProductionConfigurationValidator.validate(environment);
 
         assertTrue(errors.stream().anyMatch(item -> item.contains("token.secret")));
-        assertTrue(errors.stream().anyMatch(item -> item.contains("sensor.collector.token")));
+        assertTrue(errors.stream().anyMatch(item -> item.contains("sensor.collector.master-key")));
     }
 
     @Test

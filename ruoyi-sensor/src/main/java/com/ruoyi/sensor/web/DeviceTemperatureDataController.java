@@ -24,6 +24,7 @@ import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.sensor.domain.DeviceTemperatureData;
 import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
 import com.ruoyi.sensor.service.TelemetryPipelineService;
+import com.ruoyi.sensor.service.CollectorAccessService;
 
 @RestController
 @RequestMapping({"/sensor/temperature-data", "/system/temperature"})
@@ -34,6 +35,9 @@ public class DeviceTemperatureDataController extends BaseController
 
     @Autowired
     private TelemetryPipelineService telemetryPipelineService;
+
+    @Autowired
+    private CollectorAccessService collectorAccessService;
 
     @PreAuthorize("@ss.hasPermi('sensor:temperature:list')")
     @GetMapping("/list")
@@ -58,6 +62,7 @@ public class DeviceTemperatureDataController extends BaseController
         @RequestHeader(value = "X-Event-Id", required = false) String eventId,
         @RequestHeader(value = "X-Sequence", required = false) Long sequence)
     {
+        collectorAccessService.requireDevice(deviceTemperatureData.getDeviceCode());
         var accepted = telemetryPipelineService.accept(TelemetryPipelineService.fromUpload(
             eventId,
             deviceTemperatureData.getDeviceCode(),

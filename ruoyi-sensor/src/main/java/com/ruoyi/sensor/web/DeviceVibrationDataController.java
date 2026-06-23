@@ -38,6 +38,7 @@ import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
 import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 import com.ruoyi.sensor.service.PhmService;
 import com.ruoyi.sensor.service.TelemetryPipelineService;
+import com.ruoyi.sensor.service.CollectorAccessService;
 
 @RestController
 @RequestMapping({"/sensor/vibration-data", "/system/vibration"})
@@ -56,6 +57,9 @@ public class DeviceVibrationDataController extends BaseController
 
     @Autowired
     private TelemetryPipelineService telemetryPipelineService;
+
+    @Autowired
+    private CollectorAccessService collectorAccessService;
 
     @Value("${sensor.default-device-code:}")
     private String defaultDeviceCode;
@@ -157,6 +161,7 @@ public class DeviceVibrationDataController extends BaseController
         @RequestHeader(value = "X-Event-Id", required = false) String eventId,
         @RequestHeader(value = "X-Sequence", required = false) Long sequence)
     {
+        collectorAccessService.requireDevice(deviceVibrationData.getDeviceCode());
         var accepted = telemetryPipelineService.accept(TelemetryPipelineService.fromUpload(
             eventId,
             deviceVibrationData.getDeviceCode(),
@@ -473,18 +478,24 @@ public class DeviceVibrationDataController extends BaseController
     @Log(title = "vibration data", businessType = BusinessType.INSERT)
     @PreAuthorize("hasAuthority('sensor:collector:upload')")
     @PostMapping("/batchUpload")
-    public AjaxResult batchUpload(@RequestBody List<DeviceVibrationData> deviceVibrationDataList)
+    public ResponseEntity<AjaxResult> batchUpload(@RequestBody List<DeviceVibrationData> deviceVibrationDataList)
     {
         if (deviceVibrationDataList == null || deviceVibrationDataList.isEmpty())
         {
-            return AjaxResult.error("batch data is empty");
+            return ResponseEntity.badRequest().body(AjaxResult.error("batch data is empty"));
         }
-        String username = "collector";
+        List<com.ruoyi.sensor.domain.dto.TelemetryAcceptance> accepted = new ArrayList<>();
         for (DeviceVibrationData item : deviceVibrationDataList)
         {
-            item.setCreateBy(username);
+            collectorAccessService.requireDevice(item.getDeviceCode());
+            accepted.add(telemetryPipelineService.accept(TelemetryPipelineService.fromUpload(
+                item.getEventId(), item.getDeviceCode(), "vibration", item.getChannelId(),
+                item.getVibrationValue() == null ? null : item.getVibrationValue().doubleValue(),
+                item.getSampleTime(),
+                item.getSampleTime() == null ? null : item.getSampleTime().getTime(),
+                item.getQuality())));
         }
-        return toAjax(deviceVibrationDataService.batchInsertDeviceVibrationData(deviceVibrationDataList));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(success(accepted));
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:vibration:export')")

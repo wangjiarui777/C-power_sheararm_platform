@@ -9,7 +9,6 @@ sensor:
     virus-scan-arguments: ${SENSOR_ATTACHMENT_SCAN_ARGUMENTS}
   default-device-code: ""
   collector:
-    token: ${SENSOR_COLLECTOR_TOKEN}
     master-key: ${SENSOR_COLLECTOR_MASTER_KEY}
   websocket:
     allowed-origins: ${SENSOR_WS_ALLOWED_ORIGINS}

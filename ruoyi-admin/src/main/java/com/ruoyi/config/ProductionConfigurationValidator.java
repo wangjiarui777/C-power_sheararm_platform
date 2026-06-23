@@ -42,7 +42,6 @@ public class ProductionConfigurationValidator implements ApplicationRunner
         List<String> errors = new ArrayList<>();
         requireSecret(env, errors, "token.secret", 32);
         validatePreviousJwtSecrets(env, errors);
-        requireSecret(env, errors, "sensor.collector.token", 32);
         requireSecret(env, errors, "sensor.collector.master-key", 32);
         requireSecret(env, errors, "sensor.inference.internal-token", 32);
         requireSecret(env, errors, "spring.datasource.druid.master.password", 8);
