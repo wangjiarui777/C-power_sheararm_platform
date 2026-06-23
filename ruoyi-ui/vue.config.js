@@ -136,7 +136,22 @@ module.exports = {
               elementUI: {
                 name: 'chunk-elementUI', // split elementUI into a single package
                 test: /[\\/]node_modules[\\/]_?element-ui(.*)/, // in order to adapt to cnpm
-                priority: 20 // the weight needs to be larger than libs and app or it will be packaged into libs or app
+                priority: 20, // the weight needs to be larger than libs and app or it will be packaged into libs or app
+                chunks: 'initial' // keep route-only Element components in their async chunks
+              },
+              zrenderAsync: {
+                name: 'chunk-zrender',
+                test: /[\\/]node_modules[\\/]zrender[\\/]/,
+                chunks: 'async',
+                priority: 30,
+                enforce: true
+              },
+              echartsAsync: {
+                name: 'chunk-echarts',
+                test: /[\\/]node_modules[\\/]echarts[\\/]/,
+                chunks: 'async',
+                priority: 25,
+                enforce: true
               },
               commons: {
                 name: 'chunk-commons',

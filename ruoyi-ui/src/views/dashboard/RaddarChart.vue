@@ -4,7 +4,6 @@
 
 <script>
 import echarts from '@/utils/echarts-extended'
-require('echarts/theme/macarons') // echarts theme
 import resize from './mixins/resize'
 
 const animationDuration = 3000

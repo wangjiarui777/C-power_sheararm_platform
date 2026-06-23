@@ -1,5 +1,6 @@
 import axios from 'axios'
-import {Loading, Message} from 'element-ui'
+import Loading from 'element-ui/lib/loading'
+import Message from 'element-ui/lib/message'
 import { saveAs } from 'file-saver'
 import { getToken } from '@/utils/auth'
 import errorCode from '@/utils/errorCode'
@@ -76,4 +77,3 @@ export default {
     Message.error(errMsg)
   }
 }
-

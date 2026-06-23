@@ -2,8 +2,8 @@ const fs = require('fs')
 const path = require('path')
 
 const dist = path.resolve(__dirname, '../dist/static')
-const entryBudget = Number(process.env.ENTRY_BUDGET_KIB || 2100) * 1024
-const asyncBudget = Number(process.env.ASYNC_BUDGET_KIB || 750) * 1024
+const entryBudget = Number(process.env.ENTRY_BUDGET_KIB || 1200) * 1024
+const asyncBudget = Number(process.env.ASYNC_BUDGET_KIB || 500) * 1024
 
 function files(dir) {
   return fs.readdirSync(dir).map(name => ({

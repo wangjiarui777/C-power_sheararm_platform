@@ -1,4 +1,7 @@
-import { Message, MessageBox, Notification, Loading } from 'element-ui'
+import Message from 'element-ui/lib/message'
+import MessageBox from 'element-ui/lib/message-box'
+import Notification from 'element-ui/lib/notification'
+import Loading from 'element-ui/lib/loading'
 
 let loadingInstance
 
