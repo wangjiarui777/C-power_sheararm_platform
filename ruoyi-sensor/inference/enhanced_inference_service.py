@@ -1,8 +1,9 @@
 """
-[DEPRECATED] 此文件已被 inference_service.py 取代。
+[DEPRECATED / DEVELOPMENT ONLY] 此文件已被 inference_service.py 取代。
 
 inference_service.py 直接调用 04.4 原生函数进行 FFT/降采样/工业指标计算，
-消除了重复的包装代码。新部署请使用 inference_service.py。
+消除了重复的包装代码。此旧服务包含公开 WebSocket 和历史兼容逻辑，不得用于生产部署。
+生产环境只能启动 inference_service.py，并由 Java 平台作为唯一数据库写入者。
 
 本文件保留仅作参考。
 """

@@ -14,6 +14,9 @@ ruoyi:
   captchaType: math
 
 sensor:
+  diagnosis:
+    # 必须完成模型验收与至少14天影子运行后，才可在生产显式打开。
+    auto-alarm-enabled: ${SENSOR_DIAGNOSIS_AUTO_ALARM_ENABLED:false}
   default-device-code: ${SENSOR_DEFAULT_DEVICE_CODE:}
   collector:
     token: ${SENSOR_COLLECTOR_TOKEN:}

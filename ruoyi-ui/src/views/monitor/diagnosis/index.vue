@@ -290,7 +290,6 @@
 <script>
 import echarts from '@/utils/echarts'
 import { getInferenceHealth, inferWithFilePath, listMatFiles, uploadDiagnosisToInferenceService, analyzeLatestFile, fetchHistory, getServiceURL } from '@/api/system/bearingDiagnosis'
-import inferenceWebSocket from '@/utils/inference-websocket'
 import { translateDiagnosisLabel, translateAlarmLevel, translateRiskLevel, translateAll } from '@/utils/diagnosis-translations'
 
 export default {
@@ -302,7 +301,6 @@ export default {
       timeChart: null,      // 时域图 ECharts 实例
       freqChart: null,      // 频域图 ECharts 实例
       resizeTimer: null,    // 窗口 resize 防抖定时器
-      unsubscribeInferenceWs: null, // WebSocket 取消订阅函数
       polling: false,       // 是否正在请求中（防止同时间内多次请求）
       userManualMode: false, // 用户是否手动选择了文件（手动选择后停止自动刷新）
       chartDirty: false,    // 图表数据是否已更新待重绘（避免不必要的 render）
@@ -504,8 +502,7 @@ export default {
         this.initCharts()
       })
       window.addEventListener('resize', this.handleResize)
-      // 先建立连接 + 获取文件列表，再触发分析（避免目录空时无意义 404）
-      this.connectInferenceWs()
+      // 浏览器只访问 Java 平台，不再直连内部 Python 推理服务。
       await this.checkHealth()
       await this.fetchMatFiles()
       // 文件列表已就绪，仅在目录有文件时才发起分析
@@ -516,7 +513,6 @@ export default {
   /** 组件销毁前清理：移除事件监听、释放 WebSocket 连接、释放 ECharts 实例 */
   beforeDestroy() {
     window.removeEventListener('resize', this.handleResize)
-    this.closeInferenceWs()
     if (this.timeChart) this.timeChart.dispose()
     if (this.freqChart) this.freqChart.dispose()
     if (this.healthTrendChart) this.healthTrendChart.dispose()
@@ -1119,51 +1115,6 @@ export default {
       }
     },
 
-    // ---- WebSocket (primary data path, replaces HTTP polling) ----
-
-    connectInferenceWs() {
-      this.unsubscribeInferenceWs = inferenceWebSocket.subscribe((event, payload) => {
-        if (event === 'open') {
-          // Subscribe to health + file_list channels; analysis is triggered manually by selected model.
-          inferenceWebSocket.send({ type: 'subscribe', channel: 'health' })
-          inferenceWebSocket.send({ type: 'subscribe', channel: 'mat_files' })
-          return
-        }
-        if (event === 'error') {
-          console.warn('Inference WebSocket 连接异常')
-          return
-        }
-        if (event !== 'message' || !payload) return
-        this.handleInferenceWsMessage(payload)
-      })
-      // 根据当前模型类型连接对应服务的 WebSocket
-      inferenceWebSocket.connect(this.currentServiceBaseURL)
-    },
-
-    closeInferenceWs() {
-      if (this.unsubscribeInferenceWs) {
-        this.unsubscribeInferenceWs()
-        this.unsubscribeInferenceWs = null
-      }
-      inferenceWebSocket.close()
-    },
-
-    handleInferenceWsMessage(msg) {
-      if (msg.type === 'health_status') {
-        this.serviceHealthy = msg.status === 'ok' && msg.model_loaded !== false
-        this.healthApiLabel = this.serviceHealthy ? '正常' : '异常'
-      } else if (msg.type === 'file_list' && Array.isArray(msg.data)) {
-        this.matFileList = msg.data
-        const latestMat = this.matFileList[0]
-        const latestName = latestMat ? (latestMat.source_name || latestMat.name || '') : ''
-        if (latestName && !this.selectedMatFile && !this.userManualMode) {
-          this.selectedMatFile = latestName
-        }
-      } else if (msg.type === 'file_available') {
-        this.fetchMatFiles()
-      }
-    },
-
     /**
      * 检查 Python 推理服务的健康状态
      * GET /health (HTTP fallback)
@@ -1301,10 +1252,7 @@ export default {
       this.localFilePath = ''
       this.userManualMode = false
       this.matFileList = []
-      // 断开旧 WS，连接新服务
-      this.closeInferenceWs()
-      this.connectInferenceWs()
-      // 等待新服务文件列表就绪后再分析
+      // Java 平台根据模型类型路由到统一内部推理服务。
       await this.fetchMatFiles()
       await this.fetchLatestAnalysis()
     },

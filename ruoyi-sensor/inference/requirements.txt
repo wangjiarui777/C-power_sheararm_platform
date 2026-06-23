@@ -6,4 +6,3 @@ numpy==2.2.5
 scipy==1.15.2
 torch==2.6.0
 python-multipart==0.0.20
-pymysql==1.1.1

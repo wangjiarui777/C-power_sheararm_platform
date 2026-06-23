@@ -21,6 +21,7 @@ import importlib.util
 import json
 import logging
 import os
+import secrets
 import threading
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
@@ -36,8 +37,7 @@ import scipy.io
 import torch
 import torch.nn as nn
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from starlette.responses import JSONResponse
 
 # =============================================================================
@@ -47,7 +47,6 @@ from models.wdcnn_mech_dg2 import WDCNNMechDG
 from models.resnet18_1d import ResNet1D18
 from utils_signal import _extract_signal_from_dict
 from utils.dataset import FileInferenceDataset
-from db_writer import save_inference_result, query_history
 
 # ---------------------------------------------------------------------------
 # 动态导入 04.4 诊断模块（文件名以数字开头，无法直接 import）
@@ -77,6 +76,8 @@ BEARING_MODEL_PATH = BASE_DIR / "get" / "best_model.pth"
 DATA_DIR = BASE_DIR / "get" / "got"
 
 DEFAULT_PORT = int(os.environ.get("PORT", 5000))
+INFERENCE_BIND_HOST = os.environ.get("INFERENCE_BIND_HOST", "127.0.0.1")
+INTERNAL_TOKEN = os.environ.get("INFERENCE_INTERNAL_TOKEN", "")
 DISPLAY_POINTS = 2048
 DISPLAY_SPECTRUM_POINTS = 512
 CONFIDENCE_MIN = 1.0
@@ -109,85 +110,43 @@ _inference_executor = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS, thread_n
 _model_inference_lock = threading.Lock()
 
 # =============================================================================
-# 主事件循环引用（用于从同步端点安全广播 WebSocket 消息）
-# =============================================================================
-_main_loop: Optional[asyncio.AbstractEventLoop] = None
-
-
-def _ensure_json_serializable(obj: Any) -> Any:
-    """递归地将 numpy 数组/标量转换为 Python 原生类型，确保 JSON 可序列化。
-
-    HTTP 的 JSONResponse 会自动处理 numpy，但 WebSocket 的 send_json 不会。
-    """
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    if isinstance(obj, (np.integer,)):
-        return int(obj)
-    if isinstance(obj, (np.floating,)):
-        return float(obj)
-    if isinstance(obj, np.bool_):
-        return bool(obj)
-    if isinstance(obj, dict):
-        return {k: _ensure_json_serializable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_ensure_json_serializable(v) for v in obj]
-    return obj
-
-
-def _broadcast_analysis_sync(result: Dict[str, Any]) -> None:
-    """从同步上下文中广播分析结果到所有 WebSocket 客户端（线程安全）。"""
-    if _main_loop is None or _main_loop.is_closed():
-        return
-    try:
-        payload = _ensure_json_serializable({
-            "type": "auto_analysis",
-            "success": True,
-            "data": result,
-        })
-        asyncio.run_coroutine_threadsafe(
-            ws_manager.broadcast(payload),
-            _main_loop,
-        )
-    except Exception:
-        logger.exception("WebSocket auto_analysis broadcast failed")
-
-
-async def _broadcast_analysis_async(result: Dict[str, Any]) -> None:
-    """从异步上下文中广播分析结果到所有 WebSocket 客户端。"""
-    try:
-        payload = _ensure_json_serializable({
-            "type": "auto_analysis",
-            "success": True,
-            "data": result,
-        })
-        await ws_manager.broadcast(payload)
-    except Exception:
-        logger.exception("WebSocket auto_analysis broadcast failed")
-
-
-# =============================================================================
 # FastAPI 应用
 # =============================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager: startup & shutdown logic (FastAPI modern pattern)."""
-    global _main_loop
     global gear_model, gear_model_params, gear_class_names, gear_classwise_cfg
     global bearing_model, bearing_model_params, bearing_class_names
     global CLASS_FILE_UNK_OVERRIDES, MEAN_MAHA_ACCEPT_OVERRIDES, KNOWN_FAULT_PROTECT_CLASSES
-    global _watcher_task, _health_broadcaster_task
 
-    # ---- startup ----
-    _main_loop = asyncio.get_running_loop()
-    logger.info("Main event loop stored for WebSocket broadcast")
+    if len(INTERNAL_TOKEN.encode("utf-8")) < 32:
+        raise RuntimeError("INFERENCE_INTERNAL_TOKEN must contain at least 32 UTF-8 bytes.")
 
+    # Models are isolated: one broken artifact must not make the other model unusable.
     logger.info("Loading gear model from %s", GEAR_MODEL_PATH)
-    gear_model, gear_model_params, gear_class_names, gear_classwise_cfg = load_gear_model()
-    logger.info("Gear model loaded on %s", DEVICE)
+    try:
+        gear_model, gear_model_params, gear_class_names, gear_classwise_cfg = load_gear_model()
+        model_load_errors.pop("gear", None)
+        logger.info("Gear model loaded on %s", DEVICE)
+    except Exception as exc:
+        gear_model = None
+        gear_model_params = {}
+        gear_class_names = []
+        gear_classwise_cfg = {}
+        model_load_errors["gear"] = str(exc)
+        logger.exception("Gear model failed to load")
 
     logger.info("Loading bearing model from %s", BEARING_MODEL_PATH)
-    bearing_model, bearing_model_params, bearing_class_names = load_bearing_model()
-    logger.info("Bearing model loaded on %s", DEVICE)
+    try:
+        bearing_model, bearing_model_params, bearing_class_names = load_bearing_model()
+        model_load_errors.pop("bearing", None)
+        logger.info("Bearing model loaded on %s", DEVICE)
+    except Exception as exc:
+        bearing_model = None
+        bearing_model_params = {}
+        bearing_class_names = []
+        model_load_errors["bearing"] = str(exc)
+        logger.exception("Bearing model failed to load")
 
     CLASS_FILE_UNK_OVERRIDES = v6.parse_class_threshold_overrides(
         "healthy:0.70,single_pitting:0.85,multi_pitting:0.85,single_spalling:0.85"
@@ -200,166 +159,28 @@ async def lifespan(app: FastAPI):
     )
     logger.info("v6 thresholds configured")
 
-    _watcher_task = asyncio.create_task(_file_watcher_loop())
-    logger.info("File watcher started")
-    _health_broadcaster_task = asyncio.create_task(_health_broadcaster())
-    logger.info("Health broadcaster started")
-
     yield  # app runs here
 
     # ---- shutdown ----
-    _main_loop = None
-    if _watcher_task:
-        _watcher_task.cancel()
-        logger.info("File watcher stopped")
-    if _health_broadcaster_task:
-        _health_broadcaster_task.cancel()
-        logger.info("Health broadcaster stopped")
     _inference_executor.shutdown(wait=False, cancel_futures=True)
     logger.info("Inference executor stopped")
 
 
-app = FastAPI(title="Vibration Diagnosis Service v2", version="2.0.0", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="Vibration Diagnosis Internal Service",
+    version="3.0.0",
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 
-# =============================================================================
-# WebSocket 连接管理
-# =============================================================================
-class ConnectionManager:
-    def __init__(self) -> None:
-        self.active_connections: List[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket) -> None:
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info("WebSocket client connected (total: %d)", len(self.active_connections))
-
-    def disconnect(self, websocket: WebSocket) -> None:
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-            logger.info("WebSocket client disconnected (total: %d)", len(self.active_connections))
-
-    async def broadcast(self, message: Dict[str, Any]) -> None:
-        dead: List[WebSocket] = []
-        for conn in self.active_connections:
-            try:
-                await conn.send_json(message)
-            except Exception:
-                dead.append(conn)
-        for conn in dead:
-            if conn in self.active_connections:
-                self.active_connections.remove(conn)
-
-    async def broadcast_health(self) -> None:
-        """Broadcast current model health status to all connected clients."""
-        payload = _build_health_payload()
-        payload["type"] = "health_status"
-        await self.broadcast(payload)
-
-    async def broadcast_file_list(self) -> None:
-        """Broadcast current .mat/.npy file list to all connected clients."""
-        items: List[Dict[str, str]] = []
-        if DATA_DIR.exists():
-            for p in sorted(DATA_DIR.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
-                if p.suffix.lower() in {".mat", ".npy"}:
-                    items.append({
-                        "name": p.stem,
-                        "source_name": p.name,
-                        "label": p.stem,
-                    })
-        await self.broadcast({
-            "type": "file_list",
-            "data": items,
-        })
-
-
-ws_manager = ConnectionManager()
-
-# =============================================================================
-# 后台健康状态广播
-# =============================================================================
-_health_broadcaster_task: Optional[asyncio.Task] = None
-
-
-async def _health_broadcaster(interval: float = 30.0) -> None:
-    """Periodically broadcast health status to WebSocket clients."""
-    await asyncio.sleep(5)  # initial delay for model to load
-    while True:
-        await asyncio.sleep(interval)
-        try:
-            await ws_manager.broadcast_health()
-        except Exception:
-            logger.exception("Health broadcast failed")
-
-# =============================================================================
-# 文件监控
-# =============================================================================
-_known_files: Dict[str, float] = {}
-_watcher_task: Optional[asyncio.Task] = None
-
-
-async def _notify_file_available(file_path: Path) -> None:
-    """Notify clients that a new analysis file is available."""
-    try:
-        await ws_manager.broadcast({
-            "type": "file_available",
-            "success": True,
-            "filename": file_path.name,
-            "source_name": file_path.name,
-        })
-        logger.info("New analysis file available: %s", file_path.name)
-    except Exception as exc:
-        logger.exception("File availability broadcast failed for %s", file_path.name)
-        await ws_manager.broadcast({
-            "type": "file_available", "success": False,
-            "filename": file_path.name, "error": str(exc),
-        })
-
-
-async def _file_watcher_loop(interval: float = 3.0) -> None:
-    global _known_files
-
-    if DATA_DIR.exists():
-        for p in DATA_DIR.glob("*"):
-            if p.suffix.lower() in {".mat", ".npy"}:
-                try:
-                    _known_files[str(p)] = p.stat().st_mtime
-                except OSError:
-                    pass
-    logger.info("File watcher seeded with %d known files", len(_known_files))
-
-    while True:
-        await asyncio.sleep(interval)
-        if not DATA_DIR.exists():
-            continue
-
-        current: Dict[str, float] = {}
-        for p in DATA_DIR.glob("*"):
-            if p.suffix.lower() not in {".mat", ".npy"}:
-                continue
-            try:
-                current[str(p)] = p.stat().st_mtime
-            except OSError:
-                continue
-
-        for path_str, mtime in current.items():
-            prev = _known_files.get(path_str)
-            if prev is None or prev != mtime:
-                _known_files[path_str] = mtime
-                await _notify_file_available(Path(path_str))
-                await ws_manager.broadcast_file_list()
-
-        for path_str in list(_known_files.keys()):
-            if path_str not in current:
-                del _known_files[path_str]
+def require_internal_token(
+    x_internal_token: str = Header(default="", alias="X-Internal-Token"),
+) -> None:
+    if not INTERNAL_TOKEN or not secrets.compare_digest(x_internal_token, INTERNAL_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid internal service token.")
 
 
 # =============================================================================
@@ -373,6 +194,7 @@ gear_classwise_cfg: Dict[str, Any] = {}
 bearing_model: Optional[nn.Module] = None
 bearing_model_params: Dict[str, Any] = {}
 bearing_class_names: List[str] = []
+model_load_errors: Dict[str, str] = {}
 CLASS_FILE_UNK_OVERRIDES: Dict[str, float] = {}
 MEAN_MAHA_ACCEPT_OVERRIDES: Dict[str, float] = {}
 KNOWN_FAULT_PROTECT_CLASSES: List[str] = []
@@ -575,24 +397,6 @@ def _get_cached_or_compute(
         del _response_cache[oldest]
         logger.debug("Cache evicted oldest entry")
     return result
-
-
-# =============================================================================
-# 数据库写入
-# =============================================================================
-async def _save_to_db(result: Dict[str, Any]) -> None:
-    try:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, save_inference_result, result)
-    except Exception as exc:
-        logger.warning("DB write failed (non-fatal): %s", exc)
-
-
-def _save_to_db_sync(result: Dict[str, Any]) -> None:
-    try:
-        save_inference_result(result)
-    except Exception as exc:
-        logger.warning("DB write failed (non-fatal): %s", exc)
 
 
 # =============================================================================
@@ -1174,8 +978,9 @@ def _run_analysis(
 
 
 def _build_health_payload() -> Dict[str, Any]:
+    loaded_count = int(gear_model is not None) + int(bearing_model is not None)
     return {
-        "status": "ok",
+        "status": "ok" if loaded_count == 2 else ("degraded" if loaded_count == 1 else "unavailable"),
         "device": str(DEVICE),
         "model_loaded": gear_model is not None and bearing_model is not None,
         "gear_model_loaded": gear_model is not None,
@@ -1193,6 +998,7 @@ def _build_health_payload() -> Dict[str, Any]:
         "fs": gear_model_params.get("fs"),
         "gear_params": gear_model_params,
         "bearing_params": bearing_model_params,
+        "model_errors": dict(model_load_errors),
     }
 
 
@@ -1202,12 +1008,18 @@ def _build_health_payload() -> Dict[str, Any]:
 # API 端点
 # =============================================================================
 
-@app.get("/health")
-def health() -> Dict[str, Any]:
-    return _build_health_payload()
+@app.get("/internal/health/live", dependencies=[Depends(require_internal_token)])
+def health_live() -> Dict[str, Any]:
+    return {"status": "ok"}
 
 
-@app.get("/mat-files")
+@app.get("/internal/health/ready", dependencies=[Depends(require_internal_token)])
+def health_ready() -> JSONResponse:
+    payload = _build_health_payload()
+    return JSONResponse(content=payload, status_code=503 if payload["status"] == "unavailable" else 200)
+
+
+@app.get("/internal/files", dependencies=[Depends(require_internal_token)])
 def mat_files() -> JSONResponse:
     items: List[Dict[str, Any]] = []
     if DATA_DIR.exists():
@@ -1225,7 +1037,7 @@ def mat_files() -> JSONResponse:
     )
 
 
-@app.get("/analyze")
+@app.get("/internal/analyze", dependencies=[Depends(require_internal_token)])
 def analyze(
     file_name: Optional[str] = Query(default=None, min_length=1),
     model_type: str = Query(default="gear"),
@@ -1235,9 +1047,9 @@ def analyze(
     try:
         file_path = _resolve_analysis_file(file_name)
         if model_type == "gear" and gear_model is None:
-            raise HTTPException(status_code=500, detail="Gear model is not loaded.")
+            raise HTTPException(status_code=503, detail=model_load_errors.get("gear", "Gear model is not loaded."))
         if model_type == "bearing" and bearing_model is None:
-            raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
+            raise HTTPException(status_code=503, detail=model_load_errors.get("bearing", "Bearing model is not loaded."))
 
         def _compute() -> Dict[str, Any]:
             preferred_key = (
@@ -1264,8 +1076,6 @@ def analyze(
             model_type,
             result.get("diagnosisResult"),
         )
-        _save_to_db_sync(result)
-        _broadcast_analysis_sync(result)
         return JSONResponse(
             content={"success": True, "data": result},
             headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
@@ -1280,7 +1090,7 @@ def analyze(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.post("/analyze/upload")
+@app.post("/internal/analyze/upload", dependencies=[Depends(require_internal_token)])
 async def analyze_upload(
     file: UploadFile = File(...),
     model_type: str = Form(default="gear"),
@@ -1294,9 +1104,9 @@ async def analyze_upload(
     content = await _read_upload_limited(file)
     try:
         if model_type == "gear" and gear_model is None:
-            raise HTTPException(status_code=500, detail="Gear model is not loaded.")
+            raise HTTPException(status_code=503, detail=model_load_errors.get("gear", "Gear model is not loaded."))
         if model_type == "bearing" and bearing_model is None:
-            raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
+            raise HTTPException(status_code=503, detail=model_load_errors.get("bearing", "Bearing model is not loaded."))
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             _inference_executor,
@@ -1310,12 +1120,10 @@ async def analyze_upload(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to analyze file: {exc}") from exc
 
-    await _save_to_db(result)
-    await _broadcast_analysis_async(result)
     return {"success": True, "data": result}
 
 
-@app.post("/infer")
+@app.post("/internal/infer", dependencies=[Depends(require_internal_token)])
 def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     model_type = _normalize_model_type(payload.get("modelType") or payload.get("model_type") or "gear")
 
@@ -1335,9 +1143,9 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {suffix}. Only .mat and .npy are supported.")
 
     if model_type == "gear" and gear_model is None:
-        raise HTTPException(status_code=500, detail="Gear model is not loaded.")
+        raise HTTPException(status_code=503, detail=model_load_errors.get("gear", "Gear model is not loaded."))
     if model_type == "bearing" and bearing_model is None:
-        raise HTTPException(status_code=500, detail="Bearing model is not loaded.")
+        raise HTTPException(status_code=503, detail=model_load_errors.get("bearing", "Bearing model is not loaded."))
 
     def _compute() -> Dict[str, Any]:
         preferred_key = (
@@ -1346,7 +1154,11 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         raw_signal, _, file_meta = _load_signal_from_path(source_path, preferred_key)
         extra = {
+            "taskId": payload.get("taskId"),
+            "requestId": payload.get("requestId"),
             "deviceCode": payload.get("deviceCode"),
+            "pointId": payload.get("pointId"),
+            "channelId": payload.get("channelId"),
             "filename": payload.get("filename") or source_path.name,
             "batchId": payload.get("batchId"),
             "sampleTime": payload.get("sampleTime"),
@@ -1363,78 +1175,11 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     result = _get_cached_or_compute(source_path, model_type, _compute)
-    _save_to_db_sync(result)
-    _broadcast_analysis_sync(result)
     return {"success": True, "data": result}
-
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket) -> None:
-    await ws_manager.connect(websocket)
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            msg_type = data.get("type", "")
-            if msg_type == "ping":
-                await websocket.send_json({"type": "pong"})
-            elif msg_type == "subscribe":
-                channel = data.get("channel", "")
-                if channel == "health":
-                    payload = _build_health_payload()
-                    payload["type"] = "health_status"
-                    await websocket.send_json(payload)
-                elif channel == "mat_files":
-                    items: List[Dict[str, str]] = []
-                    if DATA_DIR.exists():
-                        for p in sorted(DATA_DIR.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True):
-                            if p.suffix.lower() in {".mat", ".npy"}:
-                                items.append({
-                                    "name": p.stem,
-                                    "source_name": p.name,
-                                    "label": p.stem,
-                                })
-                    await websocket.send_json({
-                        "type": "file_list",
-                        "data": items,
-                    })
-    except Exception:
-        pass
-    finally:
-        ws_manager.disconnect(websocket)
-
-
-@app.get("/history")
-def history(
-    start_time: str = Query(..., min_length=1),
-    end_time: str = Query(..., min_length=1),
-    device_code: Optional[str] = Query(default=None),
-) -> Dict[str, Any]:
-    try:
-        records = query_history(start_time, end_time, device_code)
-        serialized: List[Dict[str, Any]] = []
-        for row in records:
-            item = dict(row)
-            for key in ("sample_time", "create_time", "update_time"):
-                if item.get(key):
-                    item[key] = str(item[key])
-            for key in ("confidence", "unknown_ratio", "segment_consistency",
-                        "mean_mahalanobis", "mean_entropy"):
-                if item.get(key) is not None:
-                    item[key] = float(item[key])
-            serialized.append(item)
-        logger.info("history: %d records for [%s ~ %s]", len(serialized), start_time, end_time)
-        return {"success": True, "data": serialized, "total": len(serialized)}
-    except Exception as exc:
-        logger.exception("history query failed")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # =============================================================================
 # 入口
 # =============================================================================
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=DEFAULT_PORT, reload=False)
+    uvicorn.run(app, host=INFERENCE_BIND_HOST, port=DEFAULT_PORT, reload=False)

@@ -12,6 +12,7 @@ import com.ruoyi.sensor.domain.entity.PhmDeviceEventEntity;
 import com.ruoyi.sensor.domain.entity.PhmFeatureConfigEntity;
 import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
 import com.ruoyi.sensor.domain.entity.PhmSystemConfigEntity;
+import com.ruoyi.sensor.domain.entity.EnhancedInferenceRecordEntity;
 import com.ruoyi.sensor.domain.vo.PhmHistoryReportVo;
 import com.ruoyi.sensor.domain.vo.PhmRealtimeReportVo;
 import com.ruoyi.sensor.domain.vo.PhmTrendPointVo;
@@ -45,6 +46,12 @@ public interface PhmService
     void evaluateUpload(String deviceCode, String dataType, Integer channelId, Double value, java.util.Date sampleTime);
 
     void syncDiagnosisResult(Map<String, Object> diagnosis);
+
+    EnhancedInferenceRecordEntity getLatestDiagnosis(String deviceCode);
+
+    List<EnhancedInferenceRecordEntity> listDiagnosisHistory(DateRange range, String deviceCode);
+
+    record DateRange(java.util.Date startTime, java.util.Date endTime) {}
 
     List<PhmAlarmRuleEntity> listAlarmRules();
 

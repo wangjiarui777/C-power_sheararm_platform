@@ -8,9 +8,12 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.alibaba.fastjson2.JSON;
 import com.ruoyi.common.core.domain.AjaxResult;
+import com.ruoyi.common.utils.DateUtils;
+import com.ruoyi.sensor.domain.entity.EnhancedInferenceRecordEntity;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisBatchEntity;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisRecordEntity;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
@@ -28,9 +31,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping({"/sensor/diagnosis", "/sensor/vibration"})
@@ -46,6 +52,7 @@ public class VibrationDiagnosisController
     private final PhmService phmService;
     private final String gearInferUrl;
     private final String bearingInferUrl;
+    private final String internalToken;
     private final String defaultDeviceCode;
     private final String defaultModelType;
     private final int connectTimeoutMs;
@@ -59,6 +66,7 @@ public class VibrationDiagnosisController
         PhmService phmService,
         @Value("${sensor.inference.gear-url:}") String gearInferUrl,
         @Value("${sensor.inference.bearing-url:}") String bearingInferUrl,
+        @Value("${sensor.inference.internal-token:}") String internalToken,
         @Value("${sensor.inference.default-device-code:}") String defaultDeviceCode,
         @Value("${sensor.inference.default-model-type:gear}") String defaultModelType,
         @Value("${sensor.inference.connect-timeout-ms:5000}") int connectTimeoutMs,
@@ -71,6 +79,7 @@ public class VibrationDiagnosisController
         this.phmService = phmService;
         this.gearInferUrl = gearInferUrl;
         this.bearingInferUrl = bearingInferUrl;
+        this.internalToken = internalToken;
         this.defaultDeviceCode = defaultDeviceCode;
         this.defaultModelType = defaultModelType;
         this.connectTimeoutMs = connectTimeoutMs;
@@ -129,10 +138,105 @@ public class VibrationDiagnosisController
             return AjaxResult.success(normalized);
         } catch (Exception ex) {
             Map<String, Object> failure = buildFailureResult(deviceCode, filePath, ex.getMessage());
-            persistDiagnosis(failure);
             pushDiagnosis(failure);
             return AjaxResult.error("推理失败: " + ex.getMessage()).put("data", failure);
         }
+    }
+
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
+    @GetMapping("/inference/health")
+    public AjaxResult inferenceHealth(@RequestParam(defaultValue = "gear") String modelType)
+    {
+        try
+        {
+            Map<String, Object> response = proxyGet(modelType, "/internal/health/ready");
+            return AjaxResult.success(extractPythonData(response));
+        }
+        catch (Exception ex)
+        {
+            return AjaxResult.error("推理服务不可用: " + ex.getMessage());
+        }
+    }
+
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
+    @GetMapping("/inference/files")
+    public AjaxResult inferenceFiles(@RequestParam(defaultValue = "gear") String modelType)
+    {
+        try
+        {
+            return AjaxResult.success(extractPythonData(proxyGet(modelType, "/internal/files")));
+        }
+        catch (Exception ex)
+        {
+            return AjaxResult.error("获取诊断文件失败: " + ex.getMessage());
+        }
+    }
+
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
+    @GetMapping("/inference/analyze")
+    public AjaxResult inferenceAnalyze(@RequestParam(required = false) String fileName,
+        @RequestParam(defaultValue = "gear") String modelType)
+    {
+        try
+        {
+            String path = "/internal/analyze?model_type=" + modelType;
+            if (fileName != null && !fileName.isBlank())
+            {
+                path += "&file_name=" + java.net.URLEncoder.encode(fileName, StandardCharsets.UTF_8);
+            }
+            Map<String, Object> response = proxyGet(modelType, path);
+            return AjaxResult.success(extractPythonData(response));
+        }
+        catch (Exception ex)
+        {
+            return AjaxResult.error("诊断分析失败: " + ex.getMessage());
+        }
+    }
+
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
+    @PostMapping(value = "/inference/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public AjaxResult inferenceUpload(@RequestParam("file") MultipartFile file,
+        @RequestParam(defaultValue = "gear") String modelType)
+    {
+        try
+        {
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+            builder.part("model_type", modelType);
+            builder.part("file", new ByteArrayResource(file.getBytes())
+            {
+                @Override
+                public String getFilename()
+                {
+                    return file.getOriginalFilename();
+                }
+            }).contentType(MediaType.APPLICATION_OCTET_STREAM);
+            String response = restClient.post()
+                .uri(inferenceBaseUrl(modelType) + "/internal/analyze/upload")
+                .header("X-Internal-Token", internalToken)
+                .header("X-Request-Id", UUID.randomUUID().toString())
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(builder.build())
+                .retrieve()
+                .body(String.class);
+            return AjaxResult.success(extractPythonData(JSON.parseObject(response, Map.class)));
+        }
+        catch (Exception ex)
+        {
+            return AjaxResult.error("上传诊断失败: " + ex.getMessage());
+        }
+    }
+
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
+    @GetMapping("/inference/history")
+    public AjaxResult inferenceHistory(@RequestParam(required = false, name = "start_time") String startTime,
+        @RequestParam(required = false, name = "end_time") String endTime,
+        @RequestParam(required = false, name = "device_code") String deviceCode)
+    {
+        PhmService.DateRange range = new PhmService.DateRange(
+            startTime == null ? null : DateUtils.parseDate(startTime),
+            endTime == null ? null : DateUtils.parseDate(endTime));
+        List<EnhancedInferenceRecordEntity> rows = phmService.listDiagnosisHistory(range, deviceCode);
+        return AjaxResult.success(rows);
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
@@ -152,29 +256,28 @@ public class VibrationDiagnosisController
         @RequestParam(defaultValue = "1") Integer channelId)
     {
         deviceCode = normalizeDeviceCode(deviceCode);
-        Map<String, Object> data = timeSeriesAnalysisService.loadDiagnosisData(deviceCode, channelId, 120, 64);
-        Map<String, Object> latest = new LinkedHashMap<>(data);
-        boolean available = "available".equals(data.get("dataStatus"));
-        double rms = available ? ((Number) data.getOrDefault("rms", 0D)).doubleValue() : 0D;
+        EnhancedInferenceRecordEntity record = phmService.getLatestDiagnosis(deviceCode);
+        Map<String, Object> latest = new LinkedHashMap<>();
         latest.put("deviceCode", deviceCode);
         latest.put("channelId", channelId);
-        latest.put("modelVersion", null);
-        latest.put("diagnosisResult", available ? data.get("diagnosis") : null);
-        latest.put("diagnosisName", available ? data.get("diagnosis") : null);
-        latest.put("diagnosisDetail", data.get("diagnosisDetail"));
-        latest.put("confidence", available ? data.get("confidence") : null);
-        latest.put("healthIndex", available ? Math.max(0, 100 - (int) rms * 5) : null);
-        latest.put("riskLevel", available ? (rms > 7 ? "高" : rms > 4 ? "中" : "低") : null);
-        latest.put("status", available ? "完成" : "暂无数据");
-        latest.put("latestRms", available ? data.get("rms") : null);
-        latest.put("latestPeak", available ? data.get("peak") : null);
-        latest.put("batchId", null);
-        latest.put("waveform", data.getOrDefault("waveform", new ArrayList<>()));
-        latest.put("frequencyAxis", data.getOrDefault("frequencyAxis", new ArrayList<>()));
-        latest.put("spectrum", data.getOrDefault("spectrum", new ArrayList<>()));
-        latest.put("evidence", available
-                ? Arrays.asList(evidence("时序数据", "诊断结果来自当前设备的已入库波形与频谱。", "中"))
-                : new ArrayList<>());
+        latest.put("dataStatus", record == null ? "no_data" : "available");
+        latest.put("modelVersion", record == null ? null : modelVersionFromRemark(record.getRemark()));
+        latest.put("diagnosisResult", record == null ? null : record.getDiagnosisResult());
+        latest.put("diagnosisName", record == null ? null : record.getDiagnosisResult());
+        latest.put("diagnosisDetail", record == null ? null : record.getDiagnosisDetail());
+        latest.put("confidence", record == null ? null : record.getConfidence());
+        latest.put("healthIndex", record == null ? null : record.getHealthIndex());
+        latest.put("riskLevel", record == null ? null : record.getRiskLevel());
+        latest.put("alarmLevel", record == null ? null : record.getAlarmLevel());
+        latest.put("status", record == null ? "暂无数据" : "完成");
+        latest.put("sampleTime", record == null ? null : record.getSampleTime());
+        latest.put("latestRms", record == null ? null : record.getRms());
+        latest.put("latestPeak", record == null ? null : record.getPeak());
+        latest.put("batchId", record == null ? null : record.getBatchId());
+        latest.put("waveform", record == null ? new ArrayList<>() : parseJsonList(record.getWaveJson()));
+        latest.put("frequencyAxis", new ArrayList<>());
+        latest.put("spectrum", record == null ? new ArrayList<>() : parseJsonList(record.getSpectrumJson()));
+        latest.put("evidence", record == null ? new ArrayList<>() : parseJsonList(record.getEvidence()));
         return AjaxResult.success(latest);
     }
 
@@ -190,17 +293,25 @@ public class VibrationDiagnosisController
     public AjaxResult trend(@RequestParam(required = false) String deviceCode)
     {
         deviceCode = normalizeDeviceCode(deviceCode);
-        Map<String, Object> data = timeSeriesAnalysisService.loadDiagnosisData(deviceCode, 1, 120, 64);
+        List<EnhancedInferenceRecordEntity> records = phmService.listDiagnosisHistory(
+            new PhmService.DateRange(new Date(System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000), new Date()),
+            deviceCode);
         Map<String, Object> trend = new LinkedHashMap<>();
-        trend.put("dataStatus", data.get("dataStatus"));
-        if (!"available".equals(data.get("dataStatus")))
+        trend.put("dataStatus", records.isEmpty() ? "no_data" : "available");
+        List<String> xAxis = new ArrayList<>();
+        List<Integer> values = new ArrayList<>();
+        for (int i = records.size() - 1; i >= 0; i--)
         {
-            trend.put("xAxis", new ArrayList<>());
-            trend.put("values", new ArrayList<>());
-            return AjaxResult.success(trend);
+            EnhancedInferenceRecordEntity item = records.get(i);
+            if (item.getHealthIndex() != null)
+            {
+                xAxis.add(DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS,
+                    item.getSampleTime() == null ? item.getCreateTime() : item.getSampleTime()));
+                values.add(item.getHealthIndex());
+            }
         }
-        trend.put("xAxis", Arrays.asList("D-6", "D-5", "D-4", "D-3", "D-2", "D-1", "Today"));
-        trend.put("values", Arrays.asList(72, 74, 71, 68, 65, 62, Math.max(0, 100 - ((Number) data.getOrDefault("rms", 0)).intValue() * 5)));
+        trend.put("xAxis", xAxis);
+        trend.put("values", values);
         return AjaxResult.success(trend);
     }
 
@@ -230,10 +341,18 @@ public class VibrationDiagnosisController
         if (!inferPayload.containsKey("modelType") && !inferPayload.containsKey("model_type")) {
             inferPayload.put("modelType", defaultModelType);
         }
+        String requestId = stringValue(inferPayload.get("requestId"), UUID.randomUUID().toString());
+        inferPayload.put("requestId", requestId);
+        inferPayload.putIfAbsent("taskId", requestId);
+        inferPayload.putIfAbsent("deviceCode", resolveDeviceCode(inferPayload));
+        inferPayload.putIfAbsent("sampleTime", DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, new Date()));
         String body = JSON.toJSONString(inferPayload);
 
         String response = restClient.post()
             .uri(inferUrl)
+            .header("X-Internal-Token", internalToken)
+            .header("X-Request-Id", requestId)
+            .header("X-Task-Id", stringValue(inferPayload.get("taskId"), requestId))
             .contentType(MediaType.APPLICATION_JSON)
             .body(body)
             .retrieve()
@@ -243,6 +362,43 @@ public class VibrationDiagnosisController
             .body(String.class);
 
         return JSON.parseObject(response, Map.class);
+    }
+
+    private Map<String, Object> proxyGet(String modelType, String path) throws IOException
+    {
+        String response = restClient.get()
+            .uri(inferenceBaseUrl(modelType) + path)
+            .header("X-Internal-Token", internalToken)
+            .header("X-Request-Id", UUID.randomUUID().toString())
+            .retrieve()
+            .onStatus(status -> status.value() >= 400, (req, resp) -> {
+                throw new IOException("内部推理服务返回 HTTP " + resp.getStatusCode());
+            })
+            .body(String.class);
+        return JSON.parseObject(response, Map.class);
+    }
+
+    private String inferenceBaseUrl(String modelType) throws IOException
+    {
+        String configured = "bearing".equalsIgnoreCase(modelType) ? bearingInferUrl : gearInferUrl;
+        if (configured == null || configured.isBlank())
+        {
+            throw new IOException("未配置内部推理服务地址");
+        }
+        String base = configured.trim();
+        if (base.endsWith("/internal/infer"))
+        {
+            return base.substring(0, base.length() - "/internal/infer".length());
+        }
+        return base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object extractPythonData(Map<String, Object> response)
+    {
+        return response != null && response.get("data") instanceof Map
+            ? response.get("data")
+            : response != null && response.containsKey("data") ? response.get("data") : response;
     }
 
     @SuppressWarnings("unchecked")
@@ -258,12 +414,18 @@ public class VibrationDiagnosisController
         }
         Map<String, Object> result = pythonResult.get("data") instanceof Map
             ? (Map<String, Object>) pythonResult.get("data") : pythonResult;
-        boolean hasDiagnosis = result.get("diagnosisResult") != null
-            || result.get("diagnosisName") != null
-            || result.get("label") != null;
-        if (!hasDiagnosis)
+        requireResultText(result, "taskId");
+        requireResultText(result, "deviceCode");
+        requireResultText(result, "modelType");
+        requireResultText(result, "modelVersion");
+        requireResultText(result, "sampleTime");
+        requireAnyResultText(result, "diagnosisResult", "diagnosisName", "label");
+        requireNumberInRange(result, "confidence", 0, 100);
+        requireNumberInRange(result, "healthIndex", 0, 100);
+        String risk = requireResultText(result, "riskLevel");
+        if (!Arrays.asList("低", "中", "高", "low", "medium", "high").contains(risk))
         {
-            throw new IOException("推理结果缺少诊断标签");
+            throw new IOException("推理结果 riskLevel 非法");
         }
     }
 
@@ -276,37 +438,30 @@ public class VibrationDiagnosisController
         Map<String, Object> nested = data.containsKey("data") && data.get("data") instanceof Map ? (Map<String, Object>) data.get("data") : data;
 
         // 诊断结果：Python返回 diagnosisResult / label / diagnosisName
-        String diagResult = stringValue(nested.get("diagnosisResult"),
-            stringValue(nested.get("diagnosisName"),
-                stringValue(nested.get("label"), "正常")));
-        String diagDetail = stringValue(nested.get("diagnosisDetail"),
-            stringValue(nested.get("diagnosis_detail"), "模型推理完成"));
-        String modelVersion = stringValue(nested.get("modelVersion"),
-            stringValue(nested.get("model_version"), "best_model_classwise_maha.pth"));
-        String modelType = stringValue(nested.get("modelType"),
-            stringValue(nested.get("model_type"), "gear"));
+        String diagResult = firstRequiredText(nested, "diagnosisResult", "diagnosisName", "label");
+        String diagDetail = firstOptionalText(nested, "diagnosisDetail", "diagnosis_detail");
+        String modelVersion = firstRequiredText(nested, "modelVersion", "model_version");
+        String modelType = firstRequiredText(nested, "modelType", "model_type");
 
         Map<String, Object> latest = new LinkedHashMap<>();
         latest.put("deviceCode", deviceCode);
-        latest.put("sampleTime", new Date());
+        latest.put("taskId", nested.get("taskId"));
+        latest.put("requestId", nested.get("requestId"));
+        latest.put("sampleTime", nested.get("sampleTime"));
         latest.put("modelVersion", modelVersion);
         latest.put("modelType", modelType);
         latest.put("diagnosisResult", diagResult);
         latest.put("diagnosisName", diagResult);
         latest.put("diagnosisDetail", diagDetail);
         // Python 返回 confidence(百分比) / healthIndex / riskLevel / alarmLevel
-        latest.put("confidence", toNumber(nested.get("confidence"), 0));
-        latest.put("healthIndex", toNumber(nested.get("healthIndex"),
-            toNumber(nested.get("health_index"), 100)));
-        latest.put("riskLevel", stringValue(nested.get("riskLevel"),
-            stringValue(nested.get("risk_level"), "低")));
-        latest.put("alarmLevel", stringValue(nested.get("alarmLevel"),
-            stringValue(nested.get("alarm_level"), "normal")));
-        latest.put("status", "完成");
-        latest.put("latestRms", toNumber(nested.get("rms"),
-            toNumber(nested.get("latestRms"), 0)));
-        latest.put("latestPeak", toNumber(nested.get("peak"),
-            toNumber(nested.get("latestPeak"), 0)));
+        latest.put("confidence", requiredNumber(nested, "confidence"));
+        latest.put("healthIndex", requiredNumber(nested, "healthIndex"));
+        latest.put("riskLevel", firstRequiredText(nested, "riskLevel", "risk_level"));
+        latest.put("alarmLevel", firstOptionalText(nested, "alarmLevel", "alarm_level"));
+        latest.put("status", "SUCCEEDED");
+        latest.put("resultStatus", "VALID");
+        latest.put("latestRms", optionalNumber(nested, "rms", "latestRms"));
+        latest.put("latestPeak", optionalNumber(nested, "peak", "latestPeak"));
         latest.put("batchId", payload == null ? null : payload.get("batchId"));
         latest.put("filePath", filePath);
         // 波形/频谱：Python 返回 time_data / freq_axis / freq_data
@@ -322,10 +477,7 @@ public class VibrationDiagnosisController
         if (evidenceObj instanceof List) {
             latest.put("evidence", evidenceObj);
         } else {
-            latest.put("evidence", Arrays.asList(
-                evidence("模型标签", "Python 推理服务返回了实时分类标签 (模型: " + modelType + ")。", "中"),
-                evidence("置信度", "模型输出已同步到前端面板。", "中")
-            ));
+            latest.put("evidence", new ArrayList<>());
         }
         return latest;
     }
@@ -358,6 +510,141 @@ public class VibrationDiagnosisController
         return value == null ? defaultValue : String.valueOf(value);
     }
 
+    private String requireResultText(Map<String, Object> result, String key) throws IOException
+    {
+        Object value = result.get(key);
+        if (value == null || String.valueOf(value).isBlank())
+        {
+            throw new IOException("推理结果缺少 " + key);
+        }
+        return String.valueOf(value).trim();
+    }
+
+    private String requireAnyResultText(Map<String, Object> result, String... keys) throws IOException
+    {
+        for (String key : keys)
+        {
+            Object value = result.get(key);
+            if (value != null && !String.valueOf(value).isBlank())
+            {
+                return String.valueOf(value).trim();
+            }
+        }
+        throw new IOException("推理结果缺少 " + String.join("/", keys));
+    }
+
+    private double requireNumberInRange(Map<String, Object> result, String key, double min, double max)
+        throws IOException
+    {
+        Object value = result.get(key);
+        double number;
+        try
+        {
+            number = value instanceof Number ? ((Number) value).doubleValue()
+                : Double.parseDouble(String.valueOf(value));
+        }
+        catch (Exception ex)
+        {
+            throw new IOException("推理结果缺少或无法解析 " + key, ex);
+        }
+        if (!Double.isFinite(number) || number < min || number > max)
+        {
+            throw new IOException("推理结果 " + key + " 超出范围");
+        }
+        return number;
+    }
+
+    private String firstRequiredText(Map<String, Object> data, String... keys)
+    {
+        for (String key : keys)
+        {
+            Object value = data.get(key);
+            if (value != null && !String.valueOf(value).isBlank())
+            {
+                return String.valueOf(value).trim();
+            }
+        }
+        throw new IllegalArgumentException("缺少必填推理字段: " + String.join("/", keys));
+    }
+
+    private String firstOptionalText(Map<String, Object> data, String... keys)
+    {
+        for (String key : keys)
+        {
+            Object value = data.get(key);
+            if (value != null && !String.valueOf(value).isBlank())
+            {
+                return String.valueOf(value).trim();
+            }
+        }
+        return null;
+    }
+
+    private double requiredNumber(Map<String, Object> data, String key)
+    {
+        Object value = data.get(key);
+        if (value instanceof Number)
+        {
+            return ((Number) value).doubleValue();
+        }
+        if (value != null)
+        {
+            return Double.parseDouble(String.valueOf(value));
+        }
+        throw new IllegalArgumentException("缺少必填推理字段: " + key);
+    }
+
+    private Double optionalNumber(Map<String, Object> data, String... keys)
+    {
+        for (String key : keys)
+        {
+            Object value = data.get(key);
+            if (value instanceof Number)
+            {
+                return ((Number) value).doubleValue();
+            }
+            if (value != null && !String.valueOf(value).isBlank())
+            {
+                return Double.parseDouble(String.valueOf(value));
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> parseJsonList(String json)
+    {
+        if (json == null || json.isBlank())
+        {
+            return new ArrayList<>();
+        }
+        try
+        {
+            return JSON.parseObject(json, List.class);
+        }
+        catch (Exception ignored)
+        {
+            return new ArrayList<>();
+        }
+    }
+
+    private String modelVersionFromRemark(String remark)
+    {
+        if (remark == null || remark.isBlank())
+        {
+            return null;
+        }
+        try
+        {
+            Map<String, Object> metadata = JSON.parseObject(remark, Map.class);
+            return metadata == null ? null : stringValue(metadata.get("modelVersion"), null);
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
     private double toNumber(Object value, double defaultValue)
     {
         if (value instanceof Number) {
@@ -377,10 +664,10 @@ public class VibrationDiagnosisController
     {
         VibrationAnalysisRecordEntity record = new VibrationAnalysisRecordEntity();
         record.setBatchId(toLong(diagnosis.get("batchId"), null));
-        record.setDeviceCode(stringValue(diagnosis.get("deviceCode"), defaultDeviceCode));
-        record.setRms(toNumber(diagnosis.get("latestRms"), 0));
-        record.setPeak(toNumber(diagnosis.get("latestPeak"), 0));
-        record.setDiagnosisResult(stringValue(diagnosis.get("diagnosisResult"), stringValue(diagnosis.get("diagnosisName"), "正常")));
+        record.setDeviceCode(firstRequiredText(diagnosis, "deviceCode"));
+        record.setRms(optionalNumber(diagnosis, "latestRms", "rms"));
+        record.setPeak(optionalNumber(diagnosis, "latestPeak", "peak"));
+        record.setDiagnosisResult(firstRequiredText(diagnosis, "diagnosisResult", "diagnosisName"));
         record.setWaveJson(JSON.toJSONString(diagnosis.getOrDefault("waveform", new ArrayList<>())));
         record.setSpectrumJson(JSON.toJSONString(diagnosis.getOrDefault("spectrum", new ArrayList<>())));
         record.setCreateTime(new Date());

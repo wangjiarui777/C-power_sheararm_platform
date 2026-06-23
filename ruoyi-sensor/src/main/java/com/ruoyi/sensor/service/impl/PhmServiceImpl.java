@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -56,6 +57,7 @@ import com.ruoyi.sensor.service.PhmService;
 import com.ruoyi.sensor.service.support.PhmDeviceEventPolicy;
 import com.ruoyi.sensor.service.support.PhmDiagnosisLinkagePolicy;
 import com.ruoyi.sensor.websocket.SensorWebSocketHandler;
+import com.ruoyi.common.utils.DateUtils;
 
 @Service
 public class PhmServiceImpl implements PhmService
@@ -71,6 +73,9 @@ public class PhmServiceImpl implements PhmService
     private static final String WORKFLOW_CLOSED = "CLOSED";
     private static final String EVENT_TYPE_DIAGNOSIS = "diagnosis";
     private static final String EVENT_TYPE_ALARM_HANDLE = "alarm_handle";
+
+    @Value("${sensor.diagnosis.auto-alarm-enabled:false}")
+    private boolean autoAlarmEnabled;
 
     @Autowired
     private EnhancedInferenceRecordMapper enhancedInferenceRecordMapper;
@@ -537,12 +542,16 @@ public class PhmServiceImpl implements PhmService
     @Transactional(rollbackFor = Exception.class)
     public void syncDiagnosisResult(Map<String, Object> diagnosis)
     {
-        if (diagnosis == null)
+        if (diagnosis == null || !"VALID".equals(diagnosis.get("resultStatus")))
         {
             return;
         }
         String deviceCode = stringValue(diagnosis.get("deviceCode"), "");
-        if (!StringUtils.hasText(deviceCode))
+        String diagnosisResult = stringValue(diagnosis.get("diagnosisResult"), "");
+        String modelVersion = stringValue(diagnosis.get("modelVersion"), "");
+        Integer healthIndexValue = toInteger(diagnosis.get("healthIndex"), null);
+        if (!StringUtils.hasText(deviceCode) || !StringUtils.hasText(diagnosisResult)
+            || !StringUtils.hasText(modelVersion) || healthIndexValue == null)
         {
             return;
         }
@@ -553,23 +562,26 @@ public class PhmServiceImpl implements PhmService
             return;
         }
 
-        Date sampleTime = diagnosis.get("sampleTime") instanceof Date ? (Date) diagnosis.get("sampleTime") : new Date();
+        Date sampleTime = diagnosis.get("sampleTime") instanceof Date
+            ? (Date) diagnosis.get("sampleTime") : DateUtils.parseDate(diagnosis.get("sampleTime"));
+        if (sampleTime == null)
+        {
+            return;
+        }
         Integer channelId = toInteger(diagnosis.get("channelId"), 1);
         PhmMeasurePointEntity point = resolvePoint(deviceCode, "vibration", channelId);
         EnhancedInferenceRecordEntity record = persistEnhancedDiagnosis(diagnosis, sampleTime);
 
-        String diagnosisResult = stringValue(diagnosis.get("diagnosisResult"), stringValue(diagnosis.get("diagnosisName"), "正常"));
         String diagnosisDetail = stringValue(diagnosis.get("diagnosisDetail"), "");
-        String riskLevel = stringValue(diagnosis.get("riskLevel"), "低");
-        String alarmLevelText = stringValue(diagnosis.get("alarmLevel"), "normal");
+        String riskLevel = stringValue(diagnosis.get("riskLevel"), "");
+        String alarmLevelText = stringValue(diagnosis.get("alarmLevel"), "");
         int healthIndex = PhmDiagnosisLinkagePolicy.normalizeHealthIndex(
-                toInteger(diagnosis.get("healthIndex"), null),
-                Optional.ofNullable(device.getHealthIndex()).orElse(100));
+                healthIndexValue, healthIndexValue);
         boolean abnormal = PhmDiagnosisLinkagePolicy.isAbnormalDiagnosis(diagnosisResult, riskLevel, alarmLevelText);
 
         device.setHealthIndex(healthIndex);
         device.setFaultType(abnormal ? diagnosisResult : null);
-        if (abnormal)
+        if (abnormal && autoAlarmEnabled)
         {
             int alarmLevel = PhmDiagnosisLinkagePolicy.diagnosisAlarmLevel(riskLevel, alarmLevelText, healthIndex);
             device.setStatus("level" + alarmLevel);
@@ -577,7 +589,7 @@ public class PhmServiceImpl implements PhmService
             createDiagnosisAlarm(device, point, record, diagnosisResult, diagnosisDetail, riskLevel, alarmLevel, sampleTime);
             createDiagnosisEvent(device, diagnosisResult, diagnosisDetail, riskLevel, sampleTime);
         }
-        else if (!hasOpenAlarm(deviceCode))
+        else if (!abnormal && !hasOpenAlarm(deviceCode))
         {
             device.setStatus("normal");
         }
@@ -591,22 +603,28 @@ public class PhmServiceImpl implements PhmService
         record.setBatchId(toLong(diagnosis.get("batchId"), null));
         record.setDeviceCode(stringValue(diagnosis.get("deviceCode"), ""));
         record.setSourceFile(stringValue(diagnosis.get("filePath"), stringValue(diagnosis.get("filename"), null)));
-        record.setAnalysisMode(stringValue(diagnosis.get("modelType"), "python"));
-        record.setDiagnosisResult(stringValue(diagnosis.get("diagnosisResult"), stringValue(diagnosis.get("diagnosisName"), "正常")));
+        record.setAnalysisMode(stringValue(diagnosis.get("modelType"), null));
+        record.setDiagnosisResult(stringValue(diagnosis.get("diagnosisResult"), null));
         record.setConfidence(toBigDecimal(diagnosis.get("confidence")));
-        record.setHealthIndex(toInteger(diagnosis.get("healthIndex"), 100));
-        record.setRiskLevel(stringValue(diagnosis.get("riskLevel"), "低"));
-        record.setAlarmLevel(stringValue(diagnosis.get("alarmLevel"), "normal"));
+        record.setHealthIndex(toInteger(diagnosis.get("healthIndex"), null));
+        record.setRiskLevel(stringValue(diagnosis.get("riskLevel"), null));
+        record.setAlarmLevel(stringValue(diagnosis.get("alarmLevel"), null));
         record.setDiagnosisDetail(stringValue(diagnosis.get("diagnosisDetail"), ""));
         record.setDecisionReason(stringValue(diagnosis.get("decisionReason"), stringValue(diagnosis.get("diagnosisDetail"), "")));
-        record.setRms(toDouble(diagnosis.get("latestRms"), toDouble(diagnosis.get("rms"), 0)));
-        record.setPeak(toDouble(diagnosis.get("latestPeak"), toDouble(diagnosis.get("peak"), 0)));
+        record.setRms(toNullableDouble(diagnosis.get("latestRms"), diagnosis.get("rms")));
+        record.setPeak(toNullableDouble(diagnosis.get("latestPeak"), diagnosis.get("peak")));
         record.setEvidence(JSON.toJSONString(diagnosis.getOrDefault("evidence", new ArrayList<>())));
         record.setWaveJson(JSON.toJSONString(diagnosis.getOrDefault("waveform", new ArrayList<>())));
         record.setSpectrumJson(JSON.toJSONString(diagnosis.getOrDefault("spectrum", new ArrayList<>())));
         record.setSampleTime(sampleTime);
         record.setCreateTime(new Date());
         record.setUpdateTime(new Date());
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("taskId", diagnosis.get("taskId"));
+        metadata.put("requestId", diagnosis.get("requestId"));
+        metadata.put("modelVersion", diagnosis.get("modelVersion"));
+        metadata.put("resultStatus", diagnosis.get("resultStatus"));
+        record.setRemark(JSON.toJSONString(metadata));
         enhancedInferenceRecordMapper.insert(record);
         return record;
     }
@@ -1363,6 +1381,33 @@ public class PhmServiceImpl implements PhmService
                 .last("limit 1"));
     }
 
+    @Override
+    public EnhancedInferenceRecordEntity getLatestDiagnosis(String deviceCode)
+    {
+        return latestDiagnosis(deviceCode);
+    }
+
+    @Override
+    public List<EnhancedInferenceRecordEntity> listDiagnosisHistory(PhmService.DateRange range, String deviceCode)
+    {
+        LambdaQueryWrapper<EnhancedInferenceRecordEntity> query = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(deviceCode))
+        {
+            query.eq(EnhancedInferenceRecordEntity::getDeviceCode, deviceCode.trim());
+        }
+        if (range != null && range.startTime() != null)
+        {
+            query.ge(EnhancedInferenceRecordEntity::getCreateTime, range.startTime());
+        }
+        if (range != null && range.endTime() != null)
+        {
+            query.le(EnhancedInferenceRecordEntity::getCreateTime, range.endTime());
+        }
+        return enhancedInferenceRecordMapper.selectList(query
+                .orderByDesc(EnhancedInferenceRecordEntity::getCreateTime)
+                .last("limit 5000"));
+    }
+
     private String buildAlarmNo(String prefix, Date time)
     {
         Date source = time == null ? new Date() : time;
@@ -1432,6 +1477,27 @@ public class PhmServiceImpl implements PhmService
         catch (Exception ignored)
         {
             return defaultValue;
+        }
+    }
+
+    private Double toNullableDouble(Object primary, Object fallback)
+    {
+        Object value = primary != null ? primary : fallback;
+        if (value == null)
+        {
+            return null;
+        }
+        if (value instanceof Number)
+        {
+            return ((Number) value).doubleValue();
+        }
+        try
+        {
+            return Double.parseDouble(String.valueOf(value));
+        }
+        catch (Exception ignored)
+        {
+            return null;
         }
     }
 

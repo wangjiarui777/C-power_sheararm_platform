@@ -30,11 +30,11 @@ class VibrationDiagnosisControllerTest
         VibrationDiagnosisController controller = new VibrationDiagnosisController(
                 timeSeries, batches, persistence, push, phm,
                 "http://127.0.0.1:1/infer", "http://127.0.0.1:1/infer",
-                "DEV-001", "gear", 50, 50);
+                "test-internal-token-at-least-32-bytes", "DEV-001", "gear", 50, 50);
 
         controller.receiverAnalyze(Map.of("deviceCode", "DEV-001", "modelType", "gear"));
 
-        verify(persistence).saveAsync(any());
+        verify(persistence, never()).saveAsync(any());
         verify(phm, never()).syncDiagnosisResult(any());
     }
 
@@ -44,7 +44,8 @@ class VibrationDiagnosisControllerTest
         VibrationDiagnosisController controller = new VibrationDiagnosisController(
                 mock(TimeSeriesAnalysisService.class), mock(VibrationAnalysisBatchService.class),
                 mock(VibrationAnalysisPersistenceService.class), mock(SensorWebSocketPushService.class),
-                mock(PhmService.class), "", "", "", "gear", 50, 50);
+                mock(PhmService.class), "", "", "test-internal-token-at-least-32-bytes",
+                "", "gear", 50, 50);
         Method validator = VibrationDiagnosisController.class
                 .getDeclaredMethod("validatePythonResult", Map.class);
         validator.setAccessible(true);

@@ -348,8 +348,7 @@ cd <项目根目录>
 
 如需自定义端口，需要同步修改前端环境变量：
 ```env
-VUE_APP_INFERENCE_SERVICE_URL=http://127.0.0.1:5000
-VUE_APP_BEARING_SERVICE_URL=http://127.0.0.1:5001
+# 浏览器只访问 Java API；不得配置或暴露 Python 推理服务地址
 ```
 
 #### 5.4（可选）启动 Java 数据接收器（新终端窗口）
@@ -493,8 +492,8 @@ Start-Service Memurai*
 | `VUE_APP_TITLE` | 振动温度监测平台 | 振动温度监测平台 |
 | `VUE_APP_BASE_API` | `/dev-api` | `/prod-api` |
 | `VUE_APP_BASE_URL` | `http://localhost:8080` | — |
-| `VUE_APP_INFERENCE_SERVICE_URL` | `http://127.0.0.1:5000` | 按部署地址配置 |
-| `VUE_APP_BEARING_SERVICE_URL` | `http://127.0.0.1:5001` | 按部署地址配置 |
+| `SENSOR_INFER_URL` | `http://127.0.0.1:5000/internal/infer` | Java 后端访问的本机内部推理地址，不经 Nginx 暴露 |
+| `SENSOR_INFERENCE_INTERNAL_TOKEN` | 无默认值 | Java 与 Python 共享的至少 32 字节内部令牌 |
 
 ---
 
