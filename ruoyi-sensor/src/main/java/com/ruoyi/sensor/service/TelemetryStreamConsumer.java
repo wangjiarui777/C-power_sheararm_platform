@@ -22,6 +22,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.dao.DuplicateKeyException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Service
 public class TelemetryStreamConsumer
@@ -34,12 +36,16 @@ public class TelemetryStreamConsumer
     private final TimeSeriesStore timeSeriesStore;
     private final PhmService phmService;
     private final String consumerName;
+    private final Counter processedCounter;
+    private final Counter retryCounter;
+    private final Counter deadLetterCounter;
 
     public TelemetryStreamConsumer(StringRedisTemplate redisTemplate,
         IDeviceVibrationDataService vibrationService,
         IDeviceTemperatureDataService temperatureService,
         TimeSeriesStore timeSeriesStore,
-        PhmService phmService) throws Exception
+        PhmService phmService,
+        MeterRegistry meterRegistry) throws Exception
     {
         this.redisTemplate = redisTemplate;
         this.vibrationService = vibrationService;
@@ -47,6 +53,9 @@ public class TelemetryStreamConsumer
         this.timeSeriesStore = timeSeriesStore;
         this.phmService = phmService;
         this.consumerName = InetAddress.getLocalHost().getHostName() + "-" + ProcessHandle.current().pid();
+        this.processedCounter = meterRegistry.counter("phm.telemetry.processed");
+        this.retryCounter = meterRegistry.counter("phm.telemetry.retry");
+        this.deadLetterCounter = meterRegistry.counter("phm.telemetry.dead_letter");
     }
 
     @Scheduled(fixedDelayString = "${sensor.stream.poll-delay-ms:500}")
@@ -77,6 +86,7 @@ public class TelemetryStreamConsumer
             persist(envelope);
             acknowledge(record.getId());
             redisTemplate.opsForValue().increment("monitoring:telemetry:processed");
+            processedCounter.increment();
         }
         catch (Exception ex)
         {
@@ -90,6 +100,14 @@ public class TelemetryStreamConsumer
             acknowledge(record.getId());
             redisTemplate.opsForValue().increment(retry + 1 >= MAX_RETRIES
                 ? "monitoring:telemetry:dead-letter" : "monitoring:telemetry:retry-count");
+            if (retry + 1 >= MAX_RETRIES)
+            {
+                deadLetterCounter.increment();
+            }
+            else
+            {
+                retryCounter.increment();
+            }
         }
     }
 

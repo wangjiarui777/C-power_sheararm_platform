@@ -23,6 +23,7 @@ import logging
 import os
 import secrets
 import threading
+import time
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
@@ -38,7 +39,8 @@ import torch
 import torch.nn as nn
 import uvicorn
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 # =============================================================================
 # 项目内部模块
@@ -176,6 +178,27 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+INFERENCE_REQUESTS = Counter(
+    "phm_inference_requests_total", "Inference HTTP requests", ["path", "method", "status"]
+)
+INFERENCE_DURATION = Histogram(
+    "phm_inference_request_duration_seconds", "Inference HTTP request duration", ["path", "method"]
+)
+
+
+@app.middleware("http")
+async def observe_requests(request, call_next):
+    started = time.perf_counter()
+    status = "500"
+    try:
+        response = await call_next(request)
+        status = str(response.status_code)
+        return response
+    finally:
+        path = request.url.path
+        INFERENCE_REQUESTS.labels(path, request.method, status).inc()
+        INFERENCE_DURATION.labels(path, request.method).observe(time.perf_counter() - started)
 
 
 def require_internal_token(
@@ -1019,6 +1042,11 @@ def health_live() -> Dict[str, Any]:
 def health_ready() -> JSONResponse:
     payload = _build_health_payload()
     return JSONResponse(content=payload, status_code=503 if payload["status"] == "unavailable" else 200)
+
+
+@app.get("/internal/metrics", dependencies=[Depends(require_internal_token)])
+def metrics() -> Response:
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/internal/files", dependencies=[Depends(require_internal_token)])
