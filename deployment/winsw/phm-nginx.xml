@@ -1,0 +1,13 @@
+<service>
+  <id>phm-nginx</id>
+  <name>PHM Nginx Gateway</name>
+  <description>Only public HTTPS entry point for the PHM platform.</description>
+  <executable>%BASE%\..\runtime\nginx\nginx.exe</executable>
+  <arguments>-p "%BASE%\..\runtime\nginx" -c "%BASE%\..\current\nginx\nginx.conf"</arguments>
+  <stopexecutable>%BASE%\..\runtime\nginx\nginx.exe</stopexecutable>
+  <stoparguments>-p "%BASE%\..\runtime\nginx" -s quit</stoparguments>
+  <depend>phm-platform</depend>
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="10 sec"/>
+  <logpath>%BASE%\..\logs\nginx-service</logpath>
+</service>
