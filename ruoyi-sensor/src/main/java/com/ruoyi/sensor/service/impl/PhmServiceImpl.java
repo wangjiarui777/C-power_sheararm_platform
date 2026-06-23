@@ -38,6 +38,7 @@ import com.ruoyi.sensor.domain.entity.PhmFeatureConfigEntity;
 import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
 import com.ruoyi.sensor.domain.entity.PhmSystemConfigEntity;
 import com.ruoyi.sensor.domain.entity.ModelReleaseEntity;
+import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
 import com.ruoyi.sensor.domain.vo.PhmTrendPointVo;
 import com.ruoyi.sensor.domain.vo.PhmHistoryReportVo;
 import com.ruoyi.sensor.domain.vo.PhmRealtimeReportVo;
@@ -56,10 +57,12 @@ import com.ruoyi.sensor.mapper.ModelReleaseMapper;
 import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
 import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 import com.ruoyi.sensor.service.PhmService;
+import com.ruoyi.sensor.service.PhmDataScopeService;
 import com.ruoyi.sensor.service.support.PhmDeviceEventPolicy;
 import com.ruoyi.sensor.service.support.PhmDiagnosisLinkagePolicy;
 import com.ruoyi.sensor.websocket.SensorWebSocketHandler;
 import com.ruoyi.common.utils.DateUtils;
+import com.ruoyi.common.utils.SecurityUtils;
 
 @Service
 public class PhmServiceImpl implements PhmService
@@ -87,6 +90,9 @@ public class PhmServiceImpl implements PhmService
 
     @Autowired
     private PhmDeviceMapper deviceMapper;
+
+    @Autowired
+    private PhmDataScopeService dataScopeService;
 
     @Autowired
     private PhmMeasurePointMapper pointMapper;
@@ -175,7 +181,7 @@ public class PhmServiceImpl implements PhmService
     @Override
     public Map<String, Object> getDeviceBrain(Long deviceId)
     {
-        PhmDeviceEntity device = deviceMapper.selectById(deviceId);
+        PhmDeviceEntity device = scopedDeviceById(deviceId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("device", device);
         if (device == null)
@@ -212,6 +218,10 @@ public class PhmServiceImpl implements PhmService
     @Override
     public boolean toggleFavorite(Long deviceId, String username)
     {
+        if (scopedDeviceById(deviceId) == null)
+        {
+            return false;
+        }
         LambdaQueryWrapper<PhmDeviceFavoriteEntity> wrapper = new LambdaQueryWrapper<PhmDeviceFavoriteEntity>()
                 .eq(PhmDeviceFavoriteEntity::getDeviceId, deviceId)
                 .eq(PhmDeviceFavoriteEntity::getUserName, username);
@@ -233,7 +243,7 @@ public class PhmServiceImpl implements PhmService
     public List<PhmTrendPointVo> getFeatureTrend(Long pointId, String featureCode)
     {
         PhmMeasurePointEntity point = pointMapper.selectById(pointId);
-        if (point == null)
+        if (point == null || scopedDeviceByCode(point.getDeviceCode()) == null)
         {
             return new ArrayList<>();
         }
@@ -258,7 +268,17 @@ public class PhmServiceImpl implements PhmService
     @Override
     public List<PhmAlarmEventEntity> listAlarms(String deviceCode, String status, Integer alarmLevel)
     {
+        Set<String> accessibleCodes = accessibleDeviceCodes();
+        if (StringUtils.hasText(deviceCode) && !accessibleCodes.contains(deviceCode))
+        {
+            return new ArrayList<>();
+        }
+        if (accessibleCodes.isEmpty())
+        {
+            return new ArrayList<>();
+        }
         LambdaQueryWrapper<PhmAlarmEventEntity> wrapper = new LambdaQueryWrapper<PhmAlarmEventEntity>()
+                .in(PhmAlarmEventEntity::getDeviceCode, accessibleCodes)
                 .eq(StringUtils.hasText(deviceCode), PhmAlarmEventEntity::getDeviceCode, deviceCode)
                 .eq(StringUtils.hasText(status), PhmAlarmEventEntity::getStatus, status)
                 .eq(alarmLevel != null, PhmAlarmEventEntity::getAlarmLevel, alarmLevel)
@@ -271,6 +291,10 @@ public class PhmServiceImpl implements PhmService
     {
         PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
         Map<String, Object> detail = new LinkedHashMap<>();
+        if (alarm != null && scopedDeviceByCode(alarm.getDeviceCode()) == null)
+        {
+            alarm = null;
+        }
         detail.put("alarm", alarm);
         if (alarm == null)
         {
@@ -334,7 +358,8 @@ public class PhmServiceImpl implements PhmService
     public boolean acknowledgeAlarm(Long id, String username, PhmAlarmActionRequest request)
     {
         PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
-        if (alarm == null || WORKFLOW_CLOSED.equals(alarm.getWorkflowStatus()))
+        if (alarm == null || scopedDeviceByCode(alarm.getDeviceCode()) == null
+            || WORKFLOW_CLOSED.equals(alarm.getWorkflowStatus()))
         {
             return false;
         }
@@ -354,7 +379,8 @@ public class PhmServiceImpl implements PhmService
     public boolean assignAlarm(Long id, String username, PhmAlarmActionRequest request)
     {
         PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
-        if (alarm == null || request == null || !StringUtils.hasText(request.getAssignee())
+        if (alarm == null || scopedDeviceByCode(alarm.getDeviceCode()) == null
+                || request == null || !StringUtils.hasText(request.getAssignee())
                 || WORKFLOW_CLOSED.equals(alarm.getWorkflowStatus()))
         {
             return false;
@@ -379,7 +405,7 @@ public class PhmServiceImpl implements PhmService
     public boolean closeAlarm(Long id, String username, PhmAlarmActionRequest request)
     {
         PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
-        if (alarm == null)
+        if (alarm == null || scopedDeviceByCode(alarm.getDeviceCode()) == null)
         {
             return false;
         }
@@ -414,6 +440,11 @@ public class PhmServiceImpl implements PhmService
     @Override
     public List<PhmAlarmHandleRecordEntity> getAlarmTimeline(Long id)
     {
+        PhmAlarmEventEntity alarm = alarmEventMapper.selectById(id);
+        if (alarm == null || scopedDeviceByCode(alarm.getDeviceCode()) == null)
+        {
+            return new ArrayList<>();
+        }
         return handleRecordMapper.selectList(new LambdaQueryWrapper<PhmAlarmHandleRecordEntity>()
                 .eq(PhmAlarmHandleRecordEntity::getAlarmId, id)
                 .orderByAsc(PhmAlarmHandleRecordEntity::getCreateTime));
@@ -840,7 +871,15 @@ public class PhmServiceImpl implements PhmService
     @Override
     public List<PhmDeviceEventEntity> listDeviceEvents(Long deviceId, String deviceCode, Integer year)
     {
+        Set<String> accessibleCodes = accessibleDeviceCodes();
+        if (accessibleCodes.isEmpty()
+            || (StringUtils.hasText(deviceCode) && !accessibleCodes.contains(deviceCode))
+            || (deviceId != null && scopedDeviceById(deviceId) == null))
+        {
+            return new ArrayList<>();
+        }
         LambdaQueryWrapper<PhmDeviceEventEntity> wrapper = new LambdaQueryWrapper<PhmDeviceEventEntity>()
+                .in(PhmDeviceEventEntity::getDeviceCode, accessibleCodes)
                 .eq(deviceId != null, PhmDeviceEventEntity::getDeviceId, deviceId)
                 .eq(StringUtils.hasText(deviceCode), PhmDeviceEventEntity::getDeviceCode, deviceCode)
                 .orderByDesc(PhmDeviceEventEntity::getEventTime);
@@ -858,6 +897,14 @@ public class PhmServiceImpl implements PhmService
     @Override
     public int saveDeviceEvent(PhmDeviceEventEntity event, String username)
     {
+        PhmDeviceEntity device = event.getDeviceId() == null
+            ? scopedDeviceByCode(event.getDeviceCode()) : scopedDeviceById(event.getDeviceId());
+        if (device == null)
+        {
+            return 0;
+        }
+        event.setDeviceId(device.getId());
+        event.setDeviceCode(device.getDeviceCode());
         event.setOperatorName(username);
         if (event.getCreateTime() == null)
         {
@@ -870,18 +917,17 @@ public class PhmServiceImpl implements PhmService
     @Override
     public int removeDeviceEvent(Long id)
     {
-        return deviceEventMapper.deleteById(id);
+        PhmDeviceEventEntity event = deviceEventMapper.selectById(id);
+        return event != null && scopedDeviceByCode(event.getDeviceCode()) != null
+            ? deviceEventMapper.deleteById(id) : 0;
     }
 
     @Override
     public List<PhmDeviceEntity> listDevices(String keyword)
     {
-        return deviceMapper.selectList(new LambdaQueryWrapper<PhmDeviceEntity>()
-                .and(StringUtils.hasText(keyword), wrapper -> wrapper
-                        .like(PhmDeviceEntity::getDeviceCode, keyword)
-                        .or()
-                        .like(PhmDeviceEntity::getDeviceName, keyword))
-                .orderByAsc(PhmDeviceEntity::getDeviceCode));
+        PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+        query.setKeyword(keyword);
+        return dataScopeService.listDevices(query);
     }
 
     @Override
@@ -890,8 +936,21 @@ public class PhmServiceImpl implements PhmService
         boolean isNew = device.getId() == null;
         if (isNew)
         {
+            if (device.getDeptId() == null)
+            {
+                device.setDeptId(SecurityUtils.getDeptId());
+            }
             device.setCreateBy(username);
             device.setCreateTime(new Date());
+        }
+        else
+        {
+            PhmDeviceEntity accessible = scopedDeviceById(device.getId());
+            if (accessible == null)
+            {
+                return 0;
+            }
+            device.setDeptId(accessible.getDeptId());
         }
         device.setUpdateBy(username);
         device.setUpdateTime(new Date());
@@ -907,7 +966,7 @@ public class PhmServiceImpl implements PhmService
     @Transactional(rollbackFor = Exception.class)
     public int removeDevice(Long id)
     {
-        PhmDeviceEntity device = deviceMapper.selectById(id);
+        PhmDeviceEntity device = scopedDeviceById(id);
         if (device == null)
         {
             return 0;
@@ -979,7 +1038,19 @@ public class PhmServiceImpl implements PhmService
     @Override
     public List<PhmMeasurePointEntity> listMeasurePoints(Long deviceId)
     {
+        if (deviceId != null && scopedDeviceById(deviceId) == null)
+        {
+            return new ArrayList<>();
+        }
+        Set<Long> accessibleIds = dataScopeService.listDevices(new PhmDeviceScopeQuery()).stream()
+            .map(PhmDeviceEntity::getId)
+            .collect(Collectors.toSet());
+        if (accessibleIds.isEmpty())
+        {
+            return new ArrayList<>();
+        }
         return pointMapper.selectList(new LambdaQueryWrapper<PhmMeasurePointEntity>()
+                .in(PhmMeasurePointEntity::getDeviceId, accessibleIds)
                 .eq(deviceId != null, PhmMeasurePointEntity::getDeviceId, deviceId)
                 .orderByAsc(PhmMeasurePointEntity::getDisplayOrder));
     }
@@ -987,6 +1058,14 @@ public class PhmServiceImpl implements PhmService
     @Override
     public int saveMeasurePoint(PhmMeasurePointEntity point)
     {
+        PhmDeviceEntity device = point.getDeviceId() == null
+            ? scopedDeviceByCode(point.getDeviceCode()) : scopedDeviceById(point.getDeviceId());
+        if (device == null)
+        {
+            return 0;
+        }
+        point.setDeviceId(device.getId());
+        point.setDeviceCode(device.getDeviceCode());
         point.setUpdateTime(new Date());
         return point.getId() == null ? pointMapper.insert(point) : pointMapper.updateById(point);
     }
@@ -995,6 +1074,11 @@ public class PhmServiceImpl implements PhmService
     @Transactional(rollbackFor = Exception.class)
     public int removeMeasurePoint(Long id)
     {
+        PhmMeasurePointEntity point = pointMapper.selectById(id);
+        if (point == null || scopedDeviceByCode(point.getDeviceCode()) == null)
+        {
+            return 0;
+        }
         alarmRuleMapper.delete(new LambdaQueryWrapper<PhmAlarmRuleEntity>()
                 .eq(PhmAlarmRuleEntity::getPointId, id));
         return pointMapper.deleteById(id);
@@ -1027,25 +1111,43 @@ public class PhmServiceImpl implements PhmService
     @Override
     public List<PhmAttachmentEntity> listAttachments(String bizType, Long bizId)
     {
+        if (bizId != null && !"report".equalsIgnoreCase(bizType) && scopedDeviceById(bizId) == null)
+        {
+            return new ArrayList<>();
+        }
+        Set<Long> accessibleIds = dataScopeService.listDevices(new PhmDeviceScopeQuery()).stream()
+            .map(PhmDeviceEntity::getId)
+            .collect(Collectors.toSet());
         return attachmentMapper.selectList(new LambdaQueryWrapper<PhmAttachmentEntity>()
                 .eq(StringUtils.hasText(bizType), PhmAttachmentEntity::getBizType, bizType)
                 .eq(bizId != null, PhmAttachmentEntity::getBizId, bizId)
-                .orderByDesc(PhmAttachmentEntity::getCreateTime));
+                .orderByDesc(PhmAttachmentEntity::getCreateTime)).stream()
+            .filter(item -> "REPORT".equals(item.getPurpose())
+                || (item.getBizId() != null && accessibleIds.contains(item.getBizId())))
+            .collect(Collectors.toList());
     }
 
     @Override
     public int saveAttachment(PhmAttachmentEntity attachment, String username)
     {
-        if (!StringUtils.hasText(attachment.getBizType()))
+        if (attachment.getId() == null)
         {
-            attachment.setBizType("morphology");
+            throw new IllegalArgumentException("必须通过 /phm/attachments/upload 上传文件");
         }
+        PhmAttachmentEntity existing = attachmentMapper.selectById(attachment.getId());
+        if (existing == null || (existing.getBizId() != null
+            && !"REPORT".equals(existing.getPurpose()) && scopedDeviceById(existing.getBizId()) == null))
+        {
+            return 0;
+        }
+        attachment.setStoragePath(existing.getStoragePath());
+        attachment.setObjectName(existing.getObjectName());
+        attachment.setSha256(existing.getSha256());
+        attachment.setScanStatus(existing.getScanStatus());
+        attachment.setFileUrl(null);
         attachment.setUploadBy(username);
-        if (attachment.getCreateTime() == null)
-        {
-            attachment.setCreateTime(new Date());
-        }
-        return attachment.getId() == null ? attachmentMapper.insert(attachment) : attachmentMapper.updateById(attachment);
+        attachment.setCreateTime(existing.getCreateTime());
+        return attachmentMapper.updateById(attachment);
     }
 
     @Override
@@ -1317,10 +1419,40 @@ public class PhmServiceImpl implements PhmService
 
     private List<PhmDeviceEntity> queryDevices(String orgName, String status)
     {
-        return deviceMapper.selectList(new LambdaQueryWrapper<PhmDeviceEntity>()
-                .like(StringUtils.hasText(orgName), PhmDeviceEntity::getOrgName, orgName)
-                .eq(StringUtils.hasText(status), PhmDeviceEntity::getStatus, status)
-                .orderByAsc(PhmDeviceEntity::getDeviceCode));
+        PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+        query.setOrgName(orgName);
+        query.setStatus(status);
+        return dataScopeService.listDevices(query);
+    }
+
+    private PhmDeviceEntity scopedDeviceById(Long deviceId)
+    {
+        if (deviceId == null)
+        {
+            return null;
+        }
+        PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+        query.setDeviceId(deviceId);
+        return dataScopeService.getDevice(query);
+    }
+
+    private PhmDeviceEntity scopedDeviceByCode(String deviceCode)
+    {
+        if (!StringUtils.hasText(deviceCode))
+        {
+            return null;
+        }
+        PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+        query.setDeviceCode(deviceCode);
+        return dataScopeService.getDevice(query);
+    }
+
+    private Set<String> accessibleDeviceCodes()
+    {
+        return dataScopeService.listDevices(new PhmDeviceScopeQuery()).stream()
+            .map(PhmDeviceEntity::getDeviceCode)
+            .filter(StringUtils::hasText)
+            .collect(Collectors.toSet());
     }
 
     private Set<Long> favoriteIds(String username)

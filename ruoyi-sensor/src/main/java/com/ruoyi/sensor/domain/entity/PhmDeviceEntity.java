@@ -13,6 +13,7 @@ public class PhmDeviceEntity
 {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
+    private Long deptId;
     private String deviceCode;
     private String deviceName;
     private String deviceType;

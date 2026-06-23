@@ -56,6 +56,9 @@ public class ProductionConfigurationValidator implements ApplicationRunner
         requireValue(env, errors, "sensor.iotdb.username");
         validateWritablePath(env, errors, "ruoyi.profile");
         validateWritablePath(env, errors, "logging.file.path");
+        validateWritablePath(env, errors, "sensor.attachment.root");
+        validateWritablePath(env, errors, "sensor.attachment.virus-scan-command");
+        requireValue(env, errors, "sensor.attachment.virus-scan-arguments");
         validateOrigins(env, errors, "cors.allowed-origins");
         validateOrigins(env, errors, "sensor.websocket.allowed-origins");
         validateInternalInferenceUrl(env, errors);
@@ -162,4 +165,3 @@ public class ProductionConfigurationValidator implements ApplicationRunner
         }
     }
 }
-

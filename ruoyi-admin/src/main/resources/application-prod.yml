@@ -2,6 +2,11 @@ ruoyi:
   profile: ${RUOYI_PROFILE}
 
 sensor:
+  attachment:
+    root: ${SENSOR_ATTACHMENT_ROOT}
+    scan-required: true
+    virus-scan-command: ${SENSOR_ATTACHMENT_SCAN_COMMAND}
+    virus-scan-arguments: ${SENSOR_ATTACHMENT_SCAN_ARGUMENTS}
   default-device-code: ""
   collector:
     token: ${SENSOR_COLLECTOR_TOKEN}
@@ -29,6 +34,10 @@ sensor:
     trust-store-password: ${IOTDB_TRUST_STORE_PASSWORD:}
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 128MB
+      max-request-size: 130MB
   datasource:
     druid:
       master:
@@ -82,4 +91,3 @@ logging:
 token:
   secret: ${JWT_SECRET}
   previous-secrets: ${JWT_PREVIOUS_SECRETS:}
-

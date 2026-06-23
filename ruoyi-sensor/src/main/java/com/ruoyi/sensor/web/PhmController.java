@@ -1,6 +1,7 @@
 package com.ruoyi.sensor.web;
 
 import java.util.List;
+import java.nio.charset.StandardCharsets;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +28,15 @@ import com.ruoyi.sensor.domain.entity.PhmSystemConfigEntity;
 import com.ruoyi.sensor.domain.vo.PhmHistoryReportVo;
 import com.ruoyi.sensor.domain.vo.PhmRealtimeReportVo;
 import com.ruoyi.sensor.service.PhmService;
+import com.ruoyi.sensor.service.PhmAttachmentStorageService;
+import com.ruoyi.common.annotation.Log;
+import com.ruoyi.common.enums.BusinessType;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/phm")
@@ -34,6 +44,9 @@ public class PhmController extends BaseController
 {
     @Autowired
     private PhmService phmService;
+
+    @Autowired
+    private PhmAttachmentStorageService attachmentStorageService;
 
     @PreAuthorize("@ss.hasPermi('phm:device:list')")
     @GetMapping("/devices/cluster")
@@ -66,6 +79,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:device:add')")
+    @Log(title = "PHM设备新增", businessType = BusinessType.INSERT)
     @PostMapping("/devices")
     public AjaxResult addDevice(@RequestBody PhmDeviceEntity device)
     {
@@ -73,6 +87,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:device:edit')")
+    @Log(title = "PHM设备修改", businessType = BusinessType.UPDATE)
     @PutMapping("/devices")
     public AjaxResult editDevice(@RequestBody PhmDeviceEntity device)
     {
@@ -80,6 +95,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:device:remove')")
+    @Log(title = "PHM设备删除", businessType = BusinessType.DELETE)
     @DeleteMapping("/devices/{deviceId}")
     public AjaxResult removeDevice(@PathVariable Long deviceId)
     {
@@ -181,6 +197,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:handle')")
+    @Log(title = "PHM告警确认", businessType = BusinessType.UPDATE)
     @PostMapping("/alarms/{alarmId}/acknowledge")
     public AjaxResult acknowledgeAlarm(@PathVariable Long alarmId, @RequestBody(required = false) PhmAlarmActionRequest request)
     {
@@ -188,6 +205,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:handle')")
+    @Log(title = "PHM告警指派", businessType = BusinessType.UPDATE)
     @PostMapping("/alarms/{alarmId}/assign")
     public AjaxResult assignAlarm(@PathVariable Long alarmId, @RequestBody PhmAlarmActionRequest request)
     {
@@ -195,6 +213,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:handle')")
+    @Log(title = "PHM告警关闭", businessType = BusinessType.UPDATE)
     @PostMapping("/alarms/{alarmId}/close")
     public AjaxResult closeAlarm(@PathVariable Long alarmId, @RequestBody(required = false) PhmAlarmActionRequest request)
     {
@@ -216,6 +235,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:config:add')")
+    @Log(title = "PHM阈值新增", businessType = BusinessType.INSERT)
     @PostMapping("/alarm-rules")
     public AjaxResult addAlarmRule(@RequestBody PhmAlarmRuleEntity rule)
     {
@@ -223,6 +243,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:config:edit')")
+    @Log(title = "PHM阈值修改", businessType = BusinessType.UPDATE)
     @PutMapping("/alarm-rules")
     public AjaxResult editAlarmRule(@RequestBody PhmAlarmRuleEntity rule)
     {
@@ -230,6 +251,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:config:remove')")
+    @Log(title = "PHM阈值删除", businessType = BusinessType.DELETE)
     @DeleteMapping("/alarm-rules/{ruleId}")
     public AjaxResult removeAlarmRule(@PathVariable Long ruleId)
     {
@@ -274,6 +296,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:report:export')")
+    @Log(title = "PHM实时报表导出", businessType = BusinessType.EXPORT)
     @PostMapping("/reports/realtime/export")
     public void exportRealtimeReport(HttpServletResponse response,
                                      @RequestParam(required = false) String deviceCode)
@@ -292,6 +315,7 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:report:export')")
+    @Log(title = "PHM历史报表导出", businessType = BusinessType.EXPORT)
     @PostMapping("/reports/history/export")
     public void exportHistoryReport(HttpServletResponse response,
                                     @RequestParam(required = false) String orgName,
@@ -313,7 +337,7 @@ public class PhmController extends BaseController
     @PostMapping("/reports/service")
     public AjaxResult addServiceReport(@RequestBody PhmAttachmentEntity attachment)
     {
-        return toAjax(phmService.saveServiceReport(attachment, getUsernameSafe()));
+        return error("请使用 /phm/attachments/upload 上传报告文件");
     }
 
     @PreAuthorize("@ss.hasPermi('phm:config:list')")
@@ -328,10 +352,50 @@ public class PhmController extends BaseController
     @PostMapping("/attachments")
     public AjaxResult addAttachment(@RequestBody PhmAttachmentEntity attachment)
     {
-        return toAjax(phmService.saveAttachment(attachment, getUsernameSafe()));
+        return error("请使用 /phm/attachments/upload 上传附件");
+    }
+
+    @PreAuthorize("@ss.hasAnyPermi('phm:config:add,phm:report:edit,sensor:diagnosis:run')")
+    @Log(title = "PHM附件上传", businessType = BusinessType.INSERT)
+    @PostMapping(value = "/attachments/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public AjaxResult uploadAttachment(@RequestParam("file") MultipartFile file,
+        @RequestParam String purpose,
+        @RequestParam(required = false) String bizType,
+        @RequestParam(required = false) Long bizId,
+        @RequestParam(required = false) String reportType) throws Exception
+    {
+        PhmAttachmentEntity entity = attachmentStorageService.store(
+            file, purpose, bizType, bizId, reportType, getUsernameSafe());
+        return success(java.util.Map.of(
+            "attachmentId", entity.getId(),
+            "fileName", entity.getFileName(),
+            "sha256", entity.getSha256(),
+            "scanStatus", entity.getScanStatus()));
+    }
+
+    @PreAuthorize("@ss.hasAnyPermi('phm:config:list,phm:report:view,sensor:diagnosis:view')")
+    @Log(title = "PHM附件下载", businessType = BusinessType.EXPORT)
+    @GetMapping("/attachments/{attachmentId}/content")
+    public ResponseEntity<FileSystemResource> attachmentContent(@PathVariable Long attachmentId) throws Exception
+    {
+        PhmAttachmentEntity entity = attachmentStorageService.getAccessible(attachmentId);
+        if (entity == null)
+        {
+            return ResponseEntity.notFound().build();
+        }
+        FileSystemResource resource = attachmentStorageService.content(entity);
+        ContentDisposition disposition = ContentDisposition.attachment()
+            .filename(entity.getFileName(), StandardCharsets.UTF_8)
+            .build();
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .contentLength(resource.contentLength())
+            .body(resource);
     }
 
     @PreAuthorize("@ss.hasPermi('phm:config:edit')")
+    @Log(title = "PHM附件元数据修改", businessType = BusinessType.UPDATE)
     @PutMapping("/attachments")
     public AjaxResult editAttachment(@RequestBody PhmAttachmentEntity attachment)
     {
@@ -339,10 +403,18 @@ public class PhmController extends BaseController
     }
 
     @PreAuthorize("@ss.hasPermi('phm:config:remove')")
+    @Log(title = "PHM附件删除", businessType = BusinessType.DELETE)
     @DeleteMapping("/attachments/{attachmentId}")
     public AjaxResult removeAttachment(@PathVariable Long attachmentId)
     {
-        return toAjax(phmService.removeAttachment(attachmentId));
+        try
+        {
+            return toAjax(attachmentStorageService.delete(attachmentId));
+        }
+        catch (Exception ex)
+        {
+            return error("附件删除失败: " + ex.getMessage());
+        }
     }
 
     @PreAuthorize("@ss.hasPermi('phm:config:list')")

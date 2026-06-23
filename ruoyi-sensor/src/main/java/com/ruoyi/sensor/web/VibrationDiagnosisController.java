@@ -19,6 +19,8 @@ import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.sensor.domain.entity.EnhancedInferenceRecordEntity;
 import com.ruoyi.sensor.domain.entity.InferenceTaskEntity;
 import com.ruoyi.sensor.mapper.InferenceTaskMapper;
+import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
+import com.ruoyi.sensor.service.PhmDataScopeService;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisBatchEntity;
 import com.ruoyi.sensor.domain.entity.VibrationAnalysisRecordEntity;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
@@ -72,6 +74,9 @@ public class VibrationDiagnosisController
     @Autowired
     @Qualifier("vibrationExecutor")
     private Executor diagnosisExecutor;
+
+    @Autowired
+    private PhmDataScopeService dataScopeService;
 
     public VibrationDiagnosisController(TimeSeriesAnalysisService timeSeriesAnalysisService,
         VibrationAnalysisBatchService batchService,
@@ -169,6 +174,12 @@ public class VibrationDiagnosisController
         {
             return AjaxResult.error("deviceCode 为必填项");
         }
+        PhmDeviceScopeQuery deviceQuery = new PhmDeviceScopeQuery();
+        deviceQuery.setDeviceCode(String.valueOf(payload.get("deviceCode")).trim());
+        if (dataScopeService.getDevice(deviceQuery) == null)
+        {
+            return AjaxResult.error("无权访问指定设备");
+        }
         String modelType = stringValue(payload.get("modelType"), defaultModelType);
         if (!Arrays.asList("gear", "bearing").contains(modelType))
         {
@@ -216,7 +227,14 @@ public class VibrationDiagnosisController
     public AjaxResult getTask(@org.springframework.web.bind.annotation.PathVariable Long id)
     {
         InferenceTaskEntity task = inferenceTaskMapper.selectById(id);
-        return task == null ? AjaxResult.error("诊断任务不存在") : AjaxResult.success(task);
+        if (task == null)
+        {
+            return AjaxResult.error("诊断任务不存在");
+        }
+        PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+        query.setDeviceCode(task.getDeviceCode());
+        return dataScopeService.getDevice(query) == null
+            ? AjaxResult.error("诊断任务不存在") : AjaxResult.success(task);
     }
 
     private void executeTask(Long taskId)
@@ -387,7 +405,12 @@ public class VibrationDiagnosisController
             startTime == null ? null : DateUtils.parseDate(startTime),
             endTime == null ? null : DateUtils.parseDate(endTime));
         List<EnhancedInferenceRecordEntity> rows = phmService.listDiagnosisHistory(range, deviceCode);
-        return AjaxResult.success(rows);
+        java.util.Set<String> accessibleCodes = dataScopeService.listDevices(new PhmDeviceScopeQuery()).stream()
+            .map(com.ruoyi.sensor.domain.entity.PhmDeviceEntity::getDeviceCode)
+            .collect(java.util.stream.Collectors.toSet());
+        return AjaxResult.success(rows.stream()
+            .filter(item -> accessibleCodes.contains(item.getDeviceCode()))
+            .collect(java.util.stream.Collectors.toList()));
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")

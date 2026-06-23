@@ -16,7 +16,14 @@ public class PhmAttachmentEntity
     private Long bizId;
     private String fileName;
     private String fileUrl;
+    private String objectName;
+    private String storagePath;
     private String fileExt;
+    private String mimeType;
+    private Long fileSize;
+    private String sha256;
+    private String scanStatus;
+    private String purpose;
     private String reportType;
     private String uploadBy;
     private Date createTime;

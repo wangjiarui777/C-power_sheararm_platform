@@ -1,0 +1,310 @@
+package com.ruoyi.sensor.service;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.util.Date;
+import java.util.HexFormat;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import com.ruoyi.sensor.domain.entity.PhmAttachmentEntity;
+import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
+import com.ruoyi.sensor.mapper.PhmAttachmentMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+@Service
+public class PhmAttachmentStorageService
+{
+    private static final Map<String, Set<String>> PURPOSE_EXTENSIONS = Map.of(
+        "DIAGNOSIS_INPUT", Set.of("mat", "npy"),
+        "REPORT", Set.of("pdf"),
+        "MORPHOLOGY", Set.of("png", "jpg", "jpeg", "webp")
+    );
+    private static final Map<String, Long> PURPOSE_LIMITS = Map.of(
+        "DIAGNOSIS_INPUT", 128L * 1024 * 1024,
+        "REPORT", 20L * 1024 * 1024,
+        "MORPHOLOGY", 10L * 1024 * 1024
+    );
+
+    private final Path root;
+    private final AttachmentVirusScanner virusScanner;
+    private final PhmAttachmentMapper mapper;
+    private final PhmDataScopeService dataScopeService;
+
+    public PhmAttachmentStorageService(
+        @Value("${sensor.attachment.root:D:/ruoyi-secure/attachments}") String root,
+        AttachmentVirusScanner virusScanner,
+        PhmAttachmentMapper mapper,
+        PhmDataScopeService dataScopeService)
+    {
+        this.root = Path.of(root).toAbsolutePath().normalize();
+        this.virusScanner = virusScanner;
+        this.mapper = mapper;
+        this.dataScopeService = dataScopeService;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public PhmAttachmentEntity store(MultipartFile file, String purpose, String bizType, Long bizId,
+        String reportType, String username) throws Exception
+    {
+        String normalizedPurpose = purpose == null ? "" : purpose.trim().toUpperCase(Locale.ROOT);
+        Set<String> allowed = PURPOSE_EXTENSIONS.get(normalizedPurpose);
+        if (allowed == null)
+        {
+            throw new IllegalArgumentException("不支持的附件用途");
+        }
+        String originalName = safeOriginalName(file.getOriginalFilename());
+        String extension = extension(originalName);
+        if (!allowed.contains(extension))
+        {
+            throw new IllegalArgumentException("附件扩展名与用途不匹配");
+        }
+        long size = file.getSize();
+        if (size <= 0 || size > PURPOSE_LIMITS.get(normalizedPurpose))
+        {
+            throw new IllegalArgumentException("附件大小超出限制");
+        }
+        validateMimeType(normalizedPurpose, extension, file.getContentType());
+        byte[] header = readHeader(file, 16);
+        validateSignature(normalizedPurpose, extension, header);
+        if (bizId != null && !"REPORT".equals(normalizedPurpose) && !canAccessDevice(bizId))
+        {
+            throw new SecurityException("无权访问附件所属设备");
+        }
+
+        Files.createDirectories(root.resolve("quarantine"));
+        Files.createDirectories(root.resolve("objects"));
+        String objectName = UUID.randomUUID().toString().replace("-", "") + "." + extension;
+        Path quarantine = safeResolve(root.resolve("quarantine"), objectName);
+        Path target = safeResolve(root.resolve("objects"), objectName);
+        try
+        {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (InputStream input = file.getInputStream();
+                 java.io.OutputStream output = Files.newOutputStream(quarantine))
+            {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) >= 0)
+                {
+                    if (read > 0)
+                    {
+                        digest.update(buffer, 0, read);
+                        output.write(buffer, 0, read);
+                    }
+                }
+            }
+            String scanStatus = virusScanner.scan(quarantine);
+            try
+            {
+                Files.move(quarantine, target, StandardCopyOption.ATOMIC_MOVE);
+            }
+            catch (java.nio.file.AtomicMoveNotSupportedException ignored)
+            {
+                Files.move(quarantine, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            PhmAttachmentEntity entity = new PhmAttachmentEntity();
+            entity.setBizType(normalizeBizType(normalizedPurpose, bizType));
+            entity.setBizId(bizId);
+            entity.setFileName(originalName);
+            entity.setFileUrl(null);
+            entity.setObjectName(objectName);
+            entity.setStoragePath(target.toString());
+            entity.setFileExt(extension);
+            entity.setMimeType(file.getContentType());
+            entity.setFileSize(size);
+            entity.setSha256(HexFormat.of().formatHex(digest.digest()));
+            entity.setScanStatus(scanStatus);
+            entity.setPurpose(normalizedPurpose);
+            entity.setReportType(reportType);
+            entity.setUploadBy(username);
+            entity.setCreateTime(new Date());
+            mapper.insert(entity);
+            return entity;
+        }
+        catch (Exception ex)
+        {
+            Files.deleteIfExists(quarantine);
+            Files.deleteIfExists(target);
+            throw ex;
+        }
+    }
+
+    public PhmAttachmentEntity getAccessible(Long id)
+    {
+        PhmAttachmentEntity entity = mapper.selectById(id);
+        if (entity == null)
+        {
+            return null;
+        }
+        if (!"REPORT".equals(entity.getPurpose()) && entity.getBizId() != null && !canAccessDevice(entity.getBizId()))
+        {
+            return null;
+        }
+        return entity;
+    }
+
+    public FileSystemResource content(PhmAttachmentEntity entity) throws IOException
+    {
+        if (entity == null || entity.getStoragePath() == null
+            || (!"CLEAN".equals(entity.getScanStatus()) && !"SKIPPED".equals(entity.getScanStatus())))
+        {
+            throw new IOException("附件不可下载");
+        }
+        Path path = Path.of(entity.getStoragePath()).toAbsolutePath().normalize();
+        if (!path.startsWith(root.resolve("objects").normalize()) || !Files.isRegularFile(path))
+        {
+            throw new IOException("附件文件不存在");
+        }
+        return new FileSystemResource(path);
+    }
+
+    public int delete(Long id) throws IOException
+    {
+        PhmAttachmentEntity entity = getAccessible(id);
+        if (entity == null)
+        {
+            return 0;
+        }
+        int rows = mapper.deleteById(id);
+        if (rows > 0 && entity.getStoragePath() != null)
+        {
+            Files.deleteIfExists(Path.of(entity.getStoragePath()));
+        }
+        return rows;
+    }
+
+    private boolean canAccessDevice(Long deviceId)
+    {
+        PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+        query.setDeviceId(deviceId);
+        return dataScopeService.getDevice(query) != null;
+    }
+
+    private String normalizeBizType(String purpose, String bizType)
+    {
+        if ("REPORT".equals(purpose))
+        {
+            return "report";
+        }
+        return bizType == null || bizType.isBlank() ? "device" : bizType.trim();
+    }
+
+    private Path safeResolve(Path directory, String objectName)
+    {
+        Path resolved = directory.resolve(objectName).toAbsolutePath().normalize();
+        if (!resolved.startsWith(directory.toAbsolutePath().normalize()))
+        {
+            throw new IllegalArgumentException("非法对象路径");
+        }
+        return resolved;
+    }
+
+    private String safeOriginalName(String original)
+    {
+        String name = original == null ? "" : Path.of(original).getFileName().toString();
+        if (name.isBlank() || name.length() > 255)
+        {
+            throw new IllegalArgumentException("文件名无效");
+        }
+        return name;
+    }
+
+    private String extension(String name)
+    {
+        int dot = name.lastIndexOf('.');
+        return dot < 0 ? "" : name.substring(dot + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private byte[] readHeader(MultipartFile file, int length) throws IOException
+    {
+        try (InputStream input = file.getInputStream())
+        {
+            return input.readNBytes(length);
+        }
+    }
+
+    private void validateSignature(String purpose, String extension, byte[] header)
+    {
+        boolean valid;
+        if ("REPORT".equals(purpose))
+        {
+            valid = startsWith(header, "%PDF-".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        }
+        else if ("DIAGNOSIS_INPUT".equals(purpose))
+        {
+            valid = "npy".equals(extension)
+                ? startsWith(header, new byte[] {(byte) 0x93, 'N', 'U', 'M', 'P', 'Y'})
+                : startsWith(header, "MATLAB".getBytes(java.nio.charset.StandardCharsets.US_ASCII))
+                    || startsWith(header, new byte[] {(byte) 0x89, 'H', 'D', 'F', '\r', '\n', 0x1a, '\n'});
+        }
+        else
+        {
+            valid = startsWith(header, new byte[] {(byte) 0x89, 'P', 'N', 'G'})
+                || startsWith(header, new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff})
+                || (header.length >= 12 && "RIFF".equals(new String(header, 0, 4))
+                    && "WEBP".equals(new String(header, 8, 4)));
+        }
+        if (!valid)
+        {
+            throw new IllegalArgumentException("文件签名与声明用途不匹配");
+        }
+    }
+
+    private void validateMimeType(String purpose, String extension, String mimeType)
+    {
+        String mime = mimeType == null ? "" : mimeType.toLowerCase(Locale.ROOT);
+        boolean valid;
+        if ("REPORT".equals(purpose))
+        {
+            valid = "application/pdf".equals(mime);
+        }
+        else if ("DIAGNOSIS_INPUT".equals(purpose))
+        {
+            valid = Set.of("application/octet-stream", "application/x-numpy",
+                "application/x-matlab-data", "application/matlab-mat").contains(mime);
+        }
+        else if ("png".equals(extension))
+        {
+            valid = "image/png".equals(mime);
+        }
+        else if ("webp".equals(extension))
+        {
+            valid = "image/webp".equals(mime);
+        }
+        else
+        {
+            valid = Set.of("image/jpeg", "image/jpg").contains(mime);
+        }
+        if (!valid)
+        {
+            throw new IllegalArgumentException("文件 MIME 类型与声明用途不匹配");
+        }
+    }
+
+    private boolean startsWith(byte[] source, byte[] prefix)
+    {
+        if (source.length < prefix.length)
+        {
+            return false;
+        }
+        for (int i = 0; i < prefix.length; i++)
+        {
+            if (source[i] != prefix[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+}

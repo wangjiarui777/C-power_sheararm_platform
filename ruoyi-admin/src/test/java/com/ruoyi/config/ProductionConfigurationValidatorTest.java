@@ -61,6 +61,9 @@ class ProductionConfigurationValidatorTest
                 .withProperty("sensor.iotdb.password", "iotdb-password")
                 .withProperty("ruoyi.profile", "D:/ruoyi/data")
                 .withProperty("logging.file.path", "D:/ruoyi/logs")
+                .withProperty("sensor.attachment.root", "D:/ruoyi-secure/attachments")
+                .withProperty("sensor.attachment.virus-scan-command", "C:/Program Files/Windows Defender/MpCmdRun.exe")
+                .withProperty("sensor.attachment.virus-scan-arguments", "-Scan,-ScanType,3,-File,{file},-DisableRemediation")
                 .withProperty("cors.allowed-origins", "https://phm.example.internal")
                 .withProperty("sensor.websocket.allowed-origins", "https://phm.example.internal")
                 .withProperty("sensor.inference.gear-url", "http://127.0.0.1:5000/internal/infer");
