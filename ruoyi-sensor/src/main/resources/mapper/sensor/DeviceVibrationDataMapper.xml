@@ -6,6 +6,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <resultMap type="DeviceVibrationData" id="DeviceVibrationDataResult">
         <result property="dataId"    column="data_id"    />
+        <result property="eventId"    column="event_id"    />
         <result property="deviceCode"    column="device_code"    />
         <result property="channelId"    column="channel_id"    />
         <result property="pointId"    column="point_id"    />
@@ -21,7 +22,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectDeviceVibrationDataVo">
-        select data_id, device_code, channel_id, point_id, temperature_value, vibration_value, acceleration_value, sample_time, quality, receive_time, create_time, update_time, remark from device_vibration_data
+        select data_id, event_id, device_code, channel_id, point_id, temperature_value, vibration_value, acceleration_value, sample_time, quality, receive_time, create_time, update_time, remark from device_vibration_data
     </sql>
 
     <select id="selectDeviceVibrationDataList" parameterType="DeviceVibrationData" resultMap="DeviceVibrationDataResult">
@@ -52,6 +53,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         insert into device_vibration_data
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="deviceCode != null and deviceCode != ''">device_code,</if>
+            <if test="eventId != null and eventId != ''">event_id,</if>
             <if test="channelId != null">channel_id,</if>
             <if test="pointId != null">point_id,</if>
             <if test="temperatureValue != null">temperature_value,</if>
@@ -65,6 +67,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="deviceCode != null and deviceCode != ''">#{deviceCode},</if>
+            <if test="eventId != null and eventId != ''">#{eventId},</if>
             <if test="channelId != null">#{channelId},</if>
             <if test="pointId != null">#{pointId},</if>
             <if test="temperatureValue != null">#{temperatureValue},</if>

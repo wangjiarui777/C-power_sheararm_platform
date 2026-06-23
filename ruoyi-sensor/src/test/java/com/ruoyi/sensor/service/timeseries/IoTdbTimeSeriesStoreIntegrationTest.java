@@ -104,7 +104,8 @@ class IoTdbTimeSeriesStoreIntegrationTest
         ReflectionTestUtils.setField(store, "trustStorePassword", "");
         ReflectionTestUtils.setField(store, "fetchSize", 64);
         ReflectionTestUtils.setField(store, "sessionPoolSize", 2);
-        ReflectionTestUtils.setField(store, "ttlDays", 1);
+        ReflectionTestUtils.setField(store, "telemetryTtlDays", 1);
+        ReflectionTestUtils.setField(store, "frameTtlDays", 1);
         ReflectionTestUtils.setField(store, "timestampPrecision", "us");
         return store;
     }

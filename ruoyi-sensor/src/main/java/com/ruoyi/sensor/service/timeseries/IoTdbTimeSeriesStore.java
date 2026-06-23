@@ -101,8 +101,11 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
     @Value("${sensor.iotdb.session-pool-size:4}")
     private int sessionPoolSize;
 
-    @Value("${sensor.iotdb.ttl-days:3650}")
-    private int ttlDays;
+    @Value("${sensor.iotdb.telemetry-ttl-days:1095}")
+    private int telemetryTtlDays;
+
+    @Value("${sensor.iotdb.frame-ttl-days:90}")
+    private int frameTtlDays;
 
     @Value("${sensor.iotdb.timestamp-precision:us}")
     private String timestampPrecision;
@@ -483,7 +486,7 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
                     + "\"receive_time\" TIMESTAMP FIELD,"
                     + "\"sequence\" INT64 FIELD)");
             session.executeNonQueryStatement("ALTER TABLE " + TELEMETRY_TABLE
-                    + " SET PROPERTIES TTL=" + ttlMillis());
+                    + " SET PROPERTIES TTL=" + ttlMillis(telemetryTtlDays));
             session.executeNonQueryStatement("CREATE TABLE IF NOT EXISTS " + FRAME_TABLE + " ("
                     + "\"device_code\" STRING TAG,"
                     + "\"point_code\" STRING TAG,"
@@ -504,7 +507,7 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
                     + "\"receive_time\" TIMESTAMP FIELD,"
                     + "\"sequence\" INT64 FIELD)");
             session.executeNonQueryStatement("ALTER TABLE " + FRAME_TABLE
-                    + " SET PROPERTIES TTL=" + ttlMillis());
+                    + " SET PROPERTIES TTL=" + ttlMillis(frameTtlDays));
         }
     }
 
@@ -597,9 +600,9 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
         {
             throw new IllegalArgumentException("Unsupported IoTDB timestamp precision: " + timestampPrecision);
         }
-        if (ttlDays <= 0)
+        if (telemetryTtlDays <= 0 || frameTtlDays <= 0)
         {
-            throw new IllegalArgumentException("IoTDB ttl-days must be greater than zero");
+            throw new IllegalArgumentException("IoTDB telemetry/frame TTL days must be greater than zero");
         }
         if (useSsl && (trustStore == null || trustStore.isBlank()))
         {
@@ -714,7 +717,7 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
         return message.length() > 500 ? message.substring(0, 500) : message;
     }
 
-    private long ttlMillis()
+    private long ttlMillis(int ttlDays)
     {
         return Math.max(1L, ttlDays) * 24L * 60L * 60L * 1000L;
     }

@@ -11,7 +11,8 @@ import java.util.stream.Collectors;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
@@ -33,9 +35,9 @@ import com.ruoyi.sensor.domain.entity.PhmAlarmEventEntity;
 import com.ruoyi.sensor.domain.entity.PhmAlarmRuleEntity;
 import com.ruoyi.sensor.domain.entity.PhmDeviceEntity;
 import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
-import com.ruoyi.sensor.event.DataUploadEvent;
 import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 import com.ruoyi.sensor.service.PhmService;
+import com.ruoyi.sensor.service.TelemetryPipelineService;
 
 @RestController
 @RequestMapping({"/sensor/vibration-data", "/system/vibration"})
@@ -53,7 +55,7 @@ public class DeviceVibrationDataController extends BaseController
     private PhmService phmService;
 
     @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private TelemetryPipelineService telemetryPipelineService;
 
     @Value("${sensor.default-device-code:}")
     private String defaultDeviceCode;
@@ -151,30 +153,21 @@ public class DeviceVibrationDataController extends BaseController
     @Log(title = "vibration data", businessType = BusinessType.INSERT)
     @PreAuthorize("hasAuthority('sensor:collector:upload')")
     @PostMapping("/upload")
-    public AjaxResult upload(@RequestBody DeviceVibrationData deviceVibrationData)
+    public ResponseEntity<AjaxResult> upload(@RequestBody DeviceVibrationData deviceVibrationData,
+        @RequestHeader(value = "X-Event-Id", required = false) String eventId,
+        @RequestHeader(value = "X-Sequence", required = false) Long sequence)
     {
-        if (deviceVibrationData.getQuality() == null)
-        {
-            deviceVibrationData.setQuality("GOOD");
-        }
-        if (deviceVibrationData.getReceiveTime() == null)
-        {
-            deviceVibrationData.setReceiveTime(new Date());
-        }
-        deviceVibrationData.setCreateBy("collector");
-        int result = deviceVibrationDataService.insertDeviceVibrationData(deviceVibrationData);
-        if (result > 0)
-        {
-            eventPublisher.publishEvent(new DataUploadEvent(
-                    deviceVibrationData.getDeviceCode(),
-                    "vibration",
-                    deviceVibrationData.getChannelId(),
-                    deviceVibrationData.getVibrationValue() != null
-                            ? deviceVibrationData.getVibrationValue().doubleValue()
-                            : null,
-                    deviceVibrationData.getSampleTime()));
-        }
-        return toAjax(result);
+        var accepted = telemetryPipelineService.accept(TelemetryPipelineService.fromUpload(
+            eventId,
+            deviceVibrationData.getDeviceCode(),
+            "vibration",
+            deviceVibrationData.getChannelId(),
+            deviceVibrationData.getVibrationValue() == null
+                ? null : deviceVibrationData.getVibrationValue().doubleValue(),
+            deviceVibrationData.getSampleTime(),
+            sequence,
+            deviceVibrationData.getQuality()));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(success(accepted));
     }
 
     private String normalizeDeviceCode(String deviceCode)

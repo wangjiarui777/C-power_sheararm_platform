@@ -19,6 +19,8 @@ public class DeviceVibrationData extends BaseEntity
     @Excel(name = "dataId", cellType = ColumnType.NUMERIC)
     private Long dataId;
 
+    private String eventId;
+
     @Excel(name = "deviceCode")
     private String deviceCode;
 
@@ -47,6 +49,8 @@ public class DeviceVibrationData extends BaseEntity
 
     public Long getDataId() { return dataId; }
     public void setDataId(Long dataId) { this.dataId = dataId; }
+    public String getEventId() { return eventId; }
+    public void setEventId(String eventId) { this.eventId = eventId; }
     public String getDeviceCode() { return deviceCode; }
     public void setDeviceCode(String deviceCode) { this.deviceCode = deviceCode; }
     public Integer getChannelId() { return channelId; }
@@ -71,6 +75,7 @@ public class DeviceVibrationData extends BaseEntity
     {
         return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
             .append("dataId", getDataId())
+            .append("eventId", getEventId())
             .append("deviceCode", getDeviceCode())
             .append("channelId", getChannelId())
             .append("pointId", getPointId())

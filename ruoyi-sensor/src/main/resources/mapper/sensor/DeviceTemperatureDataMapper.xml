@@ -6,6 +6,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <resultMap type="DeviceTemperatureData" id="DeviceTemperatureDataResult">
         <result property="dataId"    column="data_id"    />
+        <result property="eventId"    column="event_id"    />
         <result property="deviceCode"    column="device_code"    />
         <result property="pointId"    column="point_id"    />
         <result property="channelId"    column="channel_id"    />
@@ -19,7 +20,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectDeviceTemperatureDataVo">
-        select data_id, device_code, point_id, channel_id, temperature_value, collection_time, quality, receive_time, create_time, update_time, remark from device_temperature_data
+        select data_id, event_id, device_code, point_id, channel_id, temperature_value, collection_time, quality, receive_time, create_time, update_time, remark from device_temperature_data
     </sql>
 
     <select id="selectDeviceTemperatureDataList" parameterType="DeviceTemperatureData" resultMap="DeviceTemperatureDataResult">
@@ -48,6 +49,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         insert into device_temperature_data
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="deviceCode != null and deviceCode != ''">device_code,</if>
+            <if test="eventId != null and eventId != ''">event_id,</if>
             <if test="pointId != null">point_id,</if>
             <if test="channelId != null">channel_id,</if>
             <if test="temperatureValue != null">temperature_value,</if>
@@ -59,6 +61,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="deviceCode != null and deviceCode != ''">#{deviceCode},</if>
+            <if test="eventId != null and eventId != ''">#{eventId},</if>
             <if test="pointId != null">#{pointId},</if>
             <if test="channelId != null">#{channelId},</if>
             <if test="temperatureValue != null">#{temperatureValue},</if>

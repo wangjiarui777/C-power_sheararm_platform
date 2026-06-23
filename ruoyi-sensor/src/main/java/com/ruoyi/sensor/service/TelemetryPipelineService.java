@@ -1,138 +1,77 @@
 package com.ruoyi.sensor.service;
 
-import java.sql.Timestamp;
 import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.List;
 import com.alibaba.fastjson2.JSON;
-import com.ruoyi.common.core.redis.RedisCache;
+import com.ruoyi.sensor.domain.dto.TelemetryAcceptance;
 import com.ruoyi.sensor.domain.dto.TelemetryEnvelope;
-import com.ruoyi.sensor.service.timeseries.TimeSeriesStore;
-import com.ruoyi.sensor.websocket.SensorWebSocketHandler;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.connection.stream.StreamRecords;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
-/**
- * Lightweight telemetry pipeline built on the platform's existing Redis.
- * Database persistence still happens in the acquisition adapter; this service
- * provides idempotency, stream fan-out, latest-state caching, rule evaluation,
- * and realtime notification.
- */
 @Service
 public class TelemetryPipelineService
 {
-    private static final String STREAM_KEY = "monitoring:telemetry:stream";
+    public static final String STREAM_KEY = "monitoring:telemetry:stream";
+    public static final String RETRY_STREAM_KEY = "monitoring:telemetry:retry";
+    public static final String DLQ_STREAM_KEY = "monitoring:telemetry:dlq";
+    public static final String GROUP = "monitoring-storage";
     private static final String DEDUPE_PREFIX = "monitoring:telemetry:event:";
-    private static final String LATEST_PREFIX = "monitoring:latest:";
+    private static final DefaultRedisScript<Long> ENQUEUE_SCRIPT = new DefaultRedisScript<>(
+        "if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end "
+            + "redis.call('XADD', KEYS[2], '*', 'payload', ARGV[1], 'retry', '0') "
+            + "redis.call('XTRIM', KEYS[2], 'MAXLEN', '~', ARGV[3]) "
+            + "redis.call('SET', KEYS[1], '1', 'EX', ARGV[2]) "
+            + "return 1",
+        Long.class);
 
-    @Autowired
-    private RedisCache redisCache;
+    private final StringRedisTemplate redisTemplate;
+    private final long maxLength;
 
-    @Autowired
-    private PhmService phmService;
+    public TelemetryPipelineService(StringRedisTemplate redisTemplate,
+        @Value("${sensor.stream.max-length:45000000}") long maxLength)
+    {
+        this.redisTemplate = redisTemplate;
+        this.maxLength = Math.max(10000, maxLength);
+    }
 
-    @Autowired
-    private TimeSeriesStore timeSeriesStore;
-
-    public boolean accept(TelemetryEnvelope envelope)
+    public TelemetryAcceptance accept(TelemetryEnvelope envelope)
     {
         if (envelope == null || envelope.getDeviceCode() == null || envelope.getValue() == null)
         {
-            return false;
+            throw new IllegalArgumentException("deviceCode and value are required");
         }
         envelope.normalize();
-        if (!claimEvent(envelope.getEventId()))
+        Long result = redisTemplate.execute(
+            ENQUEUE_SCRIPT,
+            List.of(DEDUPE_PREFIX + envelope.getEventId(), STREAM_KEY),
+            JSON.toJSONString(envelope),
+            String.valueOf(7 * 24 * 60 * 60),
+            String.valueOf(maxLength));
+        if (result == null)
         {
-            return false;
+            throw new IllegalStateException("Redis Stream enqueue returned no result");
         }
-        appendStream(envelope);
-        cacheLatest(envelope);
-        timeSeriesStore.writeTelemetry(envelope);
-        phmService.evaluateUpload(
-                envelope.getDeviceCode(),
-                "temperature".equals(envelope.getMetricCode()) ? "temperature" : "vibration",
-                envelope.getChannelId(),
-                envelope.getValue(),
-                envelope.getSampleTime());
-        SensorWebSocketHandler.broadcastTelemetry(envelope);
-        return true;
+        boolean duplicate = result == 0L;
+        return new TelemetryAcceptance(
+            envelope.getEventId(), new Date(), duplicate, duplicate ? "DUPLICATE" : "PERSISTED");
     }
 
-    private boolean claimEvent(String eventId)
-    {
-        try
-        {
-            Boolean claimed = redisCache.redisTemplate.opsForValue()
-                    .setIfAbsent(DEDUPE_PREFIX + eventId, "1", 24, TimeUnit.HOURS);
-            return Boolean.TRUE.equals(claimed);
-        }
-        catch (Exception ignored)
-        {
-            // Redis failure must not block acquisition. Database uniqueness and
-            // active-alarm coalescing remain the fallback safeguards.
-            return true;
-        }
-    }
-
-    private void appendStream(TelemetryEnvelope envelope)
-    {
-        try
-        {
-            Map<String, String> body = new LinkedHashMap<>();
-            body.put("eventId", envelope.getEventId());
-            body.put("deviceCode", envelope.getDeviceCode());
-            body.put("pointId", String.valueOf(envelope.getPointId()));
-            body.put("pointCode", String.valueOf(envelope.getPointCode()));
-            body.put("channelId", String.valueOf(envelope.getChannelId()));
-            body.put("metricCode", envelope.getMetricCode());
-            body.put("value", String.valueOf(envelope.getValue()));
-            body.put("unit", String.valueOf(envelope.getUnit()));
-            body.put("quality", envelope.getQuality());
-            body.put("sampleTime", String.valueOf(envelope.getSampleTime().getTime()));
-            body.put("receiveTime", String.valueOf(envelope.getReceiveTime().getTime()));
-            body.put("sequence", String.valueOf(envelope.getSequence()));
-            redisCache.redisTemplate.opsForStream()
-                    .add(StreamRecords.newRecord().ofMap(body).withStreamKey(STREAM_KEY));
-        }
-        catch (Exception ignored)
-        {
-            // Stream buffering is best-effort while Redis is unavailable.
-        }
-    }
-
-    private void cacheLatest(TelemetryEnvelope envelope)
-    {
-        try
-        {
-            String pointKey = envelope.getPointId() == null
-                    ? "ch-" + String.valueOf(envelope.getChannelId())
-                    : String.valueOf(envelope.getPointId());
-            redisCache.setCacheObject(
-                    LATEST_PREFIX + envelope.getDeviceCode() + ":" + pointKey + ":" + envelope.getMetricCode(),
-                    JSON.toJSONString(envelope),
-                    10,
-                    TimeUnit.MINUTES);
-        }
-        catch (Exception ignored)
-        {
-        }
-    }
-
-    public static TelemetryEnvelope fromUpload(String deviceCode, String dataType, Integer channelId,
-                                               Double value, Date sampleTime)
+    public static TelemetryEnvelope fromUpload(String eventId, String deviceCode, String dataType,
+        Integer channelId, Double value, Date sampleTime, Long sequence, String quality)
     {
         TelemetryEnvelope envelope = new TelemetryEnvelope();
+        envelope.setEventId(eventId);
         envelope.setDeviceCode(deviceCode);
         envelope.setChannelId(channelId);
         envelope.setMetricCode("temperature".equals(dataType) ? "temperature" : "vibration");
         envelope.setUnit("temperature".equals(dataType) ? "℃" : "mm/s");
         envelope.setValue(value);
-        envelope.setQuality("GOOD");
+        envelope.setQuality(quality);
         envelope.setSampleTime(sampleTime);
         envelope.setReceiveTime(new Date());
-        envelope.setSequence(sampleTime == null ? System.currentTimeMillis() : sampleTime.getTime());
+        envelope.setSequence(sequence);
         envelope.normalize();
         return envelope;
     }
