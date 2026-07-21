@@ -2,6 +2,7 @@ package com.ruoyi.sensor.service;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.Files;
 import com.ruoyi.sensor.domain.entity.PhmAttachmentEntity;
 import com.ruoyi.sensor.mapper.PhmAttachmentMapper;
 import org.junit.jupiter.api.Test;
@@ -61,6 +62,20 @@ class PhmAttachmentStorageServiceTest
     }
 
     @Test
+    void rejectsNpyExtensionWithForgedSignature()
+    {
+        PhmAttachmentStorageService service = new PhmAttachmentStorageService(
+            tempDir.toString(), new AttachmentVirusScanner(false, "", "", 30),
+            mock(PhmAttachmentMapper.class), mock(PhmDataScopeService.class));
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "forged.npy", "application/octet-stream",
+            "not a numpy file".getBytes(StandardCharsets.US_ASCII));
+
+        assertThrows(IllegalArgumentException.class,
+            () -> service.store(file, "DIAGNOSIS_INPUT", "device", null, null, "tester"));
+    }
+
+    @Test
     void queuedTaskCannotResolveAttachmentWhenSha256BindingChanges()
     {
         PhmAttachmentMapper mapper = mock(PhmAttachmentMapper.class);
@@ -76,5 +91,28 @@ class PhmAttachmentStorageServiceTest
         assertNotNull(service.getDiagnosisInputForTask(12L, entity.getSha256()));
         assertNull(service.getDiagnosisInputForTask(12L,
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+    }
+
+    @Test
+    void importsServerNpyThroughSecureStoragePipeline() throws Exception
+    {
+        PhmAttachmentMapper mapper = mock(PhmAttachmentMapper.class);
+        doAnswer(invocation -> {
+            PhmAttachmentEntity entity = invocation.getArgument(0);
+            entity.setId(101L);
+            return 1;
+        }).when(mapper).insert(any(PhmAttachmentEntity.class));
+        Path source = tempDir.resolve("DEV-001.npy");
+        Files.write(source, new byte[] {(byte) 0x93, 'N', 'U', 'M', 'P', 'Y', 1, 0, 0, 0});
+        PhmAttachmentStorageService service = new PhmAttachmentStorageService(
+            tempDir.resolve("attachments").toString(), new AttachmentVirusScanner(false, "", "", 30),
+            mapper, mock(PhmDataScopeService.class));
+
+        PhmAttachmentEntity entity = service.importDiagnosisFile(source, 1L, "system-ingest");
+
+        assertEquals(101L, entity.getId());
+        assertEquals("DIAGNOSIS_INPUT", entity.getPurpose());
+        assertEquals("SOURCE:SERVER_DIRECTORY", entity.getRemark());
+        assertNotNull(service.content(entity));
     }
 }

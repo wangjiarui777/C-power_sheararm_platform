@@ -1,179 +1,341 @@
 # =============================================================================
-# start-all.ps1 — 一键启动所有开发服务
-# 每个服务在独立的 PowerShell 窗口中运行，互不阻塞。
+# start-all.ps1 - 当前开发架构的一键启动器
+#
+# 架构：Vue(80) -> Spring Boot(8080) -> FastAPI 统一推理(5000)
+#       采集接收端口 8888/8890/8891/9000 由 Spring Boot 开发配置启动。
+# 所有模型、附件、上传文件、日志和运行状态都保存在本项目目录内。
 # =============================================================================
 
-$projectRoot = $PSScriptRoot
+[CmdletBinding()]
+param(
+    [switch]$SkipBuild,
+    [switch]$ForcePortCleanup,
+    [ValidateRange(1, 65535)]
+    [int]$FrontendPort = 80
+)
+
 $ErrorActionPreference = 'Stop'
+$projectRoot = [IO.Path]::GetFullPath($PSScriptRoot)
+$inferenceDir = Join-Path $projectRoot 'ruoyi-sensor\inference'
+$frontendDir = Join-Path $projectRoot 'ruoyi-ui'
+$adminJar = Join-Path $projectRoot 'ruoyi-admin\target\ruoyi-admin.jar'
+$pythonExe = Join-Path $projectRoot '.venv\Scripts\python.exe'
+$modelRoot = Join-Path $projectRoot '.local-models'
+$dataRoot = Join-Path $projectRoot '.local-data'
+$attachmentRoot = Join-Path $dataRoot 'attachments'
+$uploadRoot = Join-Path $dataRoot 'uploadPath'
+$logRoot = Join-Path $dataRoot 'logs'
+$runRoot = Join-Path $dataRoot 'run'
+$pidFile = Join-Path $runRoot 'service-pids.json'
 
-# ---------------------------------------------------------------------------
-# 辅助函数：将命令编码为 Base64 后在新的 PowerShell 窗口中执行
-# 避免多层嵌套引号带来的转义问题
-# ---------------------------------------------------------------------------
-function Start-InNewWindow {
-    param(
-        [string]$Title,
-        [string]$WorkingDir,
-        [string]$Command
-    )
-
-    # 构造在新窗口中要执行的脚本（先切目录，再执行命令）
-    $script = @"
-Set-Location '$WorkingDir'
-Write-Host '========================================' -ForegroundColor DarkGray
-Write-Host "  $Title" -ForegroundColor Yellow
-Write-Host '========================================' -ForegroundColor DarkGray
-$Command
-Write-Host ''
-Write-Host '>>> $Title 已退出。可关闭此窗口。' -ForegroundColor DarkYellow
-Read-Host
-"@
-
-    $bytes   = [System.Text.Encoding]::Unicode.GetBytes($script)
-    $encoded = [Convert]::ToBase64String($bytes)
-
-    Start-Process powershell `
-        -ArgumentList "-NoExit", "-Command", "`$Host.UI.RawUI.WindowTitle = '$Title'; powershell -EncodedCommand $encoded"
+if ($projectRoot -match '(?i)\\OneDrive\\') {
+    throw "拒绝从 OneDrive 路径启动。请从本地项目目录运行：C:\Users\123\Desktop\BiShe\RuoYi-Vue-master"
 }
 
-function Get-PortProcessId {
-    param([Parameter(Mandatory = $true)][int]$Port)
-    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -ne $conn) {
-        return $conn.OwningProcess
-    }
-    return $null
+foreach ($path in @($dataRoot, $attachmentRoot, (Join-Path $attachmentRoot 'objects'),
+        $uploadRoot, $logRoot, $runRoot)) {
+    New-Item -ItemType Directory -Path $path -Force | Out-Null
 }
 
-function Stop-PortProcess {
-    param([Parameter(Mandatory = $true)][int]$Port)
-    $processId = Get-PortProcessId -Port $Port
-    if ($null -eq $processId) {
-        return $false
-    }
-    try {
-        Stop-Process -Id $processId -Force -ErrorAction Stop
-        Write-Host "[OK] Stopped process $processId on port $Port" -ForegroundColor Yellow
-        Start-Sleep -Seconds 2
-        return $true
-    } catch {
-        Write-Host "[WARN] Failed to stop process $processId on port $Port : $($_.Exception.Message)" -ForegroundColor Yellow
-        return $false
-    }
+function Write-Step {
+    param([string]$Message)
+    Write-Host "`n==> $Message" -ForegroundColor Cyan
 }
 
-function Ensure-PortFree {
-    param([Parameter(Mandatory = $true)][int]$Port)
-    while (Get-PortProcessId -Port $Port) {
-        if (-not (Stop-PortProcess -Port $Port)) {
-            break
+function Import-LocalEnvironment {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        $text = $line.Trim()
+        if (-not $text -or $text.StartsWith('#') -or -not $text.Contains('=')) { continue }
+        $pair = $text.Split('=', 2)
+        $name = $pair[0].Trim()
+        $value = $pair[1].Trim()
+        if ($name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { continue }
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name, 'Process'))) {
+            [Environment]::SetEnvironmentVariable($name, $value, 'Process')
         }
     }
 }
 
-function Resolve-Python {
-    $pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
-    if (-not (Test-Path $pythonExe)) {
-        throw @"
-项目虚拟环境不存在: $pythonExe
-请先创建并安装依赖:
-  py -3.11 -m venv .venv
-  .\.venv\Scripts\python.exe -m pip install -r ruoyi-sensor\inference\requirements.txt
-"@
+function Assert-Command {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($null -eq $command) {
+        throw "缺少命令：$Name"
     }
-
-    return (Resolve-Path $pythonExe).Path
+    return $command.Source
 }
 
-function Test-PythonDeps {
-    param([Parameter(Mandatory = $true)][string]$PythonExe)
-
-    & $PythonExe -c "import torch" 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        throw @"
-当前 .venv 缺少 torch，推理服务无法启动。
-请执行:
-  .\.venv\Scripts\python.exe -m pip install -r ruoyi-sensor\inference\requirements.txt
-"@
+function Test-TcpEndpoint {
+    param(
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][int]$Port,
+        [int]$TimeoutMs = 1200
+    )
+    $client = New-Object Net.Sockets.TcpClient
+    try {
+        $async = $client.BeginConnect($HostName, $Port, $null, $null)
+        if (-not $async.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) { return $false }
+        $client.EndConnect($async)
+        return $true
+    } catch {
+        return $false
+    } finally {
+        $client.Close()
     }
 }
 
-# =============================================================================
-# 1. Spring Boot 后端 (ruoyi-admin)
-# =============================================================================
-Ensure-PortFree -Port 8080
-Ensure-PortFree -Port 9528
-Ensure-PortFree -Port 5000
-Ensure-PortFree -Port 5001
-Ensure-PortFree -Port 8888
-Ensure-PortFree -Port 8890
-Ensure-PortFree -Port 8891
-
-$pythonExe = Resolve-Python
-Test-PythonDeps -PythonExe $pythonExe
-Write-Host "[OK] Using Python: $pythonExe" -ForegroundColor DarkCyan
-
-Start-InNewWindow `
-    -Title 'Spring Boot Admin (后端)' `
-    -WorkingDir "$projectRoot" `
-    -Command @'
-Write-Host '[1/2] mvn clean install -DskipTests ...' -ForegroundColor Cyan
-cmd /c "mvn clean install -DskipTests"
-if ($LASTEXITCODE -ne 0) {
-    Write-Host '模块构建失败！请检查错误信息。' -ForegroundColor Red
-    exit $LASTEXITCODE
+function Get-PortProcessId {
+    param([Parameter(Mandatory = $true)][int]$Port)
+    $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $connection) { return $null }
+    return [int]$connection.OwningProcess
 }
-Write-Host '[2/2] 启动 ruoyi-admin (dev profile)...' -ForegroundColor Cyan
-Set-Location ruoyi-admin
-cmd /c "mvn -U spring-boot:run -Dspring-boot.run.profiles=dev"
-'@
 
-# 给 Maven 一点时间开始构建
-Start-Sleep -Seconds 3
-
-# =============================================================================
-# 2. Vue 前端 (ruoyi-ui)
-# =============================================================================
-Start-InNewWindow `
-    -Title 'Vue Frontend (前端)' `
-    -WorkingDir "$projectRoot\ruoyi-ui" `
-    -Command @'
-Write-Host 'npm run dev ...' -ForegroundColor Cyan
-npm run dev
-'@
-
-Start-Sleep -Seconds 1
-
-# =============================================================================
-# 3. Python 统一内部推理服务（齿轮 + 轴承）
-# =============================================================================
-Start-InNewWindow `
-    -Title 'PHM Internal Inference (:5000)' `
-    -WorkingDir "$projectRoot\ruoyi-sensor\inference" `
-    -Command @"
-`$pythonExe = '$pythonExe'
-if ([string]::IsNullOrWhiteSpace(`$env:INFERENCE_INTERNAL_TOKEN)) {
-    throw 'INFERENCE_INTERNAL_TOKEN 未设置，拒绝启动内部推理服务。'
+function Test-IsProjectProcess {
+    param([Parameter(Mandatory = $true)][int]$Id)
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId=$Id" -ErrorAction SilentlyContinue
+    if ($null -eq $process) { return $false }
+    $commandLine = [string]$process.CommandLine
+    if ($commandLine.IndexOf($projectRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    # 开发环境的 MAT 接收器以类名启动，命令行不包含工作目录。
+    return $commandLine -match '(^|\s)CwruMatReceiver(\s|$)'
 }
-`$env:GEAR_MODEL_PATH = '$projectRoot\.local-models\best_model_classwise_maha.pth'
-`$env:BEARING_MODEL_PATH = '$projectRoot\.local-models\best_model.pth'
-`$env:GEAR_MODEL_SHA256 = 'b315315a5af91421813c5f452cff1f0315b0029a22158d5f2fa44d59a4d870aa'
-`$env:BEARING_MODEL_SHA256 = '5773424dba27357bbcf756172b3cb8e19c6eebc1510c29169b7e638b3a6fdc30'
-`$attachmentRoot = if (`$env:SENSOR_ATTACHMENT_ROOT) { `$env:SENSOR_ATTACHMENT_ROOT } else { 'D:\ruoyi-secure\attachments' }
-`$env:INFERENCE_ALLOWED_INPUT_ROOTS = Join-Path `$attachmentRoot 'objects'
-Write-Host 'Starting unified internal inference service on 127.0.0.1:5000...' -ForegroundColor Cyan
-Write-Host "Using Python: `$pythonExe" -ForegroundColor DarkCyan
-& `$pythonExe inference_service.py
-"@
 
-Write-Host ''
-Write-Host '========================================' -ForegroundColor Green
-Write-Host '  全部启动完成！请检查各服务窗口。' -ForegroundColor Green
-Write-Host '========================================' -ForegroundColor Green
-Write-Host ''
-Write-Host '  后端:        http://localhost:8080' -ForegroundColor White
-Write-Host '  前端:        http://localhost:80'   -ForegroundColor White
-Write-Host '  内部推理:    http://127.0.0.1:5000/internal/*' -ForegroundColor Cyan
-Write-Host ''
+function Stop-Listener {
+    param([Parameter(Mandatory = $true)][int]$Port)
+    $ownerId = Get-PortProcessId -Port $Port
+    if ($null -eq $ownerId) { return }
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId=$ownerId" -ErrorAction SilentlyContinue
+    $isProjectProcess = Test-IsProjectProcess -Id $ownerId
+    if (-not $isProjectProcess -and -not $ForcePortCleanup) {
+        $description = if ($process) { "$($process.Name) / $($process.CommandLine)" } else { "PID $ownerId" }
+        throw "端口 $Port 被非本项目进程占用：$description。确认可终止后使用 -ForcePortCleanup。"
+    }
+    Stop-Process -Id $ownerId -Force -ErrorAction Stop
+    Write-Host "[STOP] port=$Port pid=$ownerId" -ForegroundColor Yellow
+    $deadline = (Get-Date).AddSeconds(8)
+    while ((Get-PortProcessId -Port $Port) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 250
+    }
+    if (Get-PortProcessId -Port $Port) {
+        throw "端口 $Port 未能释放"
+    }
+}
 
-Read-Host '按 Enter 键退出此启动器窗口（不影响其他服务）'
+function Wait-HttpReady {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Url,
+        [hashtable]$Headers = @{},
+        [int]$TimeoutSeconds = 90
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastError = ''
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -Headers $Headers -TimeoutSec 5
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
+                Write-Host "[READY] $Name -> $Url" -ForegroundColor Green
+                return
+            }
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+        Start-Sleep -Seconds 1
+    }
+    throw "$Name 在 ${TimeoutSeconds}s 内未就绪：$lastError"
+}
+
+function Show-LogTail {
+    param([string]$Path)
+    if (Test-Path -LiteralPath $Path) {
+        Write-Host "---- $Path ----" -ForegroundColor DarkYellow
+        Get-Content -LiteralPath $Path -Tail 60
+    }
+}
+
+function Start-LoggedProcess {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$ArgumentList = @(),
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
+    $stdout = Join-Path $logRoot ($Name + '.out.log')
+    $stderr = Join-Path $logRoot ($Name + '.err.log')
+    $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
+        -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    Write-Host "[START] $Name pid=$($process.Id)" -ForegroundColor DarkCyan
+    return @{
+        name = $Name
+        pid = $process.Id
+        process = $process
+        stdout = $stdout
+        stderr = $stderr
+    }
+}
+
+Import-LocalEnvironment -Path (Join-Path $projectRoot '.env')
+
+# 强制使用项目内路径和当前三进程架构，避免继承到 OneDrive 或历史服务配置。
+$env:SPRING_PROFILES_ACTIVE = 'dev'
+$env:SENSOR_ATTACHMENT_ROOT = $attachmentRoot
+$env:RUOYI_PROFILE = $uploadRoot
+$env:INFERENCE_MODEL_ROOT = $modelRoot
+$env:INFERENCE_ALLOWED_INPUT_ROOTS = Join-Path $attachmentRoot 'objects'
+$env:SENSOR_GEAR_INFER_URL = 'http://127.0.0.1:5000/internal/infer'
+$env:SENSOR_BEARING_INFER_URL = 'http://127.0.0.1:5000/internal/infer'
+$env:INFERENCE_BIND_HOST = '127.0.0.1'
+$env:PORT = '5000'
+$env:VUE_APP_BASE_URL = 'http://127.0.0.1:8080'
+$env:BROWSER = 'none'
+$env:NODE_PATH = Join-Path $frontendDir 'node_modules\@vue\cli-service\node_modules'
+
+if ([string]::IsNullOrWhiteSpace($env:INFERENCE_INTERNAL_TOKEN)) {
+    $env:INFERENCE_INTERNAL_TOKEN = $env:SENSOR_INFERENCE_INTERNAL_TOKEN
+}
+if ([string]::IsNullOrWhiteSpace($env:SENSOR_INFERENCE_INTERNAL_TOKEN)) {
+    $env:SENSOR_INFERENCE_INTERNAL_TOKEN = $env:INFERENCE_INTERNAL_TOKEN
+}
+if ([string]::IsNullOrWhiteSpace($env:INFERENCE_INTERNAL_TOKEN) -or
+    $env:INFERENCE_INTERNAL_TOKEN.Length -lt 32) {
+    throw '.env 中必须设置至少 32 字符的 SENSOR_INFERENCE_INTERNAL_TOKEN'
+}
+
+Write-Step '环境和本地资源预检'
+$mavenExe = Assert-Command -Name 'mvn'
+$javaExe = Assert-Command -Name 'java'
+$npmExe = Assert-Command -Name 'npm.cmd'
+if (-not (Test-Path -LiteralPath $pythonExe)) { throw "缺少项目 Python：$pythonExe" }
+if (-not (Test-Path -LiteralPath (Join-Path $frontendDir 'node_modules'))) {
+    throw '缺少 ruoyi-ui/node_modules，请先在 ruoyi-ui 目录执行 npm ci'
+}
+& $pythonExe -c "import fastapi, uvicorn, torch, numpy, scipy" 2>$null
+if ($LASTEXITCODE -ne 0) { throw '项目 .venv 缺少推理依赖，请按 requirements.txt 安装' }
+
+$manifestPath = Join-Path $inferenceDir 'models-manifest.json'
+if (-not (Test-Path -LiteralPath $manifestPath)) { throw "模型清单不存在：$manifestPath" }
+$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+foreach ($model in $manifest.models) {
+    $artifactPath = Join-Path $modelRoot $model.artifact
+    if (-not (Test-Path -LiteralPath $artifactPath)) { throw "模型制品不存在：$artifactPath" }
+    $actualHash = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne ([string]$model.sha256).ToLowerInvariant()) {
+        throw "模型 SHA-256 不匹配：$artifactPath"
+    }
+    [Environment]::SetEnvironmentVariable([string]$model.environmentPath, $artifactPath, 'Process')
+    [Environment]::SetEnvironmentVariable([string]$model.environmentSha256, $actualHash, 'Process')
+    $versionName = if ($model.type -eq 'bearing') { 'BEARING_MODEL_VERSION' } else { 'GEAR_MODEL_VERSION' }
+    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($versionName, 'Process'))) {
+        [Environment]::SetEnvironmentVariable($versionName, [string]$model.version, 'Process')
+    }
+    Write-Host "[OK] model=$($model.type) hash=$($actualHash.Substring(0, 12))..." -ForegroundColor Green
+}
+
+if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 3306)) {
+    throw 'MySQL(127.0.0.1:3306) 未启动，后端无法连接业务数据库'
+}
+if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 6379)) {
+    throw 'Redis(127.0.0.1:6379) 未启动，后端无法完成登录和缓存初始化'
+}
+if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 6667)) {
+    Write-Warning 'IoTDB(127.0.0.1:6667) 未启动；时序功能将按现有代码降级，其他服务可继续启动。'
+}
+
+Write-Step '停止当前项目的旧监听进程'
+# 5001/9528 是历史架构遗留端口；仅在确认属于本项目时才清理。
+foreach ($legacyPort in @(5001, 9528)) {
+    $legacyOwner = Get-PortProcessId -Port $legacyPort
+    if ($legacyOwner -and (Test-IsProjectProcess -Id $legacyOwner)) {
+        Stop-Listener -Port $legacyPort
+    }
+}
+foreach ($portToStop in @($FrontendPort, 5000, 8080, 8888, 8890, 8891, 9000)) {
+    Stop-Listener -Port $portToStop
+}
+
+if (-not $SkipBuild) {
+    Write-Step '同步构建 Java 多模块工程'
+    Push-Location $projectRoot
+    try {
+        & $mavenExe '-DskipTests' 'install'
+        if ($LASTEXITCODE -ne 0) { throw "Maven 构建失败，退出码：$LASTEXITCODE" }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host '[SKIP] 已跳过 Java 构建' -ForegroundColor Yellow
+}
+if (-not (Test-Path -LiteralPath $adminJar)) { throw "后端 JAR 不存在：$adminJar" }
+
+$started = @()
+try {
+    Write-Step '启动统一 Python 推理服务'
+    $inference = Start-LoggedProcess -Name 'inference' -FilePath $pythonExe `
+        -ArgumentList @('inference_service.py') -WorkingDirectory $inferenceDir
+    $started += $inference
+    Wait-HttpReady -Name '统一推理服务' -Url 'http://127.0.0.1:5000/internal/health/ready' `
+        -Headers @{ 'X-Internal-Token' = $env:INFERENCE_INTERNAL_TOKEN } -TimeoutSeconds 90
+    # Windows 环境变量名不区分大小写；Python 启动后清除 PORT，避免覆盖 Vue 端口。
+    [Environment]::SetEnvironmentVariable('PORT', $null, 'Process')
+
+    Write-Step '启动 Spring Boot 平台'
+    $backend = Start-LoggedProcess -Name 'backend' -FilePath $javaExe `
+        -ArgumentList @('-jar', $adminJar, '--spring.profiles.active=dev') -WorkingDirectory $projectRoot
+    $started += $backend
+    Wait-HttpReady -Name 'Spring Boot 后端' -Url 'http://127.0.0.1:8080/captchaImage' -TimeoutSeconds 120
+
+    Write-Step '启动 Vue 开发服务器'
+    $frontend = Start-LoggedProcess -Name 'frontend' -FilePath $npmExe `
+        -ArgumentList @('run', 'dev', '--', '--port', [string]$FrontendPort) -WorkingDirectory $frontendDir
+    $started += $frontend
+    Wait-HttpReady -Name 'Vue 前端' -Url "http://127.0.0.1:$FrontendPort/" -TimeoutSeconds 120
+
+    # npm.cmd 与 Python venv 启动器可能会派生真正的服务进程，因此记录实际监听 PID，
+    # 避免后续停止或排障时拿到已经退出的包装进程。
+    $pidState = @{
+        frontend = Get-PortProcessId -Port $FrontendPort
+        backend = Get-PortProcessId -Port 8080
+        inference = Get-PortProcessId -Port 5000
+        matReceiver = Get-PortProcessId -Port 8888
+        tcpCollector = Get-PortProcessId -Port 8890
+        tcpCollectorLegacy = Get-PortProcessId -Port 8891
+    }
+    $pidState['startedAt'] = (Get-Date).ToString('s')
+    $pidState['projectRoot'] = $projectRoot
+    $pidState | ConvertTo-Json | Set-Content -LiteralPath $pidFile -Encoding UTF8
+
+    Write-Host ''
+    Write-Host '========================================' -ForegroundColor Green
+    Write-Host '  当前架构全部启动并通过就绪检查' -ForegroundColor Green
+    Write-Host '========================================' -ForegroundColor Green
+    Write-Host "  前端:      http://localhost:$FrontendPort" -ForegroundColor White
+    Write-Host '  后端:      http://localhost:8080' -ForegroundColor White
+    Write-Host '  统一推理:  http://127.0.0.1:5000/internal/*' -ForegroundColor White
+    Write-Host "  日志:      $logRoot" -ForegroundColor DarkCyan
+    Write-Host "  PID 状态:  $pidFile" -ForegroundColor DarkCyan
+    if (Get-PortProcessId -Port 8888) { Write-Host '  MAT接收:   127.0.0.1:8888' -ForegroundColor DarkGray }
+    if (Get-PortProcessId -Port 8890) { Write-Host '  TCP采集:   127.0.0.1:8890' -ForegroundColor DarkGray }
+    if (Get-PortProcessId -Port 8891) { Write-Host '  通道采集:  127.0.0.1:8891' -ForegroundColor DarkGray }
+} catch {
+    Write-Host "`n启动失败：$($_.Exception.Message)" -ForegroundColor Red
+    foreach ($service in $started) {
+        Show-LogTail -Path $service.stderr
+        Show-LogTail -Path $service.stdout
+    }
+    foreach ($cleanupPort in @($FrontendPort, 5000, 8080, 8888, 8890, 8891, 9000)) {
+        $cleanupOwner = Get-PortProcessId -Port $cleanupPort
+        if ($cleanupOwner -and (Test-IsProjectProcess -Id $cleanupOwner)) {
+            Stop-Process -Id $cleanupOwner -Force -ErrorAction SilentlyContinue
+        }
+    }
+    throw
+}

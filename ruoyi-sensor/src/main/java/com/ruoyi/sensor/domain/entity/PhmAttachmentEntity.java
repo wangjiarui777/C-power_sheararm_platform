@@ -14,6 +14,8 @@ public class PhmAttachmentEntity
     private Long id;
     private String bizType;
     private Long bizId;
+    private Long pointId;
+    private Integer channelId;
     private String fileName;
     private String fileUrl;
     private String objectName;

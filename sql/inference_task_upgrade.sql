@@ -5,6 +5,9 @@ CREATE TABLE IF NOT EXISTS `sensor_inference_task` (
   `id` bigint NOT NULL COMMENT 'Snowflake task ID',
   `request_id` varchar(64) NOT NULL COMMENT 'Cross-service request ID',
   `idempotency_key` varchar(128) DEFAULT NULL COMMENT 'Client idempotency key',
+  `batch_id` bigint DEFAULT NULL COMMENT 'Diagnosis batch ID',
+  `attempt_no` int NOT NULL DEFAULT 1 COMMENT 'Point retry attempt',
+  `supersedes_task_id` bigint DEFAULT NULL COMMENT 'Previous failed task ID',
   `device_code` varchar(64) NOT NULL,
   `point_id` bigint DEFAULT NULL,
   `channel_id` int DEFAULT NULL,
@@ -27,5 +30,6 @@ CREATE TABLE IF NOT EXISTS `sensor_inference_task` (
   UNIQUE KEY `uk_inference_task_request` (`request_id`),
   UNIQUE KEY `uk_inference_task_idempotency` (`idempotency_key`),
   KEY `idx_inference_task_device_time` (`device_code`,`create_time`),
+  KEY `idx_inference_task_batch_point` (`batch_id`,`point_id`,`attempt_no`),
   KEY `idx_inference_task_status_time` (`status`,`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Asynchronous model inference task';

@@ -2,6 +2,7 @@ package com.ruoyi.sensor.service;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -59,6 +60,52 @@ public class PhmAttachmentStorageService
     public PhmAttachmentEntity store(MultipartFile file, String purpose, String bizType, Long bizId,
         String reportType, String username) throws Exception
     {
+        return store(file, purpose, bizType, bizId, null, null, reportType, username, true, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public PhmAttachmentEntity storeDiagnosisInput(MultipartFile file, Long deviceId, Long pointId,
+        Integer channelId, String modelType, String username) throws Exception
+    {
+        if (pointId == null || channelId == null)
+        {
+            throw new IllegalArgumentException("诊断输入必须绑定测点和通道");
+        }
+        return store(file, "DIAGNOSIS_INPUT", "device", deviceId, pointId, channelId,
+            modelType, username, true, null);
+    }
+
+    /**
+     * Imports a file discovered in the trusted server-side diagnosis inbox. The
+     * same validation, quarantine and object storage pipeline as browser uploads
+     * is used, while device authorization is performed by the ingestion service.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PhmAttachmentEntity importDiagnosisFile(Path source, Long deviceId, String username) throws Exception
+    {
+        return importDiagnosisFile(source, deviceId, null, null, username);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public PhmAttachmentEntity importDiagnosisFile(Path source, Long deviceId, Long pointId,
+        Integer channelId, String username) throws Exception
+    {
+        Path normalized = source.toAbsolutePath().normalize();
+        if (!Files.isRegularFile(normalized, java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        {
+            throw new IllegalArgumentException("诊断接入文件不存在或不是普通文件");
+        }
+        String extension = extension(normalized.getFileName().toString());
+        String mimeType = "npy".equals(extension) ? "application/x-numpy" : "application/x-matlab-data";
+        MultipartFile file = new PathMultipartFile(normalized, mimeType);
+        return store(file, "DIAGNOSIS_INPUT", "device", deviceId, pointId, channelId, null, username, false,
+            "SOURCE:SERVER_DIRECTORY");
+    }
+
+    private PhmAttachmentEntity store(MultipartFile file, String purpose, String bizType, Long bizId,
+        Long pointId, Integer channelId, String reportType, String username,
+        boolean enforceDeviceScope, String remark) throws Exception
+    {
         String normalizedPurpose = purpose == null ? "" : purpose.trim().toUpperCase(Locale.ROOT);
         Set<String> allowed = PURPOSE_EXTENSIONS.get(normalizedPurpose);
         if (allowed == null)
@@ -79,7 +126,7 @@ public class PhmAttachmentStorageService
         validateMimeType(normalizedPurpose, extension, file.getContentType());
         byte[] header = readHeader(file, 16);
         validateSignature(normalizedPurpose, extension, header);
-        if (bizId != null && !"REPORT".equals(normalizedPurpose) && !canAccessDevice(bizId))
+        if (enforceDeviceScope && bizId != null && !"REPORT".equals(normalizedPurpose) && !canAccessDevice(bizId))
         {
             throw new SecurityException("无权访问附件所属设备");
         }
@@ -119,6 +166,8 @@ public class PhmAttachmentStorageService
             PhmAttachmentEntity entity = new PhmAttachmentEntity();
             entity.setBizType(normalizeBizType(normalizedPurpose, bizType));
             entity.setBizId(bizId);
+            entity.setPointId(pointId);
+            entity.setChannelId(channelId);
             entity.setFileName(originalName);
             entity.setFileUrl(null);
             entity.setObjectName(objectName);
@@ -132,6 +181,7 @@ public class PhmAttachmentStorageService
             entity.setReportType(reportType);
             entity.setUploadBy(username);
             entity.setCreateTime(new Date());
+            entity.setRemark(remark);
             mapper.insert(entity);
             return entity;
         }
@@ -201,6 +251,44 @@ public class PhmAttachmentStorageService
                 .eq(PhmAttachmentEntity::getPurpose, "DIAGNOSIS_INPUT")
                 .eq(PhmAttachmentEntity::getBizId, deviceId)
                 .orderByDesc(PhmAttachmentEntity::getCreateTime));
+    }
+
+    public List<PhmAttachmentEntity> listAccessibleDiagnosisInputsForPoint(Long deviceId, Long pointId)
+    {
+        if (deviceId == null || pointId == null || !canAccessDevice(deviceId))
+        {
+            return List.of();
+        }
+        return mapper.selectList(new LambdaQueryWrapper<PhmAttachmentEntity>()
+            .eq(PhmAttachmentEntity::getPurpose, "DIAGNOSIS_INPUT")
+            .eq(PhmAttachmentEntity::getBizId, deviceId)
+            .eq(PhmAttachmentEntity::getPointId, pointId)
+            .orderByDesc(PhmAttachmentEntity::getCreateTime));
+    }
+
+    public PhmAttachmentEntity findDiagnosisInputByDeviceAndSha256(Long deviceId, String sha256)
+    {
+        return findDiagnosisInputByDevicePointAndSha256(deviceId, null, sha256);
+    }
+
+    public PhmAttachmentEntity findDiagnosisInputByDevicePointAndSha256(Long deviceId, Long pointId, String sha256)
+    {
+        if (deviceId == null || sha256 == null || sha256.isBlank())
+        {
+            return null;
+        }
+        return mapper.selectOne(new LambdaQueryWrapper<PhmAttachmentEntity>()
+            .eq(PhmAttachmentEntity::getPurpose, "DIAGNOSIS_INPUT")
+            .eq(PhmAttachmentEntity::getBizId, deviceId)
+            .eq(pointId != null, PhmAttachmentEntity::getPointId, pointId)
+            .isNull(pointId == null, PhmAttachmentEntity::getPointId)
+            .eq(PhmAttachmentEntity::getSha256, sha256)
+            .last("LIMIT 1"));
+    }
+
+    public Path getObjectsRoot()
+    {
+        return root.resolve("objects").toAbsolutePath().normalize();
     }
 
     public Path trustedContentPath(PhmAttachmentEntity entity) throws IOException
@@ -360,5 +448,72 @@ public class PhmAttachmentStorageService
             }
         }
         return true;
+    }
+
+    private static final class PathMultipartFile implements MultipartFile
+    {
+        private final Path path;
+        private final String contentType;
+
+        private PathMultipartFile(Path path, String contentType)
+        {
+            this.path = path;
+            this.contentType = contentType;
+        }
+
+        @Override
+        public String getName()
+        {
+            return "file";
+        }
+
+        @Override
+        public String getOriginalFilename()
+        {
+            return path.getFileName().toString();
+        }
+
+        @Override
+        public String getContentType()
+        {
+            return contentType;
+        }
+
+        @Override
+        public boolean isEmpty()
+        {
+            return getSize() == 0;
+        }
+
+        @Override
+        public long getSize()
+        {
+            try
+            {
+                return Files.size(path);
+            }
+            catch (IOException ex)
+            {
+                return 0;
+            }
+        }
+
+        @Override
+        public byte[] getBytes() throws IOException
+        {
+            return Files.readAllBytes(path);
+        }
+
+        @Override
+        public InputStream getInputStream() throws IOException
+        {
+            return Files.newInputStream(path);
+        }
+
+        @Override
+        public void transferTo(File destination) throws IOException
+        {
+            Files.copy(path, destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 }

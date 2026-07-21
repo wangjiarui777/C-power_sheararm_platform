@@ -25,10 +25,12 @@ import os
 import secrets
 import threading
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import unquote, urlparse
 
 # =============================================================================
 # 第三方库
@@ -113,6 +115,10 @@ INFERENCE_BIND_HOST = os.environ.get("INFERENCE_BIND_HOST", "127.0.0.1")
 INTERNAL_TOKEN = os.environ.get("INFERENCE_INTERNAL_TOKEN", "")
 GEAR_MODEL_VERSION = os.environ.get("GEAR_MODEL_VERSION", "gear-unregistered")
 BEARING_MODEL_VERSION = os.environ.get("BEARING_MODEL_VERSION", "bearing-unregistered")
+MODEL_ROOT = Path(os.environ.get(
+    "INFERENCE_MODEL_ROOT", str(BASE_DIR / "get")
+)).expanduser().resolve()
+MODEL_CACHE_SIZE = max(1, int(os.environ.get("INFERENCE_MODEL_CACHE_SIZE", "3")))
 DISPLAY_POINTS = 2048
 DISPLAY_SPECTRUM_POINTS = 512
 CONFIDENCE_MIN = 1.0
@@ -139,8 +145,10 @@ BEARING_CLASS_CN_MAP = {
 # 响应缓存
 # =============================================================================
 _response_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_model_bundle_cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
 _inference_executor = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS, thread_name_prefix="inference-worker")
 _model_inference_lock = threading.Lock()
+_model_cache_lock = threading.Lock()
 
 # =============================================================================
 # FastAPI 应用
@@ -356,11 +364,12 @@ def _load_signal_from_path(
 def _get_cached_or_compute(
     file_path: Path,
     model_type: str,
+    model_version: str,
     compute_fn,
     *args: Any,
     **kwargs: Any,
 ) -> Dict[str, Any]:
-    cache_key = f"{model_type}:{file_path.resolve()}"
+    cache_key = f"{model_type}:{model_version}:{file_path.resolve()}"
     try:
         mtime = file_path.stat().st_mtime
     except OSError:
@@ -415,10 +424,13 @@ def _verify_model_artifact(path: Path, expected_sha256: str, model_type: str) ->
         )
 
 
-def load_gear_model() -> Tuple[WDCNNMechDG, Dict[str, Any], List[str], Dict[str, Any]]:
-    _verify_model_artifact(GEAR_MODEL_PATH, GEAR_MODEL_SHA256, "gear")
+def load_gear_model(
+    model_path: Path = GEAR_MODEL_PATH,
+    expected_sha256: str = GEAR_MODEL_SHA256,
+) -> Tuple[WDCNNMechDG, Dict[str, Any], List[str], Dict[str, Any]]:
+    _verify_model_artifact(model_path, expected_sha256, "gear")
 
-    ckpt = v6.safe_torch_load(GEAR_MODEL_PATH, map_location=DEVICE)
+    ckpt = v6.safe_torch_load(model_path, map_location=DEVICE)
     params = ckpt["params"]
     class_names = [str(x) for x in ckpt["classes"]]
     num_classes = len(class_names)
@@ -438,7 +450,10 @@ def load_gear_model() -> Tuple[WDCNNMechDG, Dict[str, Any], List[str], Dict[str,
     return model, params, class_names, classwise_cfg
 
 
-def load_bearing_model() -> Tuple[nn.Module, Dict[str, Any], List[str]]:
+def load_bearing_model(
+    model_path: Path = BEARING_MODEL_PATH,
+    expected_sha256: str = BEARING_MODEL_SHA256,
+) -> Tuple[nn.Module, Dict[str, Any], List[str]]:
     """
     Load bearing diagnosis model (ResNet1D18) from best_model.pth.
 
@@ -447,9 +462,9 @@ def load_bearing_model() -> Tuple[nn.Module, Dict[str, Any], List[str]]:
         classes     — list of class label strings, e.g. ['N', 'OR', 'B']
         window_size / stride / signal_key / normalize — preprocessing config
     """
-    _verify_model_artifact(BEARING_MODEL_PATH, BEARING_MODEL_SHA256, "bearing")
+    _verify_model_artifact(model_path, expected_sha256, "bearing")
 
-    ckpt = v6.safe_torch_load(BEARING_MODEL_PATH, map_location=DEVICE)
+    ckpt = v6.safe_torch_load(model_path, map_location=DEVICE)
 
     # ---- extract state dict ----
     if "state_dict" in ckpt:
@@ -496,36 +511,143 @@ def load_bearing_model() -> Tuple[nn.Module, Dict[str, Any], List[str]]:
     return model, params, class_names
 
 
+def _resolve_model_artifact(artifact_uri: str) -> Path:
+    value = str(artifact_uri or "").strip()
+    if not value:
+        raise ValueError("modelArtifactUri is required for a registered model version.")
+    parsed = urlparse(value)
+    is_windows_drive = len(value) > 2 and value[1] == ":" and value[2] in ("\\", "/")
+    if parsed.scheme and parsed.scheme.lower() != "file" and not is_windows_drive:
+        raise ValueError("Only local file model artifacts are supported.")
+    if is_windows_drive:
+        candidate = Path(value)
+    elif parsed.scheme.lower() == "file":
+        raw_path = unquote(parsed.path)
+        if parsed.netloc:
+            raw_path = f"//{parsed.netloc}{raw_path}"
+        if os.name == "nt" and raw_path.startswith("/") and len(raw_path) > 2 and raw_path[2] == ":":
+            raw_path = raw_path[1:]
+        candidate = Path(raw_path)
+    else:
+        candidate = Path(value)
+    if not candidate.is_absolute():
+        candidate = MODEL_ROOT / candidate
+    resolved = candidate.expanduser().resolve()
+    try:
+        resolved.relative_to(MODEL_ROOT)
+    except ValueError as exc:
+        raise ValueError("Model artifact is outside INFERENCE_MODEL_ROOT.") from exc
+    return resolved
+
+
+def _default_model_bundle(model_type: str, requested_version: str) -> Dict[str, Any]:
+    if model_type == "gear":
+        if requested_version and requested_version != GEAR_MODEL_VERSION:
+            raise ValueError(f"Requested gear model version is not loaded: {requested_version}")
+        if gear_model is None:
+            raise RuntimeError(model_load_errors.get("gear", "Gear model is not loaded."))
+        return {
+            "model": gear_model,
+            "params": gear_model_params,
+            "classes": gear_class_names,
+            "classwise_cfg": gear_classwise_cfg,
+            "version": GEAR_MODEL_VERSION,
+        }
+    if requested_version and requested_version != BEARING_MODEL_VERSION:
+        raise ValueError(f"Requested bearing model version is not loaded: {requested_version}")
+    if bearing_model is None:
+        raise RuntimeError(model_load_errors.get("bearing", "Bearing model is not loaded."))
+    return {
+        "model": bearing_model,
+        "params": bearing_model_params,
+        "classes": bearing_class_names,
+        "version": BEARING_MODEL_VERSION,
+    }
+
+
+def _load_model_bundle(
+    model_type: str,
+    requested_version: str,
+    artifact_uri: str = "",
+    expected_sha256: str = "",
+) -> Dict[str, Any]:
+    if not artifact_uri:
+        return _default_model_bundle(model_type, requested_version)
+    if not requested_version:
+        raise ValueError("modelVersion is required for a registered model artifact.")
+    expected = str(expected_sha256 or "").strip().lower()
+    if not expected or len(expected) != 64:
+        raise ValueError("A valid modelArtifactSha256 is required.")
+    artifact_path = _resolve_model_artifact(artifact_uri)
+    cache_key = f"{model_type}:{requested_version}:{expected}:{artifact_path}"
+    with _model_cache_lock:
+        cached = _model_bundle_cache.get(cache_key)
+        if cached is not None:
+            _model_bundle_cache.move_to_end(cache_key)
+            return cached
+
+        if model_type == "gear":
+            model, params, classes, classwise_cfg = load_gear_model(artifact_path, expected)
+            bundle = {
+                "model": model,
+                "params": params,
+                "classes": classes,
+                "classwise_cfg": classwise_cfg,
+                "version": requested_version,
+            }
+        else:
+            model, params, classes = load_bearing_model(artifact_path, expected)
+            bundle = {
+                "model": model,
+                "params": params,
+                "classes": classes,
+                "version": requested_version,
+            }
+        _model_bundle_cache[cache_key] = bundle
+        while len(_model_bundle_cache) > MODEL_CACHE_SIZE:
+            _model_bundle_cache.popitem(last=False)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        return bundle
+
+
 # =============================================================================
 # 诊断执行 — 直接调用 04.4 的 diagnose_signal_array
 # =============================================================================
-def _diagnose_gear(raw_signal: np.ndarray, source_name: str = "") -> Dict[str, Any]:
+def _diagnose_gear(
+    raw_signal: np.ndarray,
+    source_name: str = "",
+    bundle: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     直接调用 04.4 的 diagnose_signal_array，无中间包装。
     """
-    if gear_model is None:
-        raise RuntimeError("Gear model is not loaded.")
+    selected = bundle or _default_model_bundle("gear", GEAR_MODEL_VERSION)
+    model = selected["model"]
+    params = selected["params"]
+    classes = selected["classes"]
+    classwise_cfg = selected["classwise_cfg"]
 
     sig = np.asarray(raw_signal, dtype=np.float32).reshape(-1)
-    win_len = int(gear_model_params["win_len"])
-    stride = int(gear_model_params["stride"])
+    win_len = int(params["win_len"])
+    stride = int(params["stride"])
     if v6.count_windows(len(sig), win_len, stride) <= 0:
         raise ValueError(
             f"Signal too short ({sig.size} samples) for gear window size {win_len}"
         )
 
     return v6.diagnose_signal_array(
-        model=gear_model,
+        model=model,
         sig=sig,
         device=DEVICE,
         win_len=win_len,
         stride=stride,
-        batch_size=int(gear_model_params.get("batch_size", 128)),
-        class_names=gear_class_names,
-        classwise_cfg=gear_classwise_cfg,
+        batch_size=int(params.get("batch_size", 128)),
+        class_names=classes,
+        classwise_cfg=classwise_cfg,
         class_file_unk_overrides=CLASS_FILE_UNK_OVERRIDES,
         mean_maha_accept_overrides=MEAN_MAHA_ACCEPT_OVERRIDES,
-        fs=float(gear_model_params.get("fs", 5120.0)),
+        fs=float(params.get("fs", 5120.0)),
         unknown_vote_required=3,
         healthy_conf_protect=0.80,
         healthy_unknown_ratio_allow=1.01,
@@ -547,7 +669,11 @@ def _normalize_model_type(model_type: Optional[str]) -> str:
 
 
 @torch.no_grad()
-def _diagnose_bearing(raw_signal: np.ndarray, source_name: str = "") -> Dict[str, Any]:
+def _diagnose_bearing(
+    raw_signal: np.ndarray,
+    source_name: str = "",
+    bundle: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     Bearing diagnosis using ResNet1D18 with sliding-window inference.
 
@@ -556,13 +682,15 @@ def _diagnose_bearing(raw_signal: np.ndarray, source_name: str = "") -> Dict[str
       - Window size / stride from checkpoint params
       - File-level prediction = argmax of mean softmax probabilities
     """
-    if bearing_model is None:
-        raise RuntimeError("Bearing model is not loaded.")
+    selected = bundle or _default_model_bundle("bearing", BEARING_MODEL_VERSION)
+    model = selected["model"]
+    params = selected["params"]
+    classes = selected["classes"]
 
     sig = np.asarray(raw_signal, dtype=np.float64).reshape(-1)
-    win_len = int(bearing_model_params["win_len"])
-    stride = int(bearing_model_params["stride"])
-    batch_size = int(bearing_model_params.get("batch_size", 64))
+    win_len = int(params["win_len"])
+    stride = int(params["stride"])
+    batch_size = int(params.get("batch_size", 64))
 
     # window count
     if sig.size < win_len:
@@ -577,7 +705,7 @@ def _diagnose_bearing(raw_signal: np.ndarray, source_name: str = "") -> Dict[str
 
     probs_all: List[torch.Tensor] = []
     seg_preds: List[int] = []
-    bearing_model.eval()
+    model.eval()
 
     for i in range(0, n_win, batch_size):
         windows = []
@@ -594,7 +722,7 @@ def _diagnose_bearing(raw_signal: np.ndarray, source_name: str = "") -> Dict[str
             windows.append(chunk)
 
         xb = torch.from_numpy(np.stack(windows)).float().unsqueeze(1).to(DEVICE)
-        logits, _feat = bearing_model(xb)
+        logits, _feat = model(xb)
         probs = torch.softmax(logits, dim=1).cpu()
         probs_all.append(probs)
         seg_preds.extend(torch.argmax(probs, dim=1).tolist())
@@ -626,14 +754,14 @@ def _diagnose_bearing(raw_signal: np.ndarray, source_name: str = "") -> Dict[str
     return {
         "source_name": source_name,
         "prediction_index": final_idx,
-        "prediction": bearing_class_names[final_idx] if final_idx < len(bearing_class_names) else "unknown",
+        "prediction": classes[final_idx] if final_idx < len(classes) else "unknown",
         "confidence": confidence,
         "mean_probs": mean_probs,
         "segment_consistency": segment_consistency,
         "num_segments": int(n_win),
         "mean_entropy": mean_entropy,
         "decision_reason": decision_reason,
-        "class_names": bearing_class_names,
+        "class_names": classes,
     }
 
 
@@ -703,10 +831,13 @@ def _build_evidence_list(v6_result: Dict[str, Any]) -> List[Dict[str, Any]]:
     return evidence
 
 
-def _build_top_probabilities(v6_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _build_top_probabilities(
+    v6_result: Dict[str, Any],
+    class_names: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
     """从 v6_result 的 prob_{class} 字段构建前端概率列表。"""
     top_probs: List[Dict[str, Any]] = []
-    for cname in gear_class_names:
+    for cname in (class_names or gear_class_names):
         key = f"prob_{cname}"
         if key in v6_result:
             top_probs.append({
@@ -723,6 +854,7 @@ def _build_frontend_payload(
     source_name: str,
     sample_rate: float = 5120.0,
     extra: Optional[Dict[str, Any]] = None,
+    class_names: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     将 04.4 诊断结果映射为前端兼容格式。
@@ -762,7 +894,7 @@ def _build_frontend_payload(
     evidence = _build_evidence_list(v6_result)
 
     # ---- 类别概率 ----
-    top_probs = _build_top_probabilities(v6_result)
+    top_probs = _build_top_probabilities(v6_result, class_names)
 
     # ---- 置信度百分比 ----
     confidence_pct = round(float(np.clip(confidence * 100.0, CONFIDENCE_MIN, CONFIDENCE_MAX)), 2)
@@ -946,6 +1078,7 @@ def _run_analysis(
     source_name: str,
     analysis_mode: str,
     extra: Optional[Dict[str, Any]] = None,
+    model_bundle: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     model_type = _normalize_model_type(model_type)
     mode = str(analysis_mode or "infer")
@@ -953,20 +1086,26 @@ def _run_analysis(
         mode = f"{model_type}_{mode}"
     extra_payload = dict(extra or {})
     extra_payload["modelType"] = model_type
+    selected = model_bundle or _default_model_bundle(
+        model_type,
+        GEAR_MODEL_VERSION if model_type == "gear" else BEARING_MODEL_VERSION,
+    )
+    params = selected["params"]
+    extra_payload["modelVersion"] = selected["version"]
 
     with _model_inference_lock:
         if model_type == "gear":
             fs = float(extra_payload.get("sample_rate") or extra_payload.get("sampleRate")
-                       or gear_model_params.get("fs", 5120.0))
-            v6_result = _diagnose_gear(raw_signal, source_name=source_name)
-            extra_payload.setdefault("modelVersion", GEAR_MODEL_VERSION)
+                       or params.get("fs", 5120.0))
+            v6_result = _diagnose_gear(raw_signal, source_name=source_name, bundle=selected)
             extra_payload["analysis_mode"] = mode
-            return _build_frontend_payload(v6_result, raw_signal, source_name, sample_rate=fs, extra=extra_payload)
+            return _build_frontend_payload(
+                v6_result, raw_signal, source_name, sample_rate=fs,
+                extra=extra_payload, class_names=selected["classes"])
 
         fs = float(extra_payload.get("sample_rate") or extra_payload.get("sampleRate")
-                   or bearing_model_params.get("fs", 16000.0))
-        bearing_result = _diagnose_bearing(raw_signal, source_name=source_name)
-        extra_payload.setdefault("modelVersion", BEARING_MODEL_VERSION)
+                   or params.get("fs", 16000.0))
+        bearing_result = _diagnose_bearing(raw_signal, source_name=source_name, bundle=selected)
         extra_payload["analysis_mode"] = mode
         return _build_bearing_frontend_payload(
             bearing_result,
@@ -985,6 +1124,8 @@ def _build_health_payload() -> Dict[str, Any]:
         "model_loaded": gear_model is not None and bearing_model is not None,
         "gear_model_loaded": gear_model is not None,
         "bearing_model_loaded": bearing_model is not None,
+        "gear_model_version": GEAR_MODEL_VERSION,
+        "bearing_model_version": BEARING_MODEL_VERSION,
         "model_path": str(GEAR_MODEL_PATH),
         "gear_model_path": str(GEAR_MODEL_PATH),
         "bearing_model_path": str(BEARING_MODEL_PATH),
@@ -1027,11 +1168,16 @@ def metrics() -> Response:
 @app.post("/internal/infer", dependencies=[Depends(require_internal_token)])
 def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     model_type = _normalize_model_type(payload.get("modelType") or payload.get("model_type") or "gear")
+    model_version = str(
+        payload.get("modelVersion") or payload.get("model_version")
+        or (GEAR_MODEL_VERSION if model_type == "gear" else BEARING_MODEL_VERSION)
+    ).strip()
     log_context = {
         "requestId": payload.get("requestId"),
         "taskId": payload.get("taskId"),
         "deviceCode": payload.get("deviceCode"),
         "modelType": model_type,
+        "modelVersion": model_version,
     }
     logger.info("Inference request accepted", extra=log_context)
 
@@ -1040,27 +1186,25 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="filePath is required.")
 
     source_path = _resolve_trusted_input_path(file_path)
-
-    if model_type == "gear" and gear_model is None:
-        raise HTTPException(status_code=503, detail=model_load_errors.get("gear", "Gear model is not loaded."))
-    if model_type == "bearing" and bearing_model is None:
-        raise HTTPException(status_code=503, detail=model_load_errors.get("bearing", "Bearing model is not loaded."))
+    try:
+        model_bundle = _load_model_bundle(
+            model_type,
+            model_version,
+            str(payload.get("modelArtifactUri") or ""),
+            str(payload.get("modelArtifactSha256") or ""),
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     def _compute() -> Dict[str, Any]:
+        params = model_bundle["params"]
         preferred_key = (
-            bearing_model_params.get("signal_key", "DE_time") if model_type == "bearing"
-            else gear_model_params.get("signal_key", "sig_acc_5120")
+            params.get("signal_key", "DE_time") if model_type == "bearing"
+            else params.get("signal_key", "sig_acc_5120")
         )
         raw_signal, _, file_meta = _load_signal_from_path(source_path, preferred_key)
         extra = {
-            "taskId": payload.get("taskId"),
-            "requestId": payload.get("requestId"),
-            "deviceCode": payload.get("deviceCode"),
-            "pointId": payload.get("pointId"),
-            "channelId": payload.get("channelId"),
             "filename": payload.get("filename") or source_path.name,
-            "batchId": payload.get("batchId"),
-            "sampleTime": payload.get("sampleTime"),
         }
         if file_meta.get("sample_rate"):
             extra["sample_rate"] = float(file_meta["sample_rate"])
@@ -1071,9 +1215,23 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
             source_path.name,
             payload.get("analysisMode", f"{model_type}_infer"),
             extra=extra,
+            model_bundle=model_bundle,
         )
 
-    result = _get_cached_or_compute(source_path, model_type, _compute)
+    result = dict(_get_cached_or_compute(
+        source_path, model_type, model_bundle["version"], _compute))
+    result.update({
+        "taskId": payload.get("taskId"),
+        "requestId": payload.get("requestId"),
+        "deviceCode": payload.get("deviceCode"),
+        "pointId": payload.get("pointId"),
+        "channelId": payload.get("channelId"),
+        "filename": payload.get("filename") or source_path.name,
+        "batchId": payload.get("batchId"),
+        "sampleTime": payload.get("sampleTime"),
+        "modelType": model_type,
+        "modelVersion": model_bundle["version"],
+    })
     logger.info("Inference request completed", extra=log_context)
     return {"success": True, "data": result}
 

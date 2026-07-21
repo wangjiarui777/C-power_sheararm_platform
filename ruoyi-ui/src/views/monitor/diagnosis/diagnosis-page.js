@@ -1,5 +1,5 @@
 import echarts from '@/utils/echarts'
-import { getInferenceHealth, inferWithAttachment, listDiagnosisDevices, listMatFiles, uploadDiagnosisToInferenceService, analyzeLatestFile, fetchHistory, getServiceURL } from '@/api/system/bearingDiagnosis'
+import { getDiagnosisOptions, getInferenceHealth, inferWithAttachment, listMatFiles, uploadDiagnosisToInferenceService, fetchHistory, getServiceURL, createDiagnosisBatch, getDiagnosisBatch, retryDiagnosisBatch } from '@/api/system/bearingDiagnosis'
 import { translateDiagnosisLabel, translateAlarmLevel, translateRiskLevel, translateAll } from '@/utils/diagnosis-translations'
 
 export default {
@@ -20,9 +20,26 @@ export default {
       healthApiLabel: '',     // 健康状态文字标签
 
       // ---- 文件选择 ----
-      matFileList: [],        // 后端 DATA_DIR 中的文件列表
+      matFileList: [],        // 已登记且当前用户可访问的后端附件
       selectedMatFile: '',    // 当前选中的附件 ID
-      selectedModelType: 'gear', // 当前选择的推理模型：gear / bearing
+      selectedDeviceCode: '',
+      selectedPointIds: [],
+      activePointId: '',
+      selectedModelType: '',
+      selectedModelVersion: '',
+      multiPointEnabled: false,
+      maxBatchPoints: 8,
+      deviceOptions: [],
+      pointOptions: [],
+      modelTypeOptions: [],
+      modelVersionOptions: [],
+      optionsLoading: false,
+      contextNotice: '',
+      contextError: false,
+      noAttachment: false,
+      contextDebounceTimer: null,
+      requestSequence: 0,
+      contextInitialized: false,
       filename: '',           // 当前分析文件名
       filePath: '',           // 文件完整路径
       deviceCode: '',         // 设备编码（从分析结果回传）
@@ -75,7 +92,19 @@ export default {
       // ---- 上传相关 ----
       uploadDialogVisible: false, // 上传弹窗可见性
       uploading: false,           // 是否正在上传/分析中
+      uploadSourceTab: 'local',   // local / server
+      pendingUploadFile: null,    // 等待用户确认上传的浏览器 File
+      pendingUploadFiles: {},     // pointId -> File
+      pointFileMappings: {},      // pointId -> attachment/file mapping
+      activeMappingPointId: '',
+      serverFileLoading: false,   // 服务器附件列表刷新状态
       lastAnalyzeResultText: '',  // 最近一次分析结果的文字摘要
+
+      // ---- 多测点批次 ----
+      diagnosisBatchId: '',
+      diagnosisBatchStatus: '',
+      diagnosisBatchItems: [],
+      batchPollingTimer: null,
 
       // ---- 历史下载 ----
       downloadDialogVisible: false,  // 下载弹窗可见性
@@ -95,13 +124,64 @@ export default {
     },
     /** 当前选中文件的显示名称 */
     selectedFileLabel() {
+      const mapping = this.pointFileMappings[String(this.activePointId)] || {}
+      if (mapping.attachmentName) return mapping.attachmentName
       const selected = this.matFileList.find(item => String(item.id) === String(this.selectedMatFile))
       return (selected && (selected.label || selected.name)) || this.filename || '--'
     },
     selectedModelLabel() {
-      if (this.selectedModelType === 'gear') return '齿轮诊断模型'
-      if (this.selectedModelType === 'bearing') return '轴承诊断模型'
-      return '齿轮诊断模型'
+      const option = this.modelTypeOptions.find(item => item.value === this.selectedModelType)
+      return option ? option.label : '--'
+    },
+    availableModelVersions() {
+      return this.modelVersionOptions.filter(item => item.modelType === this.selectedModelType)
+    },
+    selectedVersionOption() {
+      return this.availableModelVersions.find(item => item.semanticVersion === this.selectedModelVersion) || null
+    },
+    retiredVersionSelected() {
+      return this.selectedVersionOption && this.selectedVersionOption.status === 'RETIRED'
+    },
+    selectedPointOption() {
+      const target = this.activePointId || this.selectedPointIds[0]
+      return this.pointOptions.find(item => String(item.id) === String(target)) || null
+    },
+    selectedPointOptions() {
+      const ids = new Set(this.selectedPointIds.map(String))
+      return this.pointOptions.filter(item => ids.has(String(item.id)))
+    },
+    availablePointOptions() {
+      return this.pointOptions.filter(item => !this.selectedDeviceCode || item.deviceCode === this.selectedDeviceCode)
+    },
+    activeMappingPointOption() {
+      return this.pointOptions.find(item => String(item.id) === String(this.activeMappingPointId)) || null
+    },
+    selectedPointLabel() {
+      if (this.selectedPointOptions.length > 1) return `${this.selectedPointOptions.length} 个测点`
+      return this.selectedPointOption ? this.pointOptionLabel(this.selectedPointOption) : '--'
+    },
+    contextComplete() {
+      return Boolean(this.selectedDeviceCode && this.selectedPointIds.length && this.selectedModelType &&
+        this.selectedModelVersion && this.selectedPointOptions.length === this.selectedPointIds.length && this.selectedVersionOption &&
+        this.selectedVersionOption.available)
+    },
+    mappingRows() {
+      return this.selectedPointOptions.map(point => {
+        const mapping = this.pointFileMappings[String(point.id)] || {}
+        const batchItem = this.diagnosisBatchItems.find(item => String(item.pointId) === String(point.id)) || {}
+        return Object.assign({}, point, mapping, { batchItem })
+      })
+    },
+    fileMappingComplete() {
+      return this.mappingRows.length > 0 && this.mappingRows.every(row => row.attachmentId || row.localFile)
+    },
+    batchHasFailures() {
+      return this.diagnosisBatchItems.some(item => item.status === 'FAILED' || item.status === 'INVALID')
+    },
+    batchProgressText() {
+      if (!this.diagnosisBatchId) return ''
+      const complete = this.diagnosisBatchItems.filter(item => ['SUCCEEDED', 'FAILED', 'INVALID'].includes(item.status)).length
+      return `${complete}/${this.diagnosisBatchItems.length} 测点完成`
     },
     /** 根据当前模型类型返回对应的后端服务 URL */
     currentServiceBaseURL() {
@@ -213,11 +293,7 @@ export default {
       })
       window.addEventListener('resize', this.handleResize)
       // 浏览器只访问 Java 平台，不再直连内部 Python 推理服务。
-      await this.ensureDeviceContext()
-      await this.checkHealth()
-      await this.fetchMatFiles()
-      // 文件列表已就绪，仅在目录有文件时才发起分析
-      await this.fetchLatestAnalysis()
+      await this.loadDiagnosisOptions()
     })
   },
 
@@ -228,30 +304,201 @@ export default {
     if (this.freqChart) this.freqChart.dispose()
     if (this.healthTrendChart) this.healthTrendChart.dispose()
     if (this.resizeTimer) clearTimeout(this.resizeTimer)
+    if (this.contextDebounceTimer) clearTimeout(this.contextDebounceTimer)
+    if (this.batchPollingTimer) clearTimeout(this.batchPollingTimer)
+    this.requestSequence += 1
   },
 
   // =========================================================================
   // 方法
   // =========================================================================
   methods: {
-    async ensureDeviceContext() {
-      const routeDevice = this.$route && this.$route.query && this.$route.query.deviceCode
-      if (routeDevice) {
-        this.phmContext.deviceCode = String(routeDevice)
-        return
-      }
-      const response = await listDiagnosisDevices()
-      const devices = response.data || []
-      if (devices.length > 0) {
-        this.phmContext.deviceCode = devices[0].deviceCode
+    formatFileSize(bytes) {
+      const value = Number(bytes)
+      if (!Number.isFinite(value) || value <= 0) return '0 B'
+      if (value < 1024) return `${value} B`
+      if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+      return `${(value / 1024 / 1024).toFixed(1)} MB`
+    },
+
+    async loadDiagnosisOptions() {
+      this.optionsLoading = true
+      this.contextError = false
+      this.contextNotice = '正在读取可用设备、测点和模型版本…'
+      try {
+        const response = await getDiagnosisOptions()
+        const options = response.data || response || {}
+        this.deviceOptions = Array.isArray(options.devices) ? options.devices : []
+        this.pointOptions = Array.isArray(options.points) ? options.points : []
+        this.modelTypeOptions = Array.isArray(options.modelTypes) ? options.modelTypes : []
+        this.modelVersionOptions = Array.isArray(options.modelVersions) ? options.modelVersions : []
+        this.multiPointEnabled = options.multiPointEnabled === true
+        this.maxBatchPoints = Math.max(1, Number(options.maxBatchPoints) || 8)
+        this.restoreDiagnosisContext()
+      } catch (error) {
+        this.contextError = true
+        this.contextNotice = '诊断选项加载失败，请确认账号具有诊断查看权限。'
+        console.error('诊断选项加载失败', error)
+      } finally {
+        this.optionsLoading = false
       }
     },
-    phmRequestPayload() {
+    restoreDiagnosisContext() {
+      const query = (this.$route && this.$route.query) || {}
+      let saved = {}
+      try {
+        saved = JSON.parse(window.localStorage.getItem('sensor.diagnosis.context.v2') || 'null') ||
+          JSON.parse(window.localStorage.getItem('sensor.diagnosis.context.v1') || '{}')
+      } catch (error) {
+        saved = {}
+      }
+
+      const routeDevice = String(query.deviceCode || '').trim()
+      const routePoints = String(query.pointIds || query.pointId || '').split(',').map(item => item.trim()).filter(Boolean)
+      const routePoint = routePoints[0] || ''
+      const routeModelType = String(query.modelType || '').trim()
+      const routeModelVersion = String(query.modelVersion || '').trim()
+      let deviceCode = routeDevice || String(saved.deviceCode || '').trim()
+      let pointIds = routePoints.length ? routePoints
+        : (Array.isArray(saved.pointIds) ? saved.pointIds.map(String) : [String(saved.pointId || '').trim()].filter(Boolean))
+      let pointId = pointIds[0] || ''
+      let modelType = routeModelType || String(saved.modelType || '').trim()
+      let modelVersion = routeModelVersion || String(saved.modelVersion || '').trim()
+
+      if (!this.deviceOptions.some(item => item.deviceCode === deviceCode)) deviceCode = ''
+      const point = this.pointOptions.find(item => String(item.id) === pointId)
+      if (!point || (routeDevice && !routePoint && point.deviceCode !== routeDevice)) {
+        pointId = ''
+      } else if (point) {
+        // 测点是设备归属和通道的可信来源。
+        deviceCode = point.deviceCode
+      }
+      pointIds = pointIds.filter(id => this.pointOptions.some(item => String(item.id) === id && (!deviceCode || item.deviceCode === deviceCode)))
+      if (!this.multiPointEnabled) pointIds = pointIds.slice(0, 1)
+      pointIds = pointIds.slice(0, this.maxBatchPoints)
+
+      if (!this.modelTypeOptions.some(item => item.value === modelType)) modelType = ''
+      const version = this.modelVersionOptions.find(item => item.modelType === modelType && item.semanticVersion === modelVersion)
+      if (!version || !version.available) modelVersion = ''
+
+      this.selectedDeviceCode = deviceCode
+      this.selectedPointIds = pointIds
+      this.activePointId = pointIds[0] || ''
+      this.selectedModelType = modelType
+      this.selectedModelVersion = modelVersion
+      this.contextInitialized = true
+      this.updateTrustedPointContext()
+      this.persistDiagnosisContext()
+      if (this.contextComplete) {
+        this.contextNotice = '上下文已就绪，请为每个测点配置数据文件后开始诊断。'
+      } else {
+        this.contextNotice = '请选择设备、振动测点、模型类型和可执行版本。'
+      }
+    },
+    pointOptionLabel(item) {
+      const point = item.pointName || item.pointCode || `测点 ${item.id}`
+      const device = item.deviceName || item.deviceCode || '未知设备'
+      const channel = item.channelId == null ? '通道未配置' : `通道 ${item.channelId}`
+      return `${point} / ${device} / ${channel}`
+    },
+    versionOptionLabel(item) {
+      return `${item.semanticVersion} · ${item.status}${item.available ? '' : ' · 不可用'}`
+    },
+    updateTrustedPointContext() {
+      const point = this.selectedPointOption
+      this.phmContext.deviceCode = this.selectedDeviceCode
+      this.phmContext.pointId = point ? String(point.id) : ''
+      this.phmContext.channelId = point && point.channelId != null ? point.channelId : ''
+    },
+    persistDiagnosisContext() {
+      if (!this.contextInitialized) return
+      const context = {
+        deviceCode: this.selectedDeviceCode,
+        pointIds: this.selectedPointIds,
+        modelType: this.selectedModelType,
+        modelVersion: this.selectedModelVersion
+      }
+      try {
+        if (this.contextComplete) {
+          window.localStorage.setItem('sensor.diagnosis.context.v2', JSON.stringify(context))
+        }
+      } catch (error) {
+        // 隐私模式或存储配额不足不影响页面使用。
+      }
+      if (this.$route && this.$router) {
+        const query = Object.assign({}, this.$route.query)
+        ;['deviceCode', 'pointId', 'pointIds', 'channelId', 'modelType', 'modelVersion'].forEach(key => delete query[key])
+        Object.keys(context).forEach(key => {
+          if (Array.isArray(context[key]) && context[key].length) query[key] = context[key].join(',')
+          else if (context[key] !== '' && context[key] != null) query[key] = String(context[key])
+        })
+        const same = JSON.stringify(query) === JSON.stringify(this.$route.query || {})
+        if (!same) this.$router.replace({ path: this.$route.path, query }).catch(() => {})
+      }
+    },
+    handleDeviceChange(deviceCode) {
+      this.selectedPointIds = this.selectedPointIds.filter(id => this.pointOptions.some(point => String(point.id) === String(id) && point.deviceCode === deviceCode))
+      this.activePointId = this.selectedPointIds[0] || ''
+      this.handleContextChange()
+    },
+    handlePointChange(pointIds) {
+      let selected = Array.isArray(pointIds) ? pointIds.map(String) : []
+      if (!this.multiPointEnabled) selected = selected.slice(-1)
+      if (selected.length > this.maxBatchPoints) {
+        selected = selected.slice(0, this.maxBatchPoints)
+        this.$message.warning(`单批最多选择 ${this.maxBatchPoints} 个测点`)
+      }
+      const point = this.pointOptions.find(item => String(item.id) === String(selected[0]))
+      if (point) this.selectedDeviceCode = point.deviceCode
+      this.selectedPointIds = selected.filter(id => this.pointOptions.some(item => String(item.id) === id && item.deviceCode === this.selectedDeviceCode))
+      this.activePointId = this.selectedPointIds[0] || ''
+      this.handleContextChange()
+    },
+    handleModelTypeChange() {
+      const version = this.modelVersionOptions.find(item => item.modelType === this.selectedModelType && item.semanticVersion === this.selectedModelVersion)
+      if (!version) this.selectedModelVersion = ''
+      this.handleContextChange()
+    },
+    handleVersionChange() {
+      this.handleContextChange()
+    },
+    handleContextChange() {
+      this.requestSequence += 1
+      if (this.contextDebounceTimer) clearTimeout(this.contextDebounceTimer)
+      this.selectedMatFile = ''
+      this.matFileList = []
+      this.pointFileMappings = {}
+      this.pendingUploadFiles = {}
+      this.diagnosisBatchId = ''
+      this.diagnosisBatchStatus = ''
+      this.diagnosisBatchItems = []
+      if (this.batchPollingTimer) clearTimeout(this.batchPollingTimer)
+      this.noAttachment = false
+      this.contextError = false
+      this.clearDiagnosis()
+      this.updateTrustedPointContext()
+      this.persistDiagnosisContext()
+      if (this.contextComplete) {
+        this.contextNotice = '上下文已更新，请配置每个测点的数据文件。'
+      } else {
+        this.polling = false
+        this.contextNotice = '请选择设备、振动测点、模型类型和可执行版本。'
+      }
+    },
+    scheduleContextAnalysis() {
+      if (this.contextDebounceTimer) clearTimeout(this.contextDebounceTimer)
+      this.contextDebounceTimer = setTimeout(() => {
+        this.contextDebounceTimer = null
+        this.runContextAnalysis()
+      }, 300)
+    },
+    phmRequestPayload(pointId) {
       const payload = {}
-      const deviceCode = this.deviceCode || this.phmContext.deviceCode
+      const deviceCode = this.selectedDeviceCode || this.phmContext.deviceCode
       if (deviceCode) payload.deviceCode = deviceCode
-      if (this.phmContext.channelId) payload.channelId = this.phmContext.channelId
-      if (this.phmContext.pointId) payload.pointId = this.phmContext.pointId
+      const point = this.pointOptions.find(item => String(item.id) === String(pointId || this.activePointId || this.selectedPointIds[0]))
+      if (point && point.channelId != null) payload.channelId = point.channelId
+      if (point) payload.pointId = String(point.id)
       return payload
     },
 
@@ -815,27 +1062,10 @@ export default {
     // API 调用方法
     // -----------------------------------------------------------------------
 
-    /**
-     * 手动刷新：重置为自动模式，读取后端目录中最新的文件进行分析
-     * 点击刷新按钮后恢复读取后端目录最新文件的行为
-     */
     async handleRefresh() {
-      this.userManualMode = false
-      this.selectedMatFile = ''
-      this.localFilePath = ''
-      this.polling = true
-      try {
-        await Promise.all([
-          this.checkHealth(),
-          this.fetchMatFiles(),
-          this.fetchLatestAnalysis()
-        ])
-        this.$message.success('已刷新，正在读取目录最新文件')
-      } catch (error) {
-        // ignore
-      } finally {
-        this.polling = false
-      }
+      if (!this.contextComplete) return
+      if (this.diagnosisBatchId) await this.pollDiagnosisBatch(true)
+      else await this.refreshServerFiles()
     },
 
     /**
@@ -858,79 +1088,140 @@ export default {
       }
     },
 
-    /**
-     * 获取后端 DATA_DIR 中的 .mat / .npy 文件列表
-     * GET /mat-files
-     */
-    async fetchMatFiles() {
+    /** 获取当前设备已安全登记的诊断输入附件。 */
+    async fetchMatFiles(pointId = this.activeMappingPointId || this.activePointId || this.selectedPointIds[0]) {
+      if (!this.contextComplete) return []
       try {
-        const res = await listMatFiles(this.currentServiceBaseURL, this.phmRequestPayload().deviceCode)
+        const res = await listMatFiles(this.currentServiceBaseURL, this.selectedDeviceCode, pointId)
         const data = this.normalizeAnalyzeResponse(res)
         this.matFileList = Array.isArray(data) ? data : []
-        // 自动选中最新文件（列表已按 mtime 降序排列）
-        const latestMat = this.matFileList[0]
-        const latestId = latestMat ? latestMat.id : ''
-        if (latestId && !this.selectedMatFile) {
-          this.selectedMatFile = latestId
-        }
+        const mapping = this.pointFileMappings[String(pointId)] || {}
+        this.selectedMatFile = mapping.attachmentId || ''
+        return this.matFileList
       } catch (error) {
         if (error && error.response && error.response.status !== 500) {
           console.error('获取 mat 文件列表失败', error)
         }
+        throw error
       }
     },
 
-    /**
-     * 获取最新文件的诊断分析结果
-     * GET /analyze（无参数时自动分析最新文件）
-     */
-    async fetchLatestAnalysis() {
-      // 防并发：如果已有请求在进行中，直接返回
-      if (this.polling) return
-      // 如果文件列表为空，说明数据目录无文件，跳过分析避免无意义的 404
-      if (!this.matFileList || this.matFileList.length === 0) {
-        this.clearDiagnosis()
-        return
+    async handleUploadDialogOpen() {
+      this.pendingUploadFile = null
+      if (!this.contextComplete) return
+      this.selectedPointOptions.forEach(point => {
+        const key = String(point.id)
+        if (!this.pointFileMappings[key]) this.$set(this.pointFileMappings, key, {})
+      })
+      this.activeMappingPointId = this.activeMappingPointId || this.selectedPointIds[0]
+      this.serverFileLoading = true
+      try {
+        await this.fetchMatFiles(this.activeMappingPointId)
+      } catch (error) {
+        this.$message.error('服务器文件列表刷新失败')
+      } finally {
+        this.serverFileLoading = false
       }
+    },
+
+    handleUploadDialogClosed() {
+      this.pendingUploadFile = null
+      if (this.$refs.nativeFileInput) this.$refs.nativeFileInput.value = ''
+    },
+
+    async refreshServerFiles() {
+      this.serverFileLoading = true
+      try {
+        await this.fetchMatFiles(this.activeMappingPointId || this.selectedPointIds[0])
+      } catch (error) {
+        this.$message.error('服务器文件列表刷新失败')
+      } finally {
+        this.serverFileLoading = false
+      }
+    },
+
+    async selectMappingPoint(pointId) {
+      this.activeMappingPointId = String(pointId)
+      this.pendingUploadFile = this.pendingUploadFiles[String(pointId)] || null
+      await this.refreshServerFiles()
+    },
+
+    async runContextAnalysis() {
+      if (!this.contextComplete) return
+      const sequence = ++this.requestSequence
       this.polling = true
+      this.contextError = false
+      this.noAttachment = false
+      this.contextNotice = '正在定位最新诊断文件…'
+      this.clearDiagnosis()
       this.resultState = 'running'
       try {
-        const res = await analyzeLatestFile(this.selectedMatFile || null, this.phmRequestPayload(), this.currentServiceBaseURL)
+        await this.checkHealth()
+        const files = await this.fetchMatFiles()
+        if (sequence !== this.requestSequence) return
+        if (!files.length) {
+          this.clearDiagnosis()
+          this.noAttachment = true
+          this.contextNotice = '当前设备暂无诊断文件。'
+          return
+        }
+        const attachmentId = this.selectedMatFile || files[0].id
+        this.selectedMatFile = attachmentId
+        this.contextNotice = '正在执行指定模型版本的诊断…'
+        const res = await inferWithAttachment({
+          ...this.phmRequestPayload(),
+          attachmentId,
+          analysisMode: 'latest',
+          modelVersion: this.selectedModelVersion
+        }, this.currentServiceBaseURL)
+        if (sequence !== this.requestSequence) return
         const data = this.normalizeAnalyzeResponse(res)
-        if (!data || !Object.keys(data).length) return
+        if (!data || !Object.keys(data).length) throw new Error('分析完成但未返回有效结果')
+        if ((data.modelType && data.modelType !== this.selectedModelType) ||
+          (data.modelVersion && data.modelVersion !== this.selectedModelVersion)) {
+          throw new Error('推理服务实际执行的模型与所选上下文不一致')
+        }
         this.applyDiagnosis(data)
         this.appendLocalHistory(data)
-        if (data.sourceName) this.selectedMatFile = data.sourceName
-        else if (data.filename) this.selectedMatFile = data.filename
+        this.contextNotice = ''
       } catch (error) {
-        if (error && error.response && error.response.status !== 500) {
-          console.error('获取最新分析结果失败', error)
-        }
+        if (sequence !== this.requestSequence) return
+        const backendMessage = error && error.response && error.response.data && error.response.data.msg
         this.clearDiagnosis()
+        this.resultState = 'failed'
+        this.contextError = true
+        this.contextNotice = backendMessage || error.message || '诊断失败，请检查推理服务和模型制品。'
+        console.error('诊断上下文分析失败', error)
       } finally {
-        this.polling = false
+        if (sequence === this.requestSequence) this.polling = false
       }
     },
 
-    /**
-     * 根据指定文件路径获取诊断结果
-     * POST /infer
-     *
-     * @param {string} filePath - 文件路径或文件名
-     */
+    async fetchLatestAnalysis() {
+      return this.runContextAnalysis()
+    },
+
+    /** 根据可信附件 ID 创建诊断任务并获取结果。 */
     async fetchLatest(attachmentId) {
       const targetId = attachmentId || this.selectedMatFile
-      if (!targetId) {
+      if (!targetId || !this.contextComplete) {
         this.clearDiagnosis()
         return
       }
+      const sequence = ++this.requestSequence
       this.polling = true
+      this.contextError = false
+      this.contextNotice = '正在分析所选诊断文件…'
+      this.clearDiagnosis()
+      this.resultState = 'running'
       try {
         const res = await inferWithAttachment({
           ...this.phmRequestPayload(),
           attachmentId: targetId,
           analysisMode: 'latest',
+          modelVersion: this.selectedModelVersion
         }, this.currentServiceBaseURL)
+        if (sequence !== this.requestSequence) return
         const data = this.normalizeAnalyzeResponse(res)
         if (!data || !Object.keys(data).length) {
           this.clearDiagnosis()
@@ -938,43 +1229,52 @@ export default {
           return
         }
         this.applyDiagnosis(data)
+        this.contextNotice = ''
         this.lastAnalyzeResultText = data.diagnosisResult || data.label || ''
         this.appendLocalHistory(data)
-        if (data.sourceName) this.selectedMatFile = data.sourceName
-        else if (data.filename) this.selectedMatFile = data.filename
         // 如果是从上传弹窗触发的，关闭弹窗
         if (this.uploadDialogVisible) {
           this.uploadDialogVisible = false
           this.$message.success('文件已提交分析')
         }
       } catch (error) {
+        if (sequence !== this.requestSequence) return
         this.clearDiagnosis()
+        this.resultState = 'failed'
+        this.contextError = true
+        this.contextNotice = (error && error.message) || '分析失败，请检查文件或推理服务。'
         if (error && error.response && error.response.status !== 500) {
           console.error('获取最新推理结果失败', error)
         }
-        this.$message.error('分析失败，请检查文件路径或后端服务')
+        this.$message.error('分析失败，请检查附件或后端服务')
       } finally {
-        this.polling = false
+        if (sequence === this.requestSequence) this.polling = false
       }
     },
 
-    /** 下拉选择文件变更时，触发分析 */
+    /** 服务器文件选择只更新附件 ID，分析由显式按钮触发。 */
     handleSelectedMatFileChange(val) {
       const selected = String(val || '').trim()
       if (!selected) return
+      this.selectedMatFile = val
+      const file = this.matFileList.find(item => String(item.id) === selected)
+      const pointId = String(this.activeMappingPointId || this.selectedPointIds[0])
+      this.$set(this.pointFileMappings, pointId, {
+        attachmentId: val,
+        attachmentName: file ? file.name : '',
+        sourceType: file ? file.sourceType : 'SERVER_DIRECTORY'
+      })
+      this.$delete(this.pendingUploadFiles, pointId)
+      this.pendingUploadFile = null
       this.userManualMode = true
-      this.fetchLatest(selected)
     },
 
-    async handleModelTypeChange() {
-      this.resultState = 'running'
-      // 清空旧模型文件选择，不同服务数据目录不同
-      this.selectedMatFile = ''
-      this.userManualMode = false
-      this.matFileList = []
-      // Java 平台根据模型类型路由到统一内部推理服务。
-      await this.fetchMatFiles()
-      await this.fetchLatestAnalysis()
+    analyzeSelectedServerFile() {
+      if (!this.selectedMatFile) {
+        this.$message.warning('请选择服务器文件')
+        return
+      }
+      this.startBatchAnalysis()
     },
 
     // -----------------------------------------------------------------------
@@ -985,7 +1285,7 @@ export default {
     handleNativeFileChange(e) {
       const files = e.target && e.target.files
       if (files && files.length > 0) {
-        this.uploadSelectedFile(files[0])
+        this.selectPendingUploadFile(files[0])
       }
       // 重置 input，允许重复选择同名文件
       if (this.$refs.nativeFileInput) {
@@ -997,21 +1297,195 @@ export default {
     handleFileDrop(e) {
       const files = e.dataTransfer && e.dataTransfer.files
       if (files && files.length > 0) {
-        const file = files[0]
-        const suffix = String(file.name || '').toLowerCase()
-        if (!suffix.endsWith('.mat') && !suffix.endsWith('.npy')) {
-          this.$message.error('仅支持 .mat 或 .npy 文件')
-          return
-        }
-        this.uploadSelectedFile(file)
+        this.selectPendingUploadFile(files[0])
       }
     },
 
-    /**
-     * 上传文件到 Python 推理服务进行分析
-     * POST /analyze/upload（multipart/form-data）
-     */
-    async uploadSelectedFile(file) {
+    selectPendingUploadFile(file) {
+      const suffix = String(file && file.name || '').toLowerCase()
+      if (!suffix.endsWith('.mat') && !suffix.endsWith('.npy')) {
+        this.pendingUploadFile = null
+        this.$message.error('仅支持 .mat 或 .npy 文件')
+        return
+      }
+      if (Number(file.size || 0) <= 0 || Number(file.size) > 128 * 1024 * 1024) {
+        this.pendingUploadFile = null
+        this.$message.error('文件必须大于 0 且不能超过 128MB')
+        return
+      }
+      this.pendingUploadFile = file
+      const pointId = String(this.activeMappingPointId || this.selectedPointIds[0])
+      this.$set(this.pendingUploadFiles, pointId, file)
+      this.$set(this.pointFileMappings, pointId, {
+        localFile: file,
+        attachmentId: '',
+        attachmentName: file.name,
+        sourceType: 'BROWSER_UPLOAD'
+      })
+      this.selectedMatFile = ''
+    },
+
+    async uploadPointFile(pointId, file) {
+      const formData = new FormData()
+      formData.append('file', file)
+      const context = this.phmRequestPayload(pointId)
+      formData.append('device_code', context.deviceCode)
+      formData.append('point_id', context.pointId)
+      if (context.channelId != null) formData.append('channel_id', context.channelId)
+      const response = await uploadDiagnosisToInferenceService(formData, this.currentServiceBaseURL, this.selectedModelVersion)
+      const uploaded = this.normalizeAnalyzeResponse(response)
+      if (!uploaded || !uploaded.attachmentId) throw new Error(`测点 ${pointId} 上传成功但未返回附件 ID`)
+      this.$set(this.pointFileMappings, String(pointId), {
+        attachmentId: uploaded.attachmentId,
+        attachmentName: uploaded.filename || file.name,
+        sourceType: 'BROWSER_UPLOAD'
+      })
+      return uploaded
+    },
+
+    async startBatchAnalysis() {
+      if (!this.contextComplete || !this.fileMappingComplete) {
+        this.$message.warning('请先为每个测点配置一个数据文件')
+        return
+      }
+      this.uploading = true
+      this.polling = true
+      this.contextError = false
+      this.resultState = 'running'
+      this.contextNotice = '正在保存测点文件映射…'
+      try {
+        for (const row of this.mappingRows) {
+          if (row.localFile) await this.uploadPointFile(row.id, row.localFile)
+        }
+        const items = this.selectedPointIds.map(pointId => ({
+          pointId,
+          attachmentId: this.pointFileMappings[String(pointId)].attachmentId
+        }))
+        if (!this.multiPointEnabled) {
+          const item = items[0]
+          const response = await inferWithAttachment({
+            ...this.phmRequestPayload(item.pointId),
+            attachmentId: item.attachmentId,
+            modelVersion: this.selectedModelVersion,
+            analysisMode: 'manual'
+          }, this.currentServiceBaseURL)
+          const result = this.normalizeAnalyzeResponse(response)
+          this.applyDiagnosis(result)
+          this.appendLocalHistory(result)
+          this.resultState = 'done'
+          this.polling = false
+          this.contextNotice = ''
+          this.uploadDialogVisible = false
+          this.$message.success('诊断完成')
+          return
+        }
+        const requestId = typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `batch-${Date.now()}-${Math.random().toString(16).slice(2)}`
+        const response = await createDiagnosisBatch({
+          clientRequestId: requestId,
+          deviceCode: this.selectedDeviceCode,
+          modelType: this.selectedModelType,
+          modelVersion: this.selectedModelVersion,
+          items
+        })
+        const batch = this.normalizeAnalyzeResponse(response)
+        this.applyBatchSummary(batch)
+        this.uploadDialogVisible = false
+        this.contextNotice = '多测点诊断已开始，可在测点矩阵中查看进度。'
+        this.pollDiagnosisBatch()
+      } catch (error) {
+        this.polling = false
+        this.resultState = 'failed'
+        this.contextError = true
+        this.contextNotice = (error && error.message) || '创建诊断批次失败'
+        this.$message.error(this.contextNotice)
+      } finally {
+        this.uploading = false
+      }
+    },
+
+    applyBatchSummary(batch) {
+      if (!batch) return
+      this.diagnosisBatchId = batch.id || this.diagnosisBatchId
+      this.diagnosisBatchStatus = batch.status || ''
+      this.diagnosisBatchItems = Array.isArray(batch.items) ? batch.items : []
+      const active = this.diagnosisBatchItems.find(item => String(item.pointId) === String(this.activePointId))
+      const firstSucceeded = this.diagnosisBatchItems.find(item => item.status === 'SUCCEEDED' && item.result)
+      if (active && active.result) this.applyDiagnosis(active.result)
+      else if (firstSucceeded) this.selectBatchPoint(firstSucceeded)
+      const terminal = ['SUCCEEDED', 'PARTIAL', 'FAILED'].includes(this.diagnosisBatchStatus)
+      this.resultState = terminal
+        ? (this.diagnosisBatchStatus === 'FAILED' ? 'failed' : 'done')
+        : 'running'
+      this.polling = !terminal
+      if (terminal) {
+        if (this.diagnosisBatchStatus === 'PARTIAL') this.contextNotice = '批次已完成，部分测点失败，可重试失败项。'
+        else if (this.diagnosisBatchStatus === 'FAILED') this.contextNotice = '批次执行失败，请查看各测点原因。'
+        else this.contextNotice = ''
+      }
+    },
+
+    async pollDiagnosisBatch(manual = false) {
+      if (!this.diagnosisBatchId) return
+      if (this.batchPollingTimer) clearTimeout(this.batchPollingTimer)
+      try {
+        const response = await getDiagnosisBatch(this.diagnosisBatchId)
+        this.applyBatchSummary(this.normalizeAnalyzeResponse(response))
+      } catch (error) {
+        if (manual) this.$message.error('批次状态刷新失败')
+      }
+      if (!['SUCCEEDED', 'PARTIAL', 'FAILED'].includes(this.diagnosisBatchStatus)) {
+        this.batchPollingTimer = setTimeout(() => this.pollDiagnosisBatch(), 1000)
+      }
+    },
+
+    selectBatchPoint(item) {
+      if (!item) return
+      this.activePointId = String(item.pointId)
+      this.updateTrustedPointContext()
+      if (item.result) {
+        this.applyDiagnosis(item.result)
+        this.appendLocalHistory(item.result)
+      } else {
+        this.clearDiagnosis()
+        this.resultState = item.status === 'FAILED' || item.status === 'INVALID' ? 'failed' : 'running'
+      }
+    },
+
+    async retryFailedPoints() {
+      if (!this.diagnosisBatchId || !this.batchHasFailures) return
+      this.polling = true
+      try {
+        const response = await retryDiagnosisBatch(this.diagnosisBatchId)
+        this.applyBatchSummary(this.normalizeAnalyzeResponse(response))
+        this.contextNotice = '失败测点已重新排队。'
+        this.pollDiagnosisBatch()
+      } catch (error) {
+        this.polling = false
+        this.$message.error((error && error.message) || '重试失败')
+      }
+    },
+
+    batchItemStatusText(status) {
+      if (status === 'SUCCEEDED') return '完成'
+      if (status === 'RUNNING') return '分析中'
+      if (status === 'PENDING') return '排队中'
+      if (status === 'INVALID') return '输入无效'
+      if (status === 'FAILED') return '失败'
+      return '待配置'
+    },
+
+    /** 上传到 Java 安全附件存储，再用返回的附件 ID 创建异步诊断任务。 */
+    async uploadSelectedFile(file = this.pendingUploadFile) {
+      if (!this.contextComplete) {
+        this.$message.warning('请先完成设备、测点、模型类型和版本选择')
+        return
+      }
+      if (!file) {
+        this.$message.warning('请先选择本机文件')
+        return
+      }
       const suffix = String(file.name || '').toLowerCase()
       if (!suffix.endsWith('.mat') && !suffix.endsWith('.npy')) {
         this.$message.error('仅支持 .mat 或 .npy 文件')
@@ -1021,6 +1495,7 @@ export default {
       this.uploading = true
       this.polling = true
       this.resultState = 'running'
+      let attachmentStored = false
       try {
         const formData = new FormData()
         formData.append('file', file)
@@ -1028,18 +1503,38 @@ export default {
         if (phmPayload.deviceCode) formData.append('device_code', phmPayload.deviceCode)
         if (phmPayload.channelId) formData.append('channel_id', phmPayload.channelId)
         if (phmPayload.pointId) formData.append('point_id', phmPayload.pointId)
-        const response = await uploadDiagnosisToInferenceService(formData, this.currentServiceBaseURL)
-        const data = this.normalizeAnalyzeResponse(response)
+        const response = await uploadDiagnosisToInferenceService(formData, this.currentServiceBaseURL, this.selectedModelVersion)
+        const uploaded = this.normalizeAnalyzeResponse(response)
+        if (!uploaded || !uploaded.attachmentId) throw new Error('上传成功但未返回附件 ID')
+        attachmentStored = true
+        this.selectedMatFile = uploaded.attachmentId
+        const inferenceResponse = await inferWithAttachment({
+          ...phmPayload,
+          attachmentId: uploaded.attachmentId,
+          analysisMode: 'manual',
+          modelVersion: this.selectedModelVersion
+        }, this.currentServiceBaseURL)
+        const data = this.normalizeAnalyzeResponse(inferenceResponse)
+        if (!data || !Object.keys(data).length) throw new Error('分析完成但未返回有效结果')
         this.applyDiagnosis(data)
-        this.selectedMatFile = data.attachmentId || ''
+        this.appendLocalHistory(data)
+        this.contextNotice = ''
+        this.pendingUploadFile = null
+        try {
+          await this.fetchMatFiles()
+        } catch (refreshError) {
+          console.warn('分析成功，但附件列表刷新失败', refreshError)
+        }
+        this.selectedMatFile = uploaded.attachmentId
         this.uploadDialogVisible = false
-        this.$message.success('文件已提交分析')
+        this.$message.success('文件已上传并完成分析')
       } catch (error) {
         this.clearDiagnosis()
         if (error && error.response && error.response.status !== 500) {
           console.error('文件上传失败', error)
         }
-        this.$message.error('上传失败，请检查后端服务或文件格式')
+        if (attachmentStored) this.$message.error('文件已上传，但诊断任务执行失败')
+        else this.$message.error('文件上传失败')
       } finally {
         this.uploading = false
         this.polling = false

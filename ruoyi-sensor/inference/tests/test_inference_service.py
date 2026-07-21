@@ -106,6 +106,54 @@ class InferenceServiceContractTest(unittest.TestCase):
                     service.infer({"modelType": "gear", "filePath": str(source)})
         self.assertEqual(error.exception.status_code, 403)
 
+    def test_model_artifact_path_cannot_escape_model_root(self):
+        with tempfile.TemporaryDirectory() as root_dir, tempfile.TemporaryDirectory() as outside_dir:
+            outside = Path(outside_dir) / "model.pth"
+            outside.write_bytes(b"model")
+            with patch.object(service, "MODEL_ROOT", Path(root_dir).resolve()):
+                with self.assertRaisesRegex(ValueError, "outside INFERENCE_MODEL_ROOT"):
+                    service._resolve_model_artifact(str(outside))
+
+    def test_result_cache_is_isolated_by_model_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "sample.npy"
+            source.write_bytes(b"sample")
+            calls = []
+
+            def compute(version):
+                calls.append(version)
+                return {"version": version}
+
+            service._response_cache.clear()
+            first = service._get_cached_or_compute(source, "gear", "1.0.0", compute, "1.0.0")
+            cached = service._get_cached_or_compute(source, "gear", "1.0.0", compute, "unexpected")
+            second = service._get_cached_or_compute(source, "gear", "2.0.0", compute, "2.0.0")
+            self.assertEqual(first, cached)
+            self.assertEqual(second["version"], "2.0.0")
+            self.assertEqual(calls, ["1.0.0", "2.0.0"])
+
+    def test_model_bundle_cache_uses_bounded_lru(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            artifacts = []
+            for index in range(3):
+                artifact = root / f"model-{index}.pth"
+                artifact.write_bytes(f"model-{index}".encode())
+                artifacts.append(artifact)
+
+            service._model_bundle_cache.clear()
+            loader_result = (object(), {}, [], {})
+            with patch.object(service, "MODEL_ROOT", root), \
+                 patch.object(service, "MODEL_CACHE_SIZE", 2), \
+                 patch.object(service, "load_gear_model", return_value=loader_result):
+                for index, artifact in enumerate(artifacts):
+                    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+                    service._load_model_bundle("gear", f"1.0.{index}", artifact.name, digest)
+
+            self.assertEqual(len(service._model_bundle_cache), 2)
+            self.assertFalse(any(":1.0.0:" in key for key in service._model_bundle_cache))
+            self.assertTrue(any(":1.0.2:" in key for key in service._model_bundle_cache))
+
 
 if __name__ == "__main__":
     unittest.main()

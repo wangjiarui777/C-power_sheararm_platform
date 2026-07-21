@@ -181,6 +181,8 @@ CREATE TABLE phm_attachment (
   id BIGINT NOT NULL COMMENT 'Primary key',
   biz_type VARCHAR(32) NOT NULL COMMENT 'morphology/system/report',
   biz_id BIGINT DEFAULT NULL,
+  point_id BIGINT DEFAULT NULL,
+  channel_id INT DEFAULT NULL,
   file_name VARCHAR(255) NOT NULL,
   file_url VARCHAR(500) NOT NULL,
   file_ext VARCHAR(32) DEFAULT NULL,
@@ -190,6 +192,7 @@ CREATE TABLE phm_attachment (
   remark VARCHAR(500) DEFAULT NULL,
   PRIMARY KEY (id),
   KEY idx_phm_attachment_biz (biz_type, biz_id),
+  KEY idx_phm_attachment_point (biz_id, point_id, create_time),
   KEY idx_phm_attachment_report (report_type, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PHM attachment and service report';
 

@@ -10,27 +10,84 @@
         <span class="top-time">{{ lastUpdateText }}</span>
       </div>
       <div class="top-right">
-        <div class="model-picker">
-          <span class="model-picker-label">诊断模型</span>
-          <el-select
-            v-model="selectedModelType"
-            size="mini"
-            class="model-select"
-            popper-class="dark-select-dropdown"
-            :disabled="polling || uploading"
-            @change="handleModelTypeChange"
-          >
-            <el-option label="齿轮诊断模型" value="gear" />
-            <el-option label="轴承诊断模型" value="bearing" />
-          </el-select>
-        </div>
         <!-- 当前选中的文件名（溢出省略） -->
         <span class="top-file" :title="selectedFileLabel">{{ selectedFileLabel }}</span>
-        <el-button size="mini" type="success" plain @click="handleRefresh">刷新</el-button>
-        <el-button size="mini" type="primary" plain @click="uploadDialogVisible = true">上传</el-button>
+        <el-button size="mini" type="success" plain :disabled="!contextComplete" @click="handleRefresh">刷新状态</el-button>
+        <el-button size="mini" type="primary" plain :disabled="!contextComplete || polling" @click="uploadDialogVisible = true">配置文件并诊断</el-button>
         <el-button size="mini" type="warning" plain icon="el-icon-download" @click="downloadDialogVisible = true">历史下载</el-button>
       </div>
     </div>
+
+    <!-- 设备 → 测点 → 模型 → 版本，构成一次可追溯诊断的完整上下文。 -->
+    <section class="context-rail" :class="{ 'is-ready': contextComplete, 'is-loading': optionsLoading }" aria-label="诊断上下文">
+      <div class="context-heading">
+        <span class="context-kicker">DIAG CONTEXT</span>
+        <strong>诊断上下文</strong>
+        <span class="context-state">
+          <i class="context-state-dot" />{{ optionsLoading ? '正在装载选项' : (contextComplete ? '上下文就绪' : '等待完整选择') }}
+        </span>
+      </div>
+      <div class="context-field">
+        <label for="diagnosis-device">01 / 设备</label>
+        <el-select id="diagnosis-device" v-model="selectedDeviceCode" filterable clearable placeholder="选择设备" popper-class="dark-select-dropdown" :loading="optionsLoading" :disabled="optionsLoading || uploading" @change="handleDeviceChange">
+          <el-option v-for="item in deviceOptions" :key="item.deviceCode" :label="`${item.deviceName || '未命名设备'} · ${item.deviceCode}`" :value="item.deviceCode" />
+        </el-select>
+      </div>
+      <div class="context-link" aria-hidden="true">›</div>
+      <div class="context-field context-field-point">
+        <label for="diagnosis-point">02 / 测点</label>
+        <el-select id="diagnosis-point" v-model="selectedPointIds" multiple collapse-tags filterable clearable :multiple-limit="multiPointEnabled ? maxBatchPoints : 1" placeholder="选择振动测点" popper-class="dark-select-dropdown" :loading="optionsLoading" :disabled="optionsLoading || uploading" @change="handlePointChange">
+          <el-option v-for="item in availablePointOptions" :key="item.id" :label="pointOptionLabel(item)" :value="String(item.id)" />
+        </el-select>
+      </div>
+      <div class="context-link" aria-hidden="true">›</div>
+      <div class="context-field">
+        <label for="diagnosis-model">03 / 模型类型</label>
+        <el-select id="diagnosis-model" v-model="selectedModelType" filterable clearable placeholder="选择模型" popper-class="dark-select-dropdown" :disabled="optionsLoading || uploading" @change="handleModelTypeChange">
+          <el-option v-for="item in modelTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
+      </div>
+      <div class="context-link" aria-hidden="true">›</div>
+      <div class="context-field context-field-version">
+        <label for="diagnosis-version">04 / 模型版本</label>
+        <el-select id="diagnosis-version" v-model="selectedModelVersion" filterable clearable placeholder="选择可执行版本" popper-class="dark-select-dropdown" :disabled="!selectedModelType || optionsLoading || uploading" @change="handleVersionChange">
+          <el-option v-for="item in availableModelVersions" :key="`${item.modelType}-${item.semanticVersion}`" :label="versionOptionLabel(item)" :value="item.semanticVersion" :disabled="!item.available">
+            <span>{{ item.semanticVersion }}</span><span class="version-option-status" :class="`status-${String(item.status).toLowerCase()}`">{{ item.status }}{{ item.available ? '' : ' · 不可用' }}</span>
+          </el-option>
+        </el-select>
+      </div>
+      <div v-if="contextNotice || retiredVersionSelected" class="context-notice" :class="{ 'is-warning': retiredVersionSelected, 'is-error': contextError }" role="status">
+        <i :class="retiredVersionSelected ? 'el-icon-warning-outline' : (contextError ? 'el-icon-circle-close' : 'el-icon-info')" />
+        <span>{{ retiredVersionSelected ? '该 RETIRED 版本仅用于回溯诊断，不产生正式告警。' : contextNotice }}</span>
+        <el-button v-if="noAttachment" type="text" @click="uploadDialogVisible = true">选择诊断文件</el-button>
+      </div>
+    </section>
+
+    <section v-if="diagnosisBatchId" class="point-matrix" aria-label="多测点诊断进度">
+      <div class="point-matrix-head">
+        <div><span class="context-kicker">POINT MATRIX</span><strong>测点诊断总览</strong></div>
+        <div class="point-matrix-actions">
+          <span class="batch-progress">{{ batchProgressText }}</span>
+          <el-button v-if="batchHasFailures" type="warning" plain size="mini" :loading="polling" @click="retryFailedPoints">重试失败项</el-button>
+        </div>
+      </div>
+      <div class="point-matrix-grid">
+        <button
+          v-for="item in diagnosisBatchItems"
+          :key="item.pointId"
+          type="button"
+          class="point-cell"
+          :class="[`status-${String(item.status || '').toLowerCase()}`, { 'is-active': String(activePointId) === String(item.pointId) }]"
+          @click="selectBatchPoint(item)"
+        >
+          <span class="point-cell-code">CH {{ item.channelId == null ? '--' : item.channelId }}</span>
+          <strong>{{ item.pointName || item.pointCode || `测点 ${item.pointId}` }}</strong>
+          <span class="point-cell-status">{{ batchItemStatusText(item.status) }}</span>
+          <span v-if="item.result" class="point-cell-metric">健康 {{ item.result.healthIndex == null ? '--' : item.result.healthIndex }} · 风险 {{ item.result.riskLevel || '--' }}</span>
+          <span v-else-if="item.errorMessage" class="point-cell-error" :title="item.errorMessage">{{ item.errorMessage }}</span>
+        </button>
+      </div>
+    </section>
 
     <!-- ===== 三栏主体：左图表 | 中诊断核心 | 右辅助信息 ===== -->
     <div class="main-area">
@@ -247,36 +304,70 @@
     </el-dialog>
 
     <!-- ===== 上传弹窗 ===== -->
-    <el-dialog title="上传推理文件" :visible.sync="uploadDialogVisible" width="480px" append-to-body custom-class="dark-dialog">
+    <el-dialog title="多测点文件映射" :visible.sync="uploadDialogVisible" width="920px" append-to-body custom-class="dark-dialog mapping-dialog" @open="handleUploadDialogOpen" @closed="handleUploadDialogClosed">
       <div class="upload-dialog-body">
-        <el-alert title="支持 .mat 和 .npy 文件" type="info" show-icon :closable="false" class="upload-tip" />
-        <!-- 文件选择区域：native input 绕过 el-upload 兼容问题 -->
-        <div class="upload-dropzone" @click="$refs.nativeFileInput.click()" @dragover.prevent @drop.prevent="handleFileDrop">
-          <input
-            ref="nativeFileInput"
-            type="file"
-            accept=".mat,.npy"
-            style="display:none"
-            @change="handleNativeFileChange"
-          />
-          <i class="el-icon-upload" />
-          <div class="el-upload__text">将文件拖到这里，或<em>点击选择文件</em></div>
-          <div class="el-upload__tip">只接受 .mat / .npy 文件</div>
-        </div>
-        <!-- 已通过 Java 安全存储和权限校验的诊断输入附件 -->
-        <div class="mat-file-row">
-          <el-select v-model="selectedMatFile" filterable clearable placeholder="自动选择后端最新文件" popper-class="dark-select-dropdown" style="width: 100%" :disabled="polling || uploading" @change="handleSelectedMatFileChange">
-            <el-option
-              v-for="item in matFileList"
-              :key="item.id"
-              :label="(item.label || item.name) + (item.modelType ? ' / ' + (item.modelType === 'gear' ? '齿轮' : '轴承') : '')"
-              :value="item.id"
-            />
-          </el-select>
-        </div>
+        <el-alert title="每个测点需要一个 .mat 或 .npy 文件；本机文件将在开始诊断时上传" type="info" show-icon :closable="false" class="upload-tip" />
+        <div class="upload-context-summary">{{ selectedDeviceCode }} / {{ selectedPointLabel }} / {{ selectedModelLabel }} / {{ selectedModelVersion }}</div>
+        <el-table :data="mappingRows" size="mini" class="mapping-table" highlight-current-row @row-click="row => selectMappingPoint(row.id)">
+          <el-table-column label="测点" min-width="180">
+            <template slot-scope="scope"><strong>{{ scope.row.pointName || scope.row.pointCode }}</strong><small>CH {{ scope.row.channelId }}</small></template>
+          </el-table-column>
+          <el-table-column label="已映射文件" min-width="260" show-overflow-tooltip>
+            <template slot-scope="scope">{{ scope.row.attachmentName || '尚未配置' }}</template>
+          </el-table-column>
+          <el-table-column label="来源" width="100">
+            <template slot-scope="scope">{{ scope.row.localFile || scope.row.sourceType === 'BROWSER_UPLOAD' ? '本机上传' : (scope.row.attachmentId ? '服务器文件' : '--') }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="90" align="right">
+            <template slot-scope="scope"><el-button type="text" @click.stop="selectMappingPoint(scope.row.id)">配置</el-button></template>
+          </el-table-column>
+        </el-table>
+        <div v-if="activeMappingPointOption" class="mapping-editor-title">正在配置：{{ activeMappingPointOption.pointName || activeMappingPointOption.pointCode }} / CH {{ activeMappingPointOption.channelId }}</div>
+        <el-tabs v-if="activeMappingPointOption" v-model="uploadSourceTab" stretch>
+          <el-tab-pane label="本机上传" name="local">
+            <div class="upload-dropzone" @click="$refs.nativeFileInput.click()" @dragover.prevent @drop.prevent="handleFileDrop">
+              <input ref="nativeFileInput" type="file" accept=".mat,.npy" style="display:none" @change="handleNativeFileChange" />
+              <i class="el-icon-upload" />
+              <div class="el-upload__text">将文件拖到这里，或<em>点击选择文件</em></div>
+              <div class="el-upload__tip">只接受 .mat / .npy 文件，最大 128MB</div>
+            </div>
+            <div v-if="pendingUploadFile" class="selected-local-file">
+              <i class="el-icon-document" />
+              <span>{{ pendingUploadFile.name }}</span>
+              <small>{{ formatFileSize(pendingUploadFile.size) }}</small>
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="服务器文件" name="server">
+            <div class="server-file-toolbar">
+              <span>仅显示已安全登记并绑定当前测点的文件</span>
+              <el-button type="text" icon="el-icon-refresh" :loading="serverFileLoading" @click="refreshServerFiles">刷新</el-button>
+            </div>
+            <el-table
+              v-if="matFileList.length"
+              v-loading="serverFileLoading"
+              :data="matFileList"
+              max-height="250"
+              highlight-current-row
+              size="mini"
+              @current-change="row => handleSelectedMatFileChange(row && row.id)"
+            >
+              <el-table-column width="48" align="center">
+                <template slot-scope="scope"><el-radio v-model="selectedMatFile" :label="scope.row.id"><span /></el-radio></template>
+              </el-table-column>
+              <el-table-column prop="name" label="文件名" min-width="180" show-overflow-tooltip />
+              <el-table-column label="来源" width="80"><template slot-scope="scope">{{ scope.row.sourceType === 'SERVER_DIRECTORY' ? '目录接入' : '本机上传' }}</template></el-table-column>
+              <el-table-column label="大小" width="90"><template slot-scope="scope">{{ formatFileSize(scope.row.fileSize) }}</template></el-table-column>
+              <el-table-column label="接入时间" width="150"><template slot-scope="scope">{{ parseTime(scope.row.createdAt, '{y}-{m}-{d} {h}:{i}') }}</template></el-table-column>
+            </el-table>
+            <el-empty v-else :image-size="64" description="当前设备暂无服务器文件">
+              <div class="server-inbox-hint">请将文件放入：接入根目录 / {{ selectedDeviceCode }} / {{ activeMappingPointOption.pointCode }} /</div>
+            </el-empty>
+          </el-tab-pane>
+        </el-tabs>
       </div>
       <span slot="footer" class="dialog-footer">
         <el-button @click="uploadDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="uploading || polling" :disabled="!fileMappingComplete" @click="startBatchAnalysis">开始批量诊断</el-button>
       </span>
     </el-dialog>
   </div>

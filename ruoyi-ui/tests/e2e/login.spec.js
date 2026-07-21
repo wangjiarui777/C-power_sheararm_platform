@@ -23,4 +23,6 @@ test('authenticated PHM smoke path', async ({ page }) => {
   await expect(page).not.toHaveURL(/\/login/)
   await page.goto('/monitor/diagnosis')
   await expect(page.locator('body')).toContainText(/诊断|推理/)
+  await expect(page.locator('body')).toContainText('选择测点')
+  await expect(page.getByRole('button', { name: /配置测点文件/ })).toBeVisible()
 })

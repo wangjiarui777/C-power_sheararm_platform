@@ -145,6 +145,11 @@ public class ModelReleaseController extends BaseController
         release.setConfidenceThreshold(metrics.getConfidenceThreshold());
         release.setConsecutiveHits(metrics.getConsecutiveHits());
         release.setCooldownMinutes(metrics.getCooldownMinutes());
+        String metadataError = validateArtifactMetadata(release);
+        if (metadataError != null)
+        {
+            return error(metadataError);
+        }
         String error = validateQualityMetrics(release);
         if (error != null)
         {
@@ -177,6 +182,11 @@ public class ModelReleaseController extends BaseController
         {
             return null;
         }
+        String artifactError = validateArtifactMetadata(release);
+        if (artifactError != null)
+        {
+            return artifactError;
+        }
         String metricsError = validateQualityMetrics(release);
         if (metricsError != null)
         {
@@ -188,6 +198,20 @@ public class ModelReleaseController extends BaseController
                 release.getShadowEndTime().toInstant()).toDays() < 14)
         {
             return "模型必须完成至少 14 天且验收通过的影子运行";
+        }
+        return null;
+    }
+
+    private String validateArtifactMetadata(ModelReleaseEntity release)
+    {
+        if (release == null || isBlank(release.getArtifactUri()))
+        {
+            return "可执行模型必须登记模型制品路径";
+        }
+        if (isBlank(release.getFileSha256())
+            || !release.getFileSha256().matches("(?i)[0-9a-f]{64}"))
+        {
+            return "可执行模型必须登记有效的模型文件 SHA-256";
         }
         return null;
     }

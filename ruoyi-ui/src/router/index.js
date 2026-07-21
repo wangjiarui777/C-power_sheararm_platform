@@ -59,6 +59,11 @@ export const constantRoutes = [
     hidden: true
   },
   {
+    path: '/monitoring-data',
+    redirect: '/monitoring-center/index',
+    hidden: true
+  },
+  {
     path: '',
     component: Layout,
     redirect: 'index',
@@ -102,10 +107,10 @@ export const dynamicRoutes = [
     permissions: ['phm:device:query'],
     children: [
       {
-        path: ':deviceId(\\d+)',
+        path: ':deviceId(\\d+)?',
         component: () => import('@/views/phm/brain/index'),
-        name: 'PhmBrain',
-        meta: { title: '机器大脑', activeMenu: '/phm/cluster' }
+        name: 'PhmBrainDetail',
+        meta: { title: '机器大脑', activeMenu: '/phm/brain' }
       }
     ]
   },

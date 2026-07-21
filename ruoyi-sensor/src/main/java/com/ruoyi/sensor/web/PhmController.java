@@ -71,7 +71,7 @@ public class PhmController extends BaseController
         return success(phmService.toggleFavorite(deviceId, getUsernameSafe()));
     }
 
-    @PreAuthorize("@ss.hasPermi('phm:device:list')")
+    @PreAuthorize("@ss.hasAnyPermi('phm:device:list,phm:device:query')")
     @GetMapping("/devices")
     public AjaxResult devices(@RequestParam(required = false) String keyword)
     {

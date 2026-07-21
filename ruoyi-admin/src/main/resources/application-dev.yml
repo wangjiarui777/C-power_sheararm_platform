@@ -8,6 +8,8 @@ mybatis:
   mapperLocations: classpath*:mapper/**/*Mapper.xml
 
 sensor:
+  diagnosis:
+    multi-point-enabled: true
   default-device-code: ${SENSOR_DEFAULT_DEVICE_CODE:DEV-001}
   collector:
     token: ${SENSOR_COLLECTOR_TOKEN:}
@@ -24,7 +26,7 @@ sensor:
     internal-token: ${SENSOR_INFERENCE_INTERNAL_TOKEN:dev-inference-token-not-for-production}
   startup:
     inference:
-      enabled: true
+      enabled: false
       dir: ruoyi-sensor/inference
       script: inference_service.py
       python-command: python

@@ -605,8 +605,18 @@ public class PhmServiceImpl implements PhmService
             return;
         }
         Integer channelId = toInteger(diagnosis.get("channelId"), 1);
-        PhmMeasurePointEntity point = resolvePoint(deviceCode, "vibration", channelId);
+        Long pointId = toLong(diagnosis.get("pointId"), null);
+        PhmMeasurePointEntity point = resolveDiagnosisPoint(deviceCode, pointId, channelId);
         EnhancedInferenceRecordEntity record = persistEnhancedDiagnosis(diagnosis, sampleTime);
+        if (record.getModelReleaseId() != null)
+        {
+            ModelReleaseEntity executedRelease = modelReleaseMapper.selectById(record.getModelReleaseId());
+            if (executedRelease != null && !"ACTIVE".equals(executedRelease.getStatus()))
+            {
+                // 已验证/退役版本只保留人工回溯记录，不改变设备健康状态或触发告警链路。
+                return;
+            }
+        }
 
         String diagnosisDetail = stringValue(diagnosis.get("diagnosisDetail"), "");
         String riskLevel = stringValue(diagnosis.get("riskLevel"), "");
@@ -637,7 +647,11 @@ public class PhmServiceImpl implements PhmService
     {
         EnhancedInferenceRecordEntity record = new EnhancedInferenceRecordEntity();
         record.setBatchId(toLong(diagnosis.get("batchId"), null));
+        record.setTaskId(toLong(diagnosis.get("taskId"), null));
         record.setDeviceCode(stringValue(diagnosis.get("deviceCode"), ""));
+        record.setPointId(toLong(diagnosis.get("pointId"), null));
+        record.setChannelId(toInteger(diagnosis.get("channelId"), null));
+        record.setModelVersion(stringValue(diagnosis.get("modelVersion"), null));
         record.setSourceFile(stringValue(diagnosis.get("filePath"), stringValue(diagnosis.get("filename"), null)));
         record.setAnalysisMode(stringValue(diagnosis.get("modelType"), null));
         record.setDiagnosisResult(stringValue(diagnosis.get("diagnosisResult"), null));
@@ -710,7 +724,10 @@ public class PhmServiceImpl implements PhmService
         List<EnhancedInferenceRecordEntity> recent = enhancedInferenceRecordMapper.selectList(
             new LambdaQueryWrapper<EnhancedInferenceRecordEntity>()
                 .eq(EnhancedInferenceRecordEntity::getDeviceCode, current.getDeviceCode())
+                .eq(current.getPointId() != null, EnhancedInferenceRecordEntity::getPointId, current.getPointId())
+                .isNull(current.getPointId() == null, EnhancedInferenceRecordEntity::getPointId)
                 .eq(EnhancedInferenceRecordEntity::getAnalysisMode, modelType)
+                .eq(EnhancedInferenceRecordEntity::getModelVersion, modelVersion)
                 .orderByDesc(EnhancedInferenceRecordEntity::getCreateTime)
                 .last("limit " + requiredHits));
         if (recent.size() < requiredHits)
@@ -727,6 +744,93 @@ public class PhmServiceImpl implements PhmService
             }
         }
         return true;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void recalculateDiagnosisState(String deviceCode)
+    {
+        if (!StringUtils.hasText(deviceCode))
+        {
+            return;
+        }
+        PhmDeviceEntity device = deviceMapper.selectOne(new LambdaQueryWrapper<PhmDeviceEntity>()
+            .eq(PhmDeviceEntity::getDeviceCode, deviceCode)
+            .last("limit 1"));
+        if (device == null)
+        {
+            return;
+        }
+        List<EnhancedInferenceRecordEntity> records = enhancedInferenceRecordMapper.selectList(
+            new LambdaQueryWrapper<EnhancedInferenceRecordEntity>()
+                .eq(EnhancedInferenceRecordEntity::getDeviceCode, deviceCode)
+                .orderByDesc(EnhancedInferenceRecordEntity::getCreateTime)
+                .last("limit 1000"));
+        Map<Long, EnhancedInferenceRecordEntity> latestByPoint = new LinkedHashMap<>();
+        EnhancedInferenceRecordEntity legacyLatest = null;
+        for (EnhancedInferenceRecordEntity record : records)
+        {
+            if (record.getPointId() == null)
+            {
+                if (legacyLatest == null) legacyLatest = record;
+            }
+            else
+            {
+                latestByPoint.putIfAbsent(record.getPointId(), record);
+            }
+        }
+        List<EnhancedInferenceRecordEntity> latest = new ArrayList<>(latestByPoint.values());
+        if (latest.isEmpty() && legacyLatest != null)
+        {
+            latest.add(legacyLatest);
+        }
+        if (latest.isEmpty())
+        {
+            return;
+        }
+        EnhancedInferenceRecordEntity worst = latest.stream()
+            .min(Comparator
+                .comparingInt((EnhancedInferenceRecordEntity item) -> diagnosisRiskWeight(item.getRiskLevel()))
+                .thenComparing(item -> Optional.ofNullable(item.getHealthIndex()).orElse(100))
+                .thenComparing(EnhancedInferenceRecordEntity::getCreateTime,
+                    Comparator.nullsLast(Comparator.reverseOrder())))
+            .orElse(latest.get(0));
+        int health = latest.stream().map(EnhancedInferenceRecordEntity::getHealthIndex)
+            .filter(java.util.Objects::nonNull).min(Integer::compareTo)
+            .orElse(Optional.ofNullable(device.getHealthIndex()).orElse(100));
+        int diagnosisLevel = PhmDiagnosisLinkagePolicy.diagnosisAlarmLevel(
+            worst.getRiskLevel(), worst.getAlarmLevel(), health);
+        boolean abnormal = PhmDiagnosisLinkagePolicy.isAbnormalDiagnosis(
+            worst.getDiagnosisResult(), worst.getRiskLevel(), worst.getAlarmLevel());
+        List<PhmAlarmEventEntity> openAlarms = alarmEventMapper.selectList(
+            new LambdaQueryWrapper<PhmAlarmEventEntity>()
+                .eq(PhmAlarmEventEntity::getDeviceCode, deviceCode)
+                .eq(PhmAlarmEventEntity::getStatus, STATUS_UNHANDLED)
+                .orderByDesc(PhmAlarmEventEntity::getAlarmLevel));
+        int openAlarmLevel = openAlarms.isEmpty() ? 0
+            : Math.max(1, Optional.ofNullable(openAlarms.get(0).getAlarmLevel()).orElse(1));
+        int effectiveLevel = Math.max(abnormal ? diagnosisLevel : 0, openAlarmLevel);
+        device.setHealthIndex(PhmDiagnosisLinkagePolicy.normalizeHealthIndex(health, health));
+        device.setStatus(effectiveLevel > 0 ? "level" + Math.min(5, effectiveLevel) : "normal");
+        device.setFaultType(abnormal ? worst.getDiagnosisResult()
+            : openAlarms.isEmpty() ? null : openAlarms.get(0).getDiagnosisResult());
+        if (effectiveLevel > 0)
+        {
+            Date diagnosisTime = worst.getSampleTime() == null ? worst.getCreateTime() : worst.getSampleTime();
+            Date alarmTime = openAlarms.isEmpty() ? null : openAlarms.get(0).getAlarmTime();
+            device.setLastAlarmTime(alarmTime != null && (diagnosisTime == null || alarmTime.after(diagnosisTime))
+                ? alarmTime : diagnosisTime);
+        }
+        device.setUpdateTime(new Date());
+        deviceMapper.updateById(device);
+    }
+
+    private int diagnosisRiskWeight(String riskLevel)
+    {
+        String value = riskLevel == null ? "" : riskLevel.trim().toLowerCase();
+        if ("高".equals(value) || "high".equals(value)) return 0;
+        if ("中".equals(value) || "medium".equals(value)) return 1;
+        return 2;
     }
 
     private void createDiagnosisAlarm(PhmDeviceEntity device, PhmMeasurePointEntity point, EnhancedInferenceRecordEntity record,
@@ -808,6 +912,21 @@ public class PhmServiceImpl implements PhmService
                 .last("limit 1"));
     }
 
+    private PhmMeasurePointEntity resolveDiagnosisPoint(String deviceCode, Long pointId, Integer channelId)
+    {
+        if (pointId != null)
+        {
+            PhmMeasurePointEntity point = pointMapper.selectById(pointId);
+            if (point != null && deviceCode.equals(point.getDeviceCode())
+                && !Boolean.FALSE.equals(point.getEnabled())
+                && "vibration".equalsIgnoreCase(String.valueOf(point.getSignalType())))
+            {
+                return point;
+            }
+        }
+        return resolvePoint(deviceCode, "vibration", channelId);
+    }
+
     private PhmAlarmRuleEntity findAlarmRule(PhmAlarmEventEntity alarm)
     {
         if (alarm == null || !StringUtils.hasText(alarm.getFeatureCode()))
@@ -876,6 +995,17 @@ public class PhmServiceImpl implements PhmService
     @Override
     public int saveAlarmRule(PhmAlarmRuleEntity rule)
     {
+        requireText(rule.getRuleName(), "规则名称不能为空");
+        requireText(rule.getFeatureCode(), "特征值编码不能为空");
+        if (rule.getHighLimit() != null && rule.getHighHighLimit() != null
+            && rule.getHighLimit().compareTo(rule.getHighHighLimit()) > 0)
+        {
+            throw new IllegalArgumentException("高高报阈值必须大于或等于高报阈值");
+        }
+        if (rule.getId() == null)
+        {
+            rule.setCreateTime(new Date());
+        }
         rule.setUpdateTime(new Date());
         return rule.getId() == null ? alarmRuleMapper.insert(rule) : alarmRuleMapper.updateById(rule);
     }
@@ -951,6 +1081,17 @@ public class PhmServiceImpl implements PhmService
     @Override
     public int saveDevice(PhmDeviceEntity device, String username)
     {
+        requireText(device.getDeviceCode(), "设备编码不能为空");
+        requireText(device.getDeviceName(), "设备名称不能为空");
+        device.setDeviceCode(device.getDeviceCode().trim());
+        device.setDeviceName(device.getDeviceName().trim());
+        Long duplicated = deviceMapper.selectCount(new LambdaQueryWrapper<PhmDeviceEntity>()
+            .eq(PhmDeviceEntity::getDeviceCode, device.getDeviceCode())
+            .ne(device.getId() != null, PhmDeviceEntity::getId, device.getId()));
+        if (duplicated != null && duplicated > 0)
+        {
+            throw new IllegalArgumentException("设备编码已存在: " + device.getDeviceCode());
+        }
         boolean isNew = device.getId() == null;
         if (isNew)
         {
@@ -1076,14 +1217,29 @@ public class PhmServiceImpl implements PhmService
     @Override
     public int saveMeasurePoint(PhmMeasurePointEntity point)
     {
+        requireText(point.getPointCode(), "测点编码不能为空");
+        requireText(point.getPointName(), "测点名称不能为空");
+        point.setPointCode(point.getPointCode().trim());
+        point.setPointName(point.getPointName().trim());
         PhmDeviceEntity device = point.getDeviceId() == null
             ? scopedDeviceByCode(point.getDeviceCode()) : scopedDeviceById(point.getDeviceId());
         if (device == null)
         {
-            return 0;
+            throw new IllegalArgumentException("所属设备不存在或无权访问");
+        }
+        Long duplicated = pointMapper.selectCount(new LambdaQueryWrapper<PhmMeasurePointEntity>()
+            .eq(PhmMeasurePointEntity::getPointCode, point.getPointCode())
+            .ne(point.getId() != null, PhmMeasurePointEntity::getId, point.getId()));
+        if (duplicated != null && duplicated > 0)
+        {
+            throw new IllegalArgumentException("测点编码已存在: " + point.getPointCode());
         }
         point.setDeviceId(device.getId());
         point.setDeviceCode(device.getDeviceCode());
+        if (point.getId() == null)
+        {
+            point.setCreateTime(new Date());
+        }
         point.setUpdateTime(new Date());
         return point.getId() == null ? pointMapper.insert(point) : pointMapper.updateById(point);
     }
@@ -1112,6 +1268,17 @@ public class PhmServiceImpl implements PhmService
     @Override
     public int saveFeatureConfig(PhmFeatureConfigEntity config)
     {
+        requireText(config.getFeatureCode(), "特征值编码不能为空");
+        requireText(config.getFeatureName(), "特征值名称不能为空");
+        config.setFeatureCode(config.getFeatureCode().trim());
+        config.setFeatureName(config.getFeatureName().trim());
+        Long duplicated = featureConfigMapper.selectCount(new LambdaQueryWrapper<PhmFeatureConfigEntity>()
+            .eq(PhmFeatureConfigEntity::getFeatureCode, config.getFeatureCode())
+            .ne(config.getId() != null, PhmFeatureConfigEntity::getId, config.getId()));
+        if (duplicated != null && duplicated > 0)
+        {
+            throw new IllegalArgumentException("特征值编码已存在: " + config.getFeatureCode());
+        }
         if (config.getId() == null)
         {
             config.setCreateTime(new Date());
@@ -1183,8 +1350,33 @@ public class PhmServiceImpl implements PhmService
     @Override
     public int saveSystemConfig(PhmSystemConfigEntity config)
     {
+        requireText(config.getConfigKey(), "配置键不能为空");
+        if (config.getConfigValue() == null)
+        {
+            throw new IllegalArgumentException("配置值不能为空");
+        }
+        config.setConfigKey(config.getConfigKey().trim());
+        Long duplicated = systemConfigMapper.selectCount(new LambdaQueryWrapper<PhmSystemConfigEntity>()
+            .eq(PhmSystemConfigEntity::getConfigKey, config.getConfigKey())
+            .ne(config.getId() != null, PhmSystemConfigEntity::getId, config.getId()));
+        if (duplicated != null && duplicated > 0)
+        {
+            throw new IllegalArgumentException("配置键已存在: " + config.getConfigKey());
+        }
+        if (config.getId() == null)
+        {
+            config.setCreateTime(new Date());
+        }
         config.setUpdateTime(new Date());
         return config.getId() == null ? systemConfigMapper.insert(config) : systemConfigMapper.updateById(config);
+    }
+
+    private void requireText(String value, String message)
+    {
+        if (!StringUtils.hasText(value))
+        {
+            throw new IllegalArgumentException(message);
+        }
     }
 
     @Override

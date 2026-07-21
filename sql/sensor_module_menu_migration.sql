@@ -12,7 +12,7 @@ JOIN (
     FROM sys_menu
     WHERE path IN ('monitoring-center', 'analysis-toolkit', 'phm', 'index', 'vibration',
                    'temperature', 'bearing-diagnosis', 'cluster', 'alarms', 'events',
-                   'reports', 'config')
+                   'reports', 'config', 'brain')
     GROUP BY parent_id, path, COALESCE(component, '')
     HAVING COUNT(*) > 1
 ) d ON d.parent_id = m.parent_id
@@ -90,24 +90,35 @@ SELECT x.menu_name, @phm_parent, x.order_num, x.path, x.component, '', x.route_n
 FROM (
     SELECT '设备集群' menu_name, 1 order_num, 'cluster' path, 'phm/cluster/index' component,
            'PhmCluster' route_name, 'phm:device:list' perms, 'dashboard' icon, 'PHM设备管理' remark
-    UNION ALL SELECT '告警中心', 2, 'alarms', 'phm/alarms/index', 'PhmAlarms',
+    UNION ALL SELECT '机器大脑', 2, 'brain', 'phm/brain/index', 'PhmBrain',
+           'phm:device:query', 'component', 'PHM设备级健康与诊断工作台'
+    UNION ALL SELECT '告警中心', 3, 'alarms', 'phm/alarms/index', 'PhmAlarms',
            'phm:alarm:list', 'message', 'PHM告警闭环'
-    UNION ALL SELECT '设备大事记', 3, 'events', 'phm/events/index', 'PhmEvents',
+    UNION ALL SELECT '设备大事记', 4, 'events', 'phm/events/index', 'PhmEvents',
            'phm:event:list', 'time', 'PHM设备事件'
-    UNION ALL SELECT '报表中心', 4, 'reports', 'phm/reports/index', 'PhmReports',
+    UNION ALL SELECT '报表中心', 5, 'reports', 'phm/reports/index', 'PhmReports',
            'phm:report:view', 'documentation', 'PHM报表'
-    UNION ALL SELECT '配置管理', 5, 'config', 'phm/config/index', 'PhmConfig',
+    UNION ALL SELECT '配置管理', 6, 'config', 'phm/config/index', 'PhmConfig',
            'phm:config:list', 'edit', 'PHM配置'
 ) x
 WHERE NOT EXISTS (
     SELECT 1 FROM sys_menu m WHERE m.parent_id = @phm_parent AND m.path = x.path
 );
 
+UPDATE sys_menu
+SET order_num = CASE path
+    WHEN 'cluster' THEN 1 WHEN 'brain' THEN 2 WHEN 'alarms' THEN 3
+    WHEN 'events' THEN 4 WHEN 'reports' THEN 5 WHEN 'config' THEN 6
+    ELSE order_num END
+WHERE parent_id = @phm_parent
+  AND path IN ('cluster','brain','alarms','events','reports','config');
+
 SELECT menu_id INTO @phm_device_menu FROM sys_menu WHERE parent_id = @phm_parent AND path = 'cluster' LIMIT 1;
 SELECT menu_id INTO @phm_alarm_menu FROM sys_menu WHERE parent_id = @phm_parent AND path = 'alarms' LIMIT 1;
 SELECT menu_id INTO @phm_event_menu FROM sys_menu WHERE parent_id = @phm_parent AND path = 'events' LIMIT 1;
 SELECT menu_id INTO @phm_report_menu FROM sys_menu WHERE parent_id = @phm_parent AND path = 'reports' LIMIT 1;
 SELECT menu_id INTO @phm_config_menu FROM sys_menu WHERE parent_id = @phm_parent AND path = 'config' LIMIT 1;
+SELECT menu_id INTO @phm_brain_menu FROM sys_menu WHERE parent_id = @phm_parent AND path = 'brain' LIMIT 1;
 
 -- Button permissions. The NOT EXISTS predicate makes every row idempotent.
 INSERT INTO sys_menu (menu_name,parent_id,order_num,path,component,query,route_name,is_frame,is_cache,menu_type,visible,status,perms,icon,create_by,create_time,remark)
@@ -141,6 +152,14 @@ FROM (
 ) p
 WHERE p.parent_id IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM sys_menu m WHERE m.parent_id = p.parent_id AND m.perms = p.perms);
+
+-- Existing roles that can already view/query PHM devices receive the new page.
+INSERT IGNORE INTO sys_role_menu (role_id, menu_id)
+SELECT DISTINCT rm.role_id, @phm_brain_menu
+FROM sys_role_menu rm
+WHERE @phm_brain_menu IS NOT NULL
+  AND rm.menu_id IN (@phm_parent, @phm_device_menu)
+  AND rm.role_id IS NOT NULL;
 
 COMMIT;
 

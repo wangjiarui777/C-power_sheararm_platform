@@ -47,6 +47,8 @@ public interface PhmService
 
     void syncDiagnosisResult(Map<String, Object> diagnosis);
 
+    void recalculateDiagnosisState(String deviceCode);
+
     EnhancedInferenceRecordEntity getLatestDiagnosis(String deviceCode);
 
     List<EnhancedInferenceRecordEntity> listDiagnosisHistory(DateRange range, String deviceCode);

@@ -72,6 +72,7 @@ class ModelReleaseControllerTest
         release.setModelName("bearing-production");
         release.setModelType("bearing");
         release.setSemanticVersion("1.0.0");
+        release.setArtifactUri("bearing/1.0.0/model.pth");
         release.setFileSha256("a".repeat(64));
         release.setTrainingDataVersion("train-2026-01");
         release.setValidationDataVersion("validation-2026-01");

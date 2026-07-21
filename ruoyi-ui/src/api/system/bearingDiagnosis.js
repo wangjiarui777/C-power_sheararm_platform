@@ -23,15 +23,47 @@ export function listDiagnosisDevices() {
   })
 }
 
-export function listMatFiles(modelType = 'gear', deviceCode) {
+export function getDiagnosisOptions() {
   return request({
-    url: '/sensor/diagnosis/inference/files',
-    method: 'get',
-    params: { modelType, deviceCode: deviceCode || undefined }
+    url: '/sensor/diagnosis/options',
+    method: 'get'
   })
 }
 
-export function analyzeLatestFile(attachmentId, context = {}, modelType = 'gear') {
+export function listMatFiles(modelType = 'gear', deviceCode, pointId) {
+  return request({
+    url: '/sensor/diagnosis/inference/files',
+    method: 'get',
+    params: { modelType, deviceCode: deviceCode || undefined, pointId: pointId || undefined }
+  })
+}
+
+export function createDiagnosisBatch(data) {
+  return request({
+    url: '/sensor/diagnosis/batches',
+    method: 'post',
+    timeout: 30000,
+    data
+  })
+}
+
+export function getDiagnosisBatch(id) {
+  return request({
+    url: `/sensor/diagnosis/batches/${id}`,
+    method: 'get',
+    timeout: 10000
+  })
+}
+
+export function retryDiagnosisBatch(id) {
+  return request({
+    url: `/sensor/diagnosis/batches/${id}/retry`,
+    method: 'post',
+    timeout: 30000
+  })
+}
+
+export function analyzeLatestFile(attachmentId, context = {}, modelType = 'gear', modelVersion) {
   return request({
     url: '/sensor/diagnosis/inference/analyze',
     method: 'get',
@@ -39,6 +71,7 @@ export function analyzeLatestFile(attachmentId, context = {}, modelType = 'gear'
     params: {
       attachmentId: attachmentId || undefined,
       modelType,
+      modelVersion: modelVersion || undefined,
       deviceCode: context.deviceCode || undefined,
       channelId: context.channelId || undefined,
       pointId: context.pointId || undefined,
@@ -47,9 +80,12 @@ export function analyzeLatestFile(attachmentId, context = {}, modelType = 'gear'
   })
 }
 
-export function uploadDiagnosisToInferenceService(formData, modelType = 'gear') {
+export function uploadDiagnosisToInferenceService(formData, modelType = 'gear', modelVersion) {
   if (!formData.has('model_type')) {
     formData.append('model_type', modelType)
+  }
+  if (modelVersion && !formData.has('model_version')) {
+    formData.append('model_version', modelVersion)
   }
   return request({
     url: '/sensor/diagnosis/inference/upload',
@@ -75,7 +111,7 @@ export async function inferWithAttachment(data, modelType = 'gear') {
     data: Object.assign({}, data, {
       modelType,
       idempotencyKey: data.idempotencyKey ||
-        `${modelType}:${data.deviceCode || ''}:${data.attachmentId || ''}:${Date.now()}`
+        `${modelType}:${data.modelVersion || ''}:${data.deviceCode || ''}:${data.pointId || ''}:${data.attachmentId || ''}:${Date.now()}`
     })
   })
   const task = created.data || created

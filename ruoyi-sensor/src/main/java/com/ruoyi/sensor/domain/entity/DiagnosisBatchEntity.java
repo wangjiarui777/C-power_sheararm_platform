@@ -7,29 +7,20 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 @Data
-@TableName("sensor_inference_task")
-public class InferenceTaskEntity
+@TableName("sensor_diagnosis_batch")
+public class DiagnosisBatchEntity
 {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
-    private String requestId;
-    private String idempotencyKey;
-    private Long batchId;
-    private Integer attemptNo;
-    private Long supersedesTaskId;
+    private String clientRequestId;
+    private String requestHash;
     private String deviceCode;
-    private Long pointId;
-    private Integer channelId;
     private String modelType;
-    private String requestedModelVersion;
-    private String inputType;
-    private String inputRef;
-    private String inputSha256;
+    private String modelVersion;
     private String status;
-    private String errorCode;
-    private String errorMessage;
-    private String inputJson;
-    private String resultJson;
+    private Integer totalCount;
+    private Integer successCount;
+    private Integer failedCount;
     private String createdBy;
     private Date createTime;
     private Date startTime;

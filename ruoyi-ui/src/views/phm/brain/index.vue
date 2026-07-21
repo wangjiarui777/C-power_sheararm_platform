@@ -6,9 +6,27 @@
         <h2>{{ device.deviceName || '机器大脑' }}</h2>
         <p>{{ device.deviceCode }} · {{ device.deviceType }} · {{ device.orgName }}</p>
       </div>
+      <div class="brain-device-context">
+        <span>当前设备</span>
+        <el-select
+          v-model="selectedDeviceId"
+          filterable
+          placeholder="请选择设备"
+          size="small"
+          :disabled="!devices.length"
+          @change="changeDevice"
+        >
+          <el-option
+            v-for="item in devices"
+            :key="item.id"
+            :label="`${item.deviceName} · ${item.deviceCode}`"
+            :value="String(item.id)"
+          />
+        </el-select>
+      </div>
       <div class="brain-status">
         <el-tag :type="statusTag(device.status)">{{ statusText(device.status) }}</el-tag>
-        <strong>{{ device.healthIndex || 0 }}%</strong>
+        <strong>{{ withUnit(device.healthIndex, '%') }}</strong>
         <span>健康指数</span>
       </div>
     </section>
@@ -20,8 +38,8 @@
           <el-descriptions-item label="型号">{{ device.modelName || '--' }}</el-descriptions-item>
           <el-descriptions-item label="制造商">{{ device.manufacturer || '--' }}</el-descriptions-item>
           <el-descriptions-item label="安装位置">{{ device.location || '--' }}</el-descriptions-item>
-          <el-descriptions-item label="累计运行">{{ device.runHours || 0 }} h</el-descriptions-item>
-          <el-descriptions-item label="当前故障">{{ device.faultType || '无' }}</el-descriptions-item>
+          <el-descriptions-item label="累计运行">{{ withUnit(device.runHours, ' h') }}</el-descriptions-item>
+          <el-descriptions-item label="当前故障">{{ display(device.faultType) }}</el-descriptions-item>
         </el-descriptions>
         <h3>工况参数</h3>
         <pre>{{ prettyJson(device.processJson) }}</pre>
@@ -55,8 +73,8 @@
             @click="selectPoint(item)"
           >
             <strong>{{ item.point.pointName }}</strong>
-            <span>振动 {{ item.latestVibration || '--' }}</span>
-            <span>温度 {{ item.latestTemperature || '--' }}</span>
+            <span>振动 {{ display(item.latestVibration) }}</span>
+            <span>温度 {{ display(item.latestTemperature) }}</span>
           </article>
         </div>
         <div class="point-grid">
@@ -64,8 +82,8 @@
             <div class="point-title">{{ item.point.pointName }}</div>
             <div class="point-sub">通道 {{ item.point.channelId || '--' }} · {{ item.point.signalType }}</div>
             <div class="point-values">
-              <span>振动 <b>{{ item.latestVibration || '--' }}</b></span>
-              <span>温度 <b>{{ item.latestTemperature || '--' }}</b></span>
+              <span>振动 <b>{{ display(item.latestVibration) }}</b></span>
+              <span>温度 <b>{{ display(item.latestTemperature) }}</b></span>
             </div>
           </article>
         </div>
@@ -142,7 +160,7 @@
 
 <script>
 import echarts from '@/utils/echarts'
-import { getDeviceBrain, saveDeviceEvent } from '@/api/phm'
+import { getDeviceBrain, listPhmDevices, saveDeviceEvent } from '@/api/phm'
 import { industrialChartTheme } from '@/utils/industrialTheme'
 
 export default {
@@ -151,6 +169,8 @@ export default {
     return {
       loading: false,
       chart: null,
+      devices: [],
+      selectedDeviceId: '',
       device: {},
       points: [],
       alarms: [],
@@ -172,17 +192,52 @@ export default {
   },
   mounted() {
     window.addEventListener('appearance-mode-change', this.renderChart)
-    this.loadBrain()
+    this.initializeBrain()
   },
   beforeDestroy() {
     window.removeEventListener('appearance-mode-change', this.renderChart)
     if (this.chart) this.chart.dispose()
   },
+  watch: {
+    '$route.fullPath'() {
+      this.initializeBrain()
+    }
+  },
   methods: {
-    async loadBrain() {
+    display(value) {
+      return value === null || value === undefined || value === '' ? '--' : value
+    },
+    withUnit(value, unit) {
+      return value === null || value === undefined || value === '' ? '--' : `${value}${unit}`
+    },
+    async initializeBrain() {
       this.loading = true
       try {
-        const res = await getDeviceBrain(this.$route.params.deviceId)
+        const deviceRes = await listPhmDevices()
+        this.devices = deviceRes.data || []
+        if (!this.devices.length) {
+          this.selectedDeviceId = ''
+          this.resetBrainData()
+          return
+        }
+        const requestedId = this.$route.params.deviceId || this.$route.query.deviceId
+        const requested = requestedId == null ? '' : String(requestedId)
+        const matched = this.devices.find(item => String(item.id) === requested)
+        this.selectedDeviceId = matched ? String(matched.id) : String(this.devices[0].id)
+        await this.loadBrain()
+      } catch (error) {
+        this.$message.error(`机器大脑加载失败：${error.message || error}`)
+        this.resetBrainData()
+      } finally {
+        this.loading = false
+      }
+    },
+    async loadBrain() {
+      if (!this.selectedDeviceId) {
+        this.resetBrainData()
+        return
+      }
+      const res = await getDeviceBrain(this.selectedDeviceId)
         const data = res.data || {}
         this.device = data.device || {}
         this.points = data.points || []
@@ -191,8 +246,23 @@ export default {
         this.latestDiagnosis = data.latestDiagnosis || {}
         this.activePoint = this.points[0] || null
         this.$nextTick(this.renderChart)
-      } finally {
-        this.loading = false
+    },
+    changeDevice(deviceId) {
+      const id = String(deviceId)
+      const target = this.$route.params.deviceId
+        ? `/phm/brain/${id}`
+        : { path: '/phm/brain', query: { deviceId: id } }
+      this.$router.push(target)
+    },
+    resetBrainData() {
+      this.device = {}
+      this.points = []
+      this.alarms = []
+      this.events = []
+      this.latestDiagnosis = {}
+      this.activePoint = null
+      if (this.chart) {
+        this.chart.clear()
       }
     },
     selectPoint(item) {
@@ -247,7 +317,9 @@ export default {
         query: {
           deviceCode: this.device.deviceCode,
           pointId: this.activePoint && this.activePoint.point ? this.activePoint.point.id : undefined,
-          channelId: this.activePoint && this.activePoint.point ? this.activePoint.point.channelId : undefined
+          channelId: this.activePoint && this.activePoint.point ? this.activePoint.point.channelId : undefined,
+          modelType: this.latestDiagnosis.modelType || this.$route.query.modelType || undefined,
+          modelVersion: this.latestDiagnosis.modelVersion || this.$route.query.modelVersion || undefined
         }
       })
     },
@@ -343,6 +415,8 @@ export default {
 .brain-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .brain-hero h2 { margin: 6px 0; color: var(--ops-heading); }
 .brain-hero p { margin: 0; color: var(--ops-muted); }
+.brain-device-context { display: flex; align-items: center; gap: 10px; margin-left: auto; color: var(--ops-muted); }
+.brain-device-context .el-select { width: 260px; }
 .brain-status { min-width: 180px; padding: 16px 18px; text-align: right; border-radius: 16px; }
 .brain-status strong { display: block; margin-top: 8px; font-size: 30px; color: var(--ops-heading); }
 .brain-status span { color: var(--ops-muted); font-size: 12px; }
@@ -376,5 +450,6 @@ export default {
 @media (max-width: 1200px) {
   .brain-grid { grid-template-columns: 1fr; }
   .brain-hero { align-items: stretch; flex-direction: column; }
+  .brain-device-context { margin-left: 0; }
 }
 </style>

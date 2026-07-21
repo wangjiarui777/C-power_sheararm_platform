@@ -128,8 +128,12 @@ export function listAttachments(params) {
   return request({ url: '/phm/attachments', method: 'get', params })
 }
 
-export function saveAttachment(data) {
-  return request({ url: '/phm/attachments', method: data.id ? 'put' : 'post', data })
+export function getAttachmentContent(attachmentId) {
+  return request({
+    url: `/phm/attachments/${attachmentId}/content`,
+    method: 'get',
+    responseType: 'blob'
+  })
 }
 
 export function deleteAttachment(attachmentId) {

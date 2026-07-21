@@ -89,6 +89,7 @@ Thumbs.db
 *.swp
 *.tmp
 *.temp
+*.class
 
 ######################################################################
 # Data & Model files
@@ -98,10 +99,15 @@ Thumbs.db
 *.ckpt
 *.pth
 models/
+!ruoyi-sensor/inference/models/
+!ruoyi-sensor/inference/models/__init__.py
+!ruoyi-sensor/inference/models/resnet18_1d.py
+!ruoyi-sensor/inference/models/wdcnn_mech_dg2.py
 outputs/
 target_unlabeled/
 get/got/
 .local-models/
+.local-data/
 ruoyi-ui/test-results/
 
 ######################################################################

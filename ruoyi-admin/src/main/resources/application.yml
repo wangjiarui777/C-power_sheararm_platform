@@ -7,7 +7,7 @@ ruoyi:
   # 版权年份
   copyrightYear: 2026
   # 文件路径 示例（ Windows配置D:/ruoyi/uploadPath，Linux配置 /home/ruoyi/uploadPath）
-  profile: D:/ruoyi/uploadPath
+  profile: ${RUOYI_PROFILE:./.local-data/uploadPath}
   # 获取ip地址开关
   addressEnabled: false
   # 验证码类型 math 数字计算 char 字符验证
@@ -15,7 +15,7 @@ ruoyi:
 
 sensor:
   attachment:
-    root: ${SENSOR_ATTACHMENT_ROOT:D:/ruoyi-secure/attachments}
+    root: ${SENSOR_ATTACHMENT_ROOT:./.local-data/attachments}
     scan-required: ${SENSOR_ATTACHMENT_SCAN_REQUIRED:false}
     virus-scan-command: ${SENSOR_ATTACHMENT_SCAN_COMMAND:}
     virus-scan-arguments: ${SENSOR_ATTACHMENT_SCAN_ARGUMENTS:}
@@ -27,6 +27,19 @@ sensor:
   diagnosis:
     # 必须完成模型验收与至少14天影子运行后，才可在生产显式打开。
     auto-alarm-enabled: ${SENSOR_DIAGNOSIS_AUTO_ALARM_ENABLED:false}
+    multi-point-enabled: ${SENSOR_DIAGNOSIS_MULTI_POINT_ENABLED:false}
+    batch:
+      max-points: ${SENSOR_DIAGNOSIS_BATCH_MAX_POINTS:8}
+    executor:
+      core-pool-size: ${SENSOR_DIAGNOSIS_EXECUTOR_CORE_POOL_SIZE:4}
+      max-pool-size: ${SENSOR_DIAGNOSIS_EXECUTOR_MAX_POOL_SIZE:4}
+      queue-capacity: ${SENSOR_DIAGNOSIS_EXECUTOR_QUEUE_CAPACITY:100}
+    ingest:
+      # 目录结构：<root>/<deviceCode>/<pointCode>/*.mat|*.npy；生产环境需显式启用。
+      enabled: ${SENSOR_DIAGNOSIS_INGEST_ENABLED:false}
+      root: ${SENSOR_DIAGNOSIS_INGEST_ROOT:./.local-data/diagnosis-inbox}
+      scan-interval-ms: ${SENSOR_DIAGNOSIS_INGEST_SCAN_INTERVAL_MS:5000}
+      stable-wait-ms: ${SENSOR_DIAGNOSIS_INGEST_STABLE_WAIT_MS:10000}
   default-device-code: ${SENSOR_DEFAULT_DEVICE_CODE:}
   collector:
     token: ${SENSOR_COLLECTOR_TOKEN:}
@@ -39,6 +52,8 @@ sensor:
     default-model-type: ${SENSOR_DEFAULT_MODEL_TYPE:gear}
     connect-timeout-ms: ${SENSOR_INFER_CONNECT_TIMEOUT_MS:5000}
     read-timeout-ms: ${SENSOR_INFER_READ_TIMEOUT_MS:120000}
+    # 启用目录接入时必须包含 sensor.attachment.root/objects。
+    allowed-input-roots: ${INFERENCE_ALLOWED_INPUT_ROOTS:}
   startup:
     inference:
       enabled: true

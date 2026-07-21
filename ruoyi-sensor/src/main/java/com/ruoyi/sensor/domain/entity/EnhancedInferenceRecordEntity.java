@@ -14,7 +14,11 @@ public class EnhancedInferenceRecordEntity
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long batchId;
+    private Long taskId;
     private String deviceCode;
+    private Long pointId;
+    private Integer channelId;
+    private String modelVersion;
     private String sourceFile;
     private String analysisMode;
     private Double sampleRate;

@@ -5,6 +5,40 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+function Import-LocalEnvironment {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        $text = $line.Trim()
+        if (-not $text -or $text.StartsWith('#') -or -not $text.Contains('=')) { continue }
+        $pair = $text.Split('=', 2)
+        $name = $pair[0].Trim()
+        $value = $pair[1].Trim()
+        if ($name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { continue }
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name, 'Process'))) {
+            [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+        }
+    }
+}
+
+Import-LocalEnvironment -Path (Join-Path $scriptDir '.env')
+$env:SENSOR_ATTACHMENT_ROOT = Join-Path $scriptDir '.local-data\attachments'
+$env:RUOYI_PROFILE = Join-Path $scriptDir '.local-data\uploadPath'
+$env:INFERENCE_MODEL_ROOT = Join-Path $scriptDir '.local-models'
+if ([string]::IsNullOrWhiteSpace($env:INFERENCE_INTERNAL_TOKEN) -and
+    -not [string]::IsNullOrWhiteSpace($env:SENSOR_INFERENCE_INTERNAL_TOKEN)) {
+    $env:INFERENCE_INTERNAL_TOKEN = $env:SENSOR_INFERENCE_INTERNAL_TOKEN
+}
+if ([string]::IsNullOrWhiteSpace($env:SENSOR_INFERENCE_INTERNAL_TOKEN) -and
+    -not [string]::IsNullOrWhiteSpace($env:INFERENCE_INTERNAL_TOKEN)) {
+    $env:SENSOR_INFERENCE_INTERNAL_TOKEN = $env:INFERENCE_INTERNAL_TOKEN
+}
+
 $pythonExe = Join-Path $scriptDir ".venv\Scripts\python.exe"
 $servicePath = Join-Path $scriptDir "ruoyi-sensor\inference\inference_service.py"
 $workDir = Join-Path $scriptDir "ruoyi-sensor\inference"
@@ -44,8 +78,7 @@ if ([string]::IsNullOrWhiteSpace($env:BEARING_MODEL_SHA256)) {
     $env:BEARING_MODEL_SHA256 = "5773424dba27357bbcf756172b3cb8e19c6eebc1510c29169b7e638b3a6fdc30"
 }
 if ([string]::IsNullOrWhiteSpace($env:INFERENCE_ALLOWED_INPUT_ROOTS)) {
-    $attachmentRoot = if ($env:SENSOR_ATTACHMENT_ROOT) { $env:SENSOR_ATTACHMENT_ROOT } else { "D:\ruoyi-secure\attachments" }
-    $env:INFERENCE_ALLOWED_INPUT_ROOTS = Join-Path $attachmentRoot "objects"
+    $env:INFERENCE_ALLOWED_INPUT_ROOTS = Join-Path $env:SENSOR_ATTACHMENT_ROOT "objects"
 }
 Write-Host "Starting unified inference service (127.0.0.1:5000)..." -ForegroundColor Yellow
 Start-Process -FilePath $pythonExe -ArgumentList $servicePath -WorkingDirectory $workDir -WindowStyle Hidden

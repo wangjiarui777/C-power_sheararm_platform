@@ -10,7 +10,11 @@ DROP TABLE IF EXISTS enhanced_inference_record;
 CREATE TABLE enhanced_inference_record (
   id                  BIGINT(20)    NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   batch_id            BIGINT(20)    DEFAULT NULL              COMMENT '批次ID',
+  task_id             BIGINT(20)    DEFAULT NULL              COMMENT '推理任务ID',
   device_code         VARCHAR(64)   DEFAULT NULL              COMMENT '设备编码',
+  point_id            BIGINT(20)    DEFAULT NULL              COMMENT '测点ID',
+  channel_id          INT           DEFAULT NULL              COMMENT '采集通道',
+  model_version       VARCHAR(128)  DEFAULT NULL              COMMENT '模型版本',
   source_file         VARCHAR(255)  DEFAULT NULL              COMMENT '数据源文件名',
   analysis_mode       VARCHAR(32)   DEFAULT NULL              COMMENT '分析模式(v6_latest/v6_specified/v6_upload/v6_infer/v6_auto)',
   sample_rate         DOUBLE        DEFAULT NULL              COMMENT '采样频率(Hz)',
@@ -54,6 +58,8 @@ CREATE TABLE enhanced_inference_record (
   KEY idx_device_code (device_code),
   KEY idx_create_time (create_time),
   KEY idx_device_time (device_code, create_time),
+  KEY idx_device_point_time (device_code, point_id, create_time),
+  KEY idx_task_id (task_id),
   KEY idx_diagnosis_result (diagnosis_result)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='增强推理诊断结果记录表';
 
