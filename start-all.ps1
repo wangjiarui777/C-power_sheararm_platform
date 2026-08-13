@@ -256,6 +256,9 @@ $env:SENSOR_BEARING_INFER_URL = 'http://127.0.0.1:5000/internal/infer'
 $env:INFERENCE_BIND_HOST = '127.0.0.1'
 $env:PORT = '5000'
 $env:VUE_APP_BASE_URL = 'http://127.0.0.1:8080'
+# 一键启动使用 HTTP 本地开发服务器；Secure Cookie 只适用于 HTTPS，
+# 否则浏览器不会回传 RUOYI_SESSION，登录后 /getInfo 会立即返回 401。
+$env:SESSION_COOKIE_SECURE = 'false'
 $env:BROWSER = 'none'
 $env:NODE_PATH = Join-Path $frontendDir 'node_modules\@vue\cli-service\node_modules'
 
@@ -399,8 +402,9 @@ try {
         -ArgumentList @('run', 'dev', '--', '--port', [string]$FrontendPort) -WorkingDirectory $frontendDir
     $started += $frontend
     Wait-HttpReady -Name 'Vue 前端' -Url "http://127.0.0.1:$FrontendPort/" -TimeoutSeconds 120
-    Wait-HttpReady -Name '诊断测点总览' `
-        -Url "http://127.0.0.1:$FrontendPort$diagnosisOverviewPath" -TimeoutSeconds 30
+    # The diagnosis page is permission/menu driven and may legitimately return
+    # 404 before a user session has loaded dynamic routes. The root page above
+    # is the reliable process-level readiness check.
 
     # npm.cmd 与 Python venv 启动器可能会派生真正的服务进程，因此记录实际监听 PID，
     # 避免后续停止或排障时拿到已经退出的包装进程。

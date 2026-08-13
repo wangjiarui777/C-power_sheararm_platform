@@ -14,6 +14,16 @@ const isWhiteList = (path) => {
   return whiteList.some(pattern => isPathMatch(pattern, path))
 }
 
+const passwordChangeRoute = () => ({
+  name: 'Profile',
+  params: { activeTab: 'resetPwd' },
+  replace: true
+})
+
+const requiresPasswordRedirect = (to) => {
+  return store.getters.passwordChangeRequired && to.name !== 'Profile'
+}
+
 router.beforeEach((to, from, next) => {
   NProgress.start()
   if (store.getters.authenticated || store.getters.roles.length > 0) {
@@ -37,10 +47,14 @@ router.beforeEach((to, from, next) => {
         // 判断当前用户是否已拉取完user_info信息
         store.dispatch('GetInfo').then(() => {
           isRelogin.show = false
+          if (store.getters.passwordChangeRequired) {
+            next(requiresPasswordRedirect(to) ? passwordChangeRoute() : { ...to, replace: true })
+            return
+          }
           store.dispatch('GenerateRoutes').then(accessRoutes => {
             // 根据roles权限生成可访问的路由表
             router.addRoutes(accessRoutes) // 动态添加可访问路由表
-            next({ ...to, replace: true }) // hack方法 确保addRoutes已完成
+            next(requiresPasswordRedirect(to) ? passwordChangeRoute() : { ...to, replace: true })
           })
         }).catch(err => {
             store.dispatch('LogOut').then(() => {
@@ -48,6 +62,8 @@ router.beforeEach((to, from, next) => {
               next({ path: '/' })
             })
           })
+      } else if (requiresPasswordRedirect(to)) {
+        next(passwordChangeRoute())
       } else {
         next()
       }
@@ -56,9 +72,13 @@ router.beforeEach((to, from, next) => {
     isRelogin.show = true
     store.dispatch('GetInfo').then(() => {
       isRelogin.show = false
+      if (store.getters.passwordChangeRequired) {
+        next(requiresPasswordRedirect(to) ? passwordChangeRoute() : { ...to, replace: true })
+        return
+      }
       store.dispatch('GenerateRoutes').then(accessRoutes => {
         router.addRoutes(accessRoutes)
-        next({ ...to, replace: true })
+        next(requiresPasswordRedirect(to) ? passwordChangeRoute() : { ...to, replace: true })
       })
     }).catch(() => {
       isRelogin.show = false

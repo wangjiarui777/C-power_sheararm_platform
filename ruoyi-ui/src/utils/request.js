@@ -89,6 +89,12 @@ service.interceptors.response.use(res => {
           isRelogin.show = false
           store.dispatch('LogOut').then(() => {
             location.href = '/index'
+          }).catch(() => {
+            // 401 本身表示会话已失效，登出接口失败时也要回到登录页，
+            // 不能让这个预期分支产生未捕获 Promise，触发 webpack overlay。
+            store.dispatch('FedLogOut').finally(() => {
+              location.href = '/index'
+            })
           })
       }).catch(() => {
         isRelogin.show = false

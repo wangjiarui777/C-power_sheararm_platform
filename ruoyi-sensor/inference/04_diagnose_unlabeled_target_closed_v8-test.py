@@ -99,6 +99,16 @@ def make_device(device_arg: str) -> torch.device:
 
 
 def safe_torch_load(path: Path, map_location: torch.device):
+    reconstruct = getattr(getattr(np, "_core", np.core).multiarray, "_reconstruct")
+    torch.serialization.add_safe_globals([
+        reconstruct,
+        np.ndarray,
+        np.dtype,
+        type(np.dtype(np.float32)),
+        type(np.dtype(np.float64)),
+        type(np.dtype(np.int32)),
+        type(np.dtype(np.int64)),
+    ])
     try:
         checkpoint = torch.load(path, map_location=map_location, weights_only=True)
     except TypeError as exc:

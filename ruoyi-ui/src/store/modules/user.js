@@ -9,6 +9,7 @@ import defAva from '@/assets/images/profile.jpg'
 const user = {
   state: {
     authenticated: false,
+    passwordChangeRequired: false,
     id: '',
     name: '',
     nickName: '',
@@ -20,6 +21,9 @@ const user = {
   mutations: {
     SET_AUTHENTICATED: (state, authenticated) => {
       state.authenticated = authenticated
+    },
+    SET_PASSWORD_CHANGE_REQUIRED: (state, required) => {
+      state.passwordChangeRequired = required
     },
     SET_ID: (state, id) => {
       state.id = id
@@ -64,6 +68,7 @@ const user = {
       return new Promise((resolve, reject) => {
         getInfo().then(res => {
           commit('SET_AUTHENTICATED', true)
+          commit('SET_PASSWORD_CHANGE_REQUIRED', Boolean(res.passwordChangeRequired))
           const user = res.user
           let avatar = user.avatar || ""
           if (!isHttp(avatar)) {
@@ -82,9 +87,11 @@ const user = {
           cache.session.set('pwrChrtype', res.pwdChrtype)
           /* 初始密码提示 */
           if(res.passwordChangeRequired) {
-            MessageBox.alert('首次登录或密码已被管理员重置，请先修改密码。', '安全提示', { confirmButtonText: '去修改' }).then(() => {
-              router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
-            })
+            MessageBox.alert('首次登录或密码已被管理员重置，请先修改密码。', '安全提示', {
+              confirmButtonText: '去修改',
+              closeOnClickModal: false,
+              closeOnPressEscape: false
+            }).catch(() => {})
           }
           /* 过期密码提示 */
           if(!res.passwordChangeRequired && res.isPasswordExpired) {
@@ -104,6 +111,7 @@ const user = {
       return new Promise((resolve, reject) => {
         logout().then(() => {
           commit('SET_AUTHENTICATED', false)
+          commit('SET_PASSWORD_CHANGE_REQUIRED', false)
           commit('SET_ROLES', [])
           commit('SET_PERMISSIONS', [])
           resolve()
@@ -117,6 +125,7 @@ const user = {
     FedLogOut({ commit }) {
       return new Promise(resolve => {
         commit('SET_AUTHENTICATED', false)
+        commit('SET_PASSWORD_CHANGE_REQUIRED', false)
         resolve()
       })
     }

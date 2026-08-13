@@ -57,7 +57,11 @@ export default {
       this.$refs["form"].validate(valid => {
         if (valid) {
           updateUserPwd(this.user.oldPassword, this.user.newPassword).then(() => {
-            this.$modal.msgSuccess("修改成功")
+            this.$store.commit('SET_PASSWORD_CHANGE_REQUIRED', false)
+            this.$modal.msgSuccess("修改成功，请使用新密码重新登录")
+            this.$store.dispatch('LogOut').finally(() => {
+              location.href = '/login'
+            })
           })
         }
       })

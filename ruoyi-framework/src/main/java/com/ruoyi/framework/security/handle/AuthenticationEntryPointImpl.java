@@ -12,6 +12,7 @@ import com.ruoyi.common.constant.HttpStatus;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.utils.ServletUtils;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.framework.web.service.TokenService;
 
 /**
  * 认证失败处理类 返回未授权
@@ -23,12 +24,21 @@ public class AuthenticationEntryPointImpl implements AuthenticationEntryPoint, S
 {
     private static final long serialVersionUID = -8970718410437077606L;
 
+    private final transient TokenService tokenService;
+
+    public AuthenticationEntryPointImpl(TokenService tokenService)
+    {
+        this.tokenService = tokenService;
+    }
+
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException e)
             throws IOException
     {
         int code = HttpStatus.UNAUTHORIZED;
         String msg = StringUtils.format("请求访问：{}，认证失败，无法访问系统资源", request.getRequestURI());
+        // 失效会话不能继续留在浏览器中，否则前端每次启动都会重复收到 401。
+        tokenService.clearSessionCookie(response);
         ServletUtils.renderString(response, JSON.toJSONString(AjaxResult.error(code, msg)));
     }
 }

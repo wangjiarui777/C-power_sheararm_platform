@@ -47,10 +47,24 @@ from models.wdcnn_mech_dg2 import WDCNNMechDG
 def safe_torch_load(path, map_location):
     """
     兼容不同 PyTorch 版本的 torch.load。
+
+    训练检查点只包含张量、字典和 numpy 元数据。显式注册这些 numpy
+    类型后仍使用 weights_only=True，避免为了兼容旧检查点而启用任意
+    pickle 执行。
     """
     try:
+        reconstruct = getattr(getattr(np, "_core", np.core).multiarray, "_reconstruct")
+        torch.serialization.add_safe_globals([
+            reconstruct,
+            np.ndarray,
+            np.dtype,
+            type(np.dtype(np.float32)),
+            type(np.dtype(np.float64)),
+            type(np.dtype(np.int32)),
+            type(np.dtype(np.int64)),
+        ])
         checkpoint = torch.load(path, map_location=map_location, weights_only=True)
-    except TypeError as exc:
+    except (AttributeError, TypeError) as exc:
         raise RuntimeError("PyTorch with weights_only=True support is required") from exc
     if not isinstance(checkpoint, dict):
         raise ValueError("model artifact must be a tensor state dictionary checkpoint")

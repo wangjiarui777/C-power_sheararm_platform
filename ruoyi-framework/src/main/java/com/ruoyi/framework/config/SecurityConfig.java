@@ -14,6 +14,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.logout.LogoutFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.filter.CorsFilter;
 import com.ruoyi.framework.config.properties.PermitAllUrlProperties;
@@ -102,10 +103,14 @@ public class SecurityConfig
             .csrf(csrf -> {
                 CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
                 repository.setCookieCustomizer(cookie -> cookie.path("/").secure(secureCookie).sameSite("Lax"));
-                csrf.csrfTokenRepository(repository).ignoringRequestMatchers(
+                // Vue/SPA 从 XSRF-TOKEN Cookie 读取原始令牌并回传 X-XSRF-TOKEN；
+                // 显式使用非 XOR handler，避免 Spring Security 6 默认处理器
+                // 将 Cookie 令牌再次编码后导致所有登录 POST 返回 403。
+                CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
+                csrf.csrfTokenRepository(repository).csrfTokenRequestHandler(requestHandler).ignoringRequestMatchers(
                     "/sensor/vibration-data/upload", "/system/vibration/upload",
                     "/sensor/vibration-data/batchUpload", "/system/vibration/batchUpload",
-                    "/sensor/temperature-data/upload", "/system/temperature/upload",
+                    "/sensor/temperature-data/upload", "/system/temperature/upload", "/logout",
                     "/sensor/diagnosis/receiver/callback", "/sensor/vibration/receiver/callback");
             })
             // 禁用HTTP响应标头
@@ -120,7 +125,7 @@ public class SecurityConfig
             .authorizeHttpRequests((requests) -> {
                 permitAllUrl.getUrls().forEach(url -> requests.requestMatchers(url).permitAll());
                 // 对于登录login 注册register 验证码captchaImage 允许匿名访问
-                requests.requestMatchers("/login", "/register", "/captchaImage", "/csrf").permitAll()
+                requests.requestMatchers("/login", "/register", "/captchaImage", "/csrf", "/logout", "/error").permitAll()
                     // 静态资源，可匿名访问
                     .requestMatchers(HttpMethod.GET, "/", "/index.html", "/**.css", "/**.js").permitAll()
                     // Druid 控制台需要 JWT 认证（Druid 自身还有登录表单）

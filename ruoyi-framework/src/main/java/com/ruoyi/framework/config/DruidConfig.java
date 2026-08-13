@@ -9,6 +9,8 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
 import com.alibaba.druid.pool.DruidDataSource;
 import com.ruoyi.common.enums.DataSourceType;
 import com.ruoyi.common.utils.spring.SpringUtils;
@@ -48,6 +50,18 @@ public class DruidConfig
         targetDataSources.put(DataSourceType.MASTER.name(), masterDataSource);
         setDataSource(targetDataSources, DataSourceType.SLAVE.name(), "slaveDataSource");
         return new DynamicDataSource(masterDataSource, targetDataSources);
+    }
+
+    /**
+     * The application has more than one DataSource (system and low-code business).
+     * Spring Boot therefore backs off its automatic JdbcTemplate; expose the
+     * system template explicitly for services that use the primary database.
+    */
+    @Bean(name = "jdbcTemplate")
+    @Primary
+    public JdbcTemplate jdbcTemplate(@Qualifier("dynamicDataSource") DataSource dataSource)
+    {
+        return new JdbcTemplate(dataSource);
     }
     
     /**
