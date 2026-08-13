@@ -1492,10 +1492,12 @@ public class PhmServiceImpl implements PhmService
     @Override
     public List<PhmAttachmentEntity> listServiceReports(String reportType)
     {
-        return attachmentMapper.selectList(new LambdaQueryWrapper<PhmAttachmentEntity>()
+        List<PhmAttachmentEntity> reports = attachmentMapper.selectList(new LambdaQueryWrapper<PhmAttachmentEntity>()
                 .eq(PhmAttachmentEntity::getBizType, "report")
                 .eq(StringUtils.hasText(reportType), PhmAttachmentEntity::getReportType, reportType)
                 .orderByDesc(PhmAttachmentEntity::getCreateTime));
+        reports.forEach(report -> report.setFileUrl("/phm/attachments/" + report.getId() + "/content"));
+        return reports;
     }
 
     @Override

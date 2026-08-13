@@ -12,6 +12,7 @@ import com.ruoyi.common.exception.user.UserPasswordNotMatchException;
 import com.ruoyi.common.exception.user.UserPasswordRetryLimitExceedException;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.framework.security.context.AuthenticationContextHolder;
+import com.ruoyi.common.utils.ip.IpUtils;
 
 /**
  * 登录密码方法
@@ -38,7 +39,7 @@ public class SysPasswordService
      */
     private String getCacheKey(String username)
     {
-        return CacheConstants.PWD_ERR_CNT_KEY + username;
+        return CacheConstants.PWD_ERR_CNT_KEY + username.toLowerCase() + ":" + IpUtils.getIpAddr();
     }
 
     public void validate(SysUser user)
@@ -62,7 +63,8 @@ public class SysPasswordService
         if (!matches(user, password))
         {
             retryCount = retryCount + 1;
-            redisCache.setCacheObject(getCacheKey(username), retryCount, lockTime, TimeUnit.MINUTES);
+            int cooldownMinutes = Math.min(lockTime, Math.max(1, retryCount * retryCount));
+            redisCache.setCacheObject(getCacheKey(username), retryCount, cooldownMinutes, TimeUnit.MINUTES);
             throw new UserPasswordNotMatchException();
         }
         else

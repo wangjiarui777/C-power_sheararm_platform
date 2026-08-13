@@ -7,6 +7,14 @@ mybatis:
   typeAliasesPackage: com.ruoyi.**.domain
   mapperLocations: classpath*:mapper/**/*Mapper.xml
 
+lowcode:
+  runtime:
+    write-enabled: ${LOWCODE_RUNTIME_WRITE_ENABLED:true}
+
+security:
+  session:
+    secure-cookie: false
+
 sensor:
   diagnosis:
     multi-point-enabled: true

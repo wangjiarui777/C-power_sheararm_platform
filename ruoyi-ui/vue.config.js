@@ -48,7 +48,7 @@ module.exports = {
         changeOrigin: true
       }
     },
-    disableHostCheck: true
+    allowedHosts: ['localhost', '127.0.0.1']
   },
   css: {
     loaderOptions: {
@@ -62,12 +62,14 @@ module.exports = {
     resolve: {
       alias: {
         '@': resolve('src')
+      },
+      fallback: {
+        path: require.resolve('path-browserify')
       }
     },
     plugins: [
       // 使用gzip解压缩静态文件
       new CompressionPlugin({
-        cache: false,                                  // 不启用文件缓存
         test: /\.(js|css|html|jpe?g|png|gif|svg)?$/i,  // 压缩文件格式
         filename: '[path][base].gz[query]',            // 压缩后的文件名
         algorithm: 'gzip',                             // 使用gzip压缩
@@ -80,7 +82,7 @@ module.exports = {
     config.plugins.delete('preload') // TODO: need test
     config.plugins.delete('prefetch') // TODO: need test
 
-    // 强制 babel 转译 three.js（Webpack 4 的 acorn 解析器不支持 ES2022 static 类块）
+    // Transpile the explicitly supported third-party browser dependencies.
     config.module
       .rule('js')
       .exclude
@@ -107,23 +109,9 @@ module.exports = {
       .test(/\.svg$/)
       .include.add(resolve('src/assets/icons'))
       .end()
-      .use('svg-sprite-loader')
-      .loader('svg-sprite-loader')
-      .options({
-        symbolId: 'icon-[name]'
-      })
-      .end()
+      .type('asset/source')
 
     config.when(process.env.NODE_ENV !== 'development', config => {
-          config
-            .plugin('ScriptExtHtmlWebpackPlugin')
-            .after('html')
-            .use('script-ext-html-webpack-plugin', [{
-            // `runtime` must same as runtimeChunk name. default is `runtime`
-              inline: /runtime\..*\.js$/
-            }])
-            .end()
-
           config.optimization.splitChunks({
             chunks: 'all',
             cacheGroups: {

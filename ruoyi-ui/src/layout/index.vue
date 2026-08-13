@@ -17,7 +17,7 @@
 import { AppMain, Navbar, Settings, Sidebar, TagsView } from './components'
 import ResizeMixin from './mixin/ResizeHandler'
 import { mapState } from 'vuex'
-import variables from '@/assets/styles/variables.scss'
+import * as variables from '@/assets/styles/variables.scss'
 
 export default {
   name: 'Layout',

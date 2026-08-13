@@ -1,21 +1,18 @@
 package com.ruoyi.framework.web.service;
 
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import javax.crypto.SecretKey;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 import com.ruoyi.common.constant.CacheConstants;
-import com.ruoyi.common.constant.Constants;
 import com.ruoyi.common.core.domain.model.LoginUser;
 import com.ruoyi.common.core.redis.RedisCache;
 import com.ruoyi.common.utils.ServletUtils;
@@ -24,151 +21,73 @@ import com.ruoyi.common.utils.http.UserAgentUtils;
 import com.ruoyi.common.utils.ip.AddressUtils;
 import com.ruoyi.common.utils.ip.IpUtils;
 import com.ruoyi.common.utils.uuid.IdUtils;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import jakarta.servlet.http.HttpServletRequest;
 
-/**
- * token验证处理
- * 
- * @author ruoyi
- */
+/** Redis-backed opaque browser session service. */
 @Component
 public class TokenService
 {
     private static final Logger log = LoggerFactory.getLogger(TokenService.class);
+    private static final long MILLIS_MINUTE = 60_000L;
+    private static final long REFRESH_THRESHOLD = 20 * MILLIS_MINUTE;
 
-    // 令牌自定义标识
-    @Value("${token.header}")
-    private String header;
-
-    // 令牌秘钥
-    @Value("${token.secret}")
-    private String secret;
-
-    // 旧签名密钥，逗号分隔，仅用于平滑轮换期间验证已有令牌
-    @Value("${token.previous-secrets:}")
-    private String previousSecrets;
-
-    // 令牌有效期（默认30分钟）
-    @Value("${token.expireTime}")
+    @Value("${token.expireTime:30}")
     private int expireTime;
 
-    protected static final long MILLIS_SECOND = 1000;
+    @Value("${security.session.cookie-name:RUOYI_SESSION}")
+    private String cookieName;
 
-    protected static final long MILLIS_MINUTE = 60 * MILLIS_SECOND;
-
-    private static final Long MILLIS_MINUTE_TWENTY = 20 * 60 * 1000L;
+    @Value("${security.session.secure-cookie:true}")
+    private boolean secureCookie;
 
     @Autowired
     private RedisCache redisCache;
 
-    /**
-     * 获取用户身份信息
-     * 
-     * @return 用户信息
-     */
     public LoginUser getLoginUser(HttpServletRequest request)
     {
-        // 获取请求携带的令牌
-        String token = getToken(request);
-        if (StringUtils.isNotEmpty(token))
+        String sessionId = getSessionId(request);
+        if (StringUtils.isEmpty(sessionId)) return null;
+        try
         {
-            try
-            {
-                Claims claims = parseToken(token);
-                // 解析对应的权限以及用户信息
-                String uuid = (String) claims.get(Constants.LOGIN_USER_KEY);
-                String userKey = getTokenKey(uuid);
-                LoginUser user = redisCache.getCacheObject(userKey);
-                return user;
-            }
-            catch (Exception e)
-            {
-                log.error("获取用户信息异常'{}'", e.getMessage());
-            }
+            return redisCache.getCacheObject(getTokenKey(sessionId));
         }
-        return null;
+        catch (RuntimeException ex)
+        {
+            log.warn("Unable to read browser session: {}", ex.getMessage());
+            return null;
+        }
     }
 
-    /**
-     * 设置用户身份信息
-     */
     public void setLoginUser(LoginUser loginUser)
     {
-        if (StringUtils.isNotNull(loginUser) && StringUtils.isNotEmpty(loginUser.getToken()))
-        {
-            refreshToken(loginUser);
-        }
+        if (loginUser != null && StringUtils.isNotEmpty(loginUser.getToken())) refreshToken(loginUser);
     }
 
-    /**
-     * 删除用户身份信息
-     */
-    public void delLoginUser(String token)
+    public void delLoginUser(String sessionId)
     {
-        if (StringUtils.isNotEmpty(token))
-        {
-            String userKey = getTokenKey(token);
-            redisCache.deleteObject(userKey);
-        }
+        if (StringUtils.isNotEmpty(sessionId)) redisCache.deleteObject(getTokenKey(sessionId));
     }
 
-    /**
-     * 创建令牌
-     * 
-     * @param loginUser 用户信息
-     * @return 令牌
-     */
     public String createToken(LoginUser loginUser)
     {
-        String token = IdUtils.fastUUID();
-        loginUser.setToken(token);
+        String sessionId = IdUtils.fastUUID();
+        loginUser.setToken(sessionId);
         setUserAgent(loginUser);
         refreshToken(loginUser);
-
-        Map<String, Object> claims = new HashMap<>();
-        claims.put(Constants.LOGIN_USER_KEY, token);
-        claims.put(Constants.JWT_USERNAME, loginUser.getUsername());
-        return createToken(claims);
+        return sessionId;
     }
 
-    /**
-     * 验证令牌有效期，相差不足20分钟，自动刷新缓存
-     * 
-     * @param loginUser 登录信息
-     * @return 令牌
-     */
     public void verifyToken(LoginUser loginUser)
     {
-        long expireTime = loginUser.getExpireTime();
-        long currentTime = System.currentTimeMillis();
-        if (expireTime - currentTime <= MILLIS_MINUTE_TWENTY)
-        {
-            refreshToken(loginUser);
-        }
+        if (loginUser.getExpireTime() - System.currentTimeMillis() <= REFRESH_THRESHOLD) refreshToken(loginUser);
     }
 
-    /**
-     * 刷新令牌有效期
-     * 
-     * @param loginUser 登录信息
-     */
     public void refreshToken(LoginUser loginUser)
     {
         loginUser.setLoginTime(System.currentTimeMillis());
         loginUser.setExpireTime(loginUser.getLoginTime() + expireTime * MILLIS_MINUTE);
-        // 根据uuid将loginUser缓存
-        String userKey = getTokenKey(loginUser.getToken());
-        redisCache.setCacheObject(userKey, loginUser, expireTime, TimeUnit.MINUTES);
+        redisCache.setCacheObject(getTokenKey(loginUser.getToken()), loginUser, expireTime, TimeUnit.MINUTES);
     }
 
-    /**
-     * 设置用户代理信息
-     * 
-     * @param loginUser 登录信息
-     */
     public void setUserAgent(LoginUser loginUser)
     {
         String userAgent = ServletUtils.getRequest().getHeader("User-Agent");
@@ -179,134 +98,89 @@ public class TokenService
         loginUser.setOs(UserAgentUtils.getOperatingSystem(userAgent));
     }
 
-    /**
-     * 从数据声明生成令牌
-     *
-     * @param claims 数据声明
-     * @return 令牌
-     */
-    private String createToken(Map<String, Object> claims)
+    public void writeSessionCookie(HttpServletResponse response, String sessionId)
     {
-        return Jwts.builder()
-                .claims(claims)
-                .signWith(signingKey(secret))
-                .compact();
+        response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie(sessionId, expireTime * 60L).toString());
     }
 
-    /**
-     * 从令牌中获取数据声明
-     *
-     * @param token 令牌
-     * @return 数据声明
-     */
-    private Claims parseToken(String token)
+    public void clearSessionCookie(HttpServletResponse response)
     {
-        RuntimeException lastError = null;
-        for (SecretKey key : verificationKeys())
-        {
-            try
-            {
-                return Jwts.parser()
-                        .verifyWith(key)
-                        .build()
-                        .parseSignedClaims(token)
-                        .getPayload();
-            }
-            catch (RuntimeException ex)
-            {
-                lastError = ex;
-            }
-        }
-        throw lastError == null ? new IllegalArgumentException("JWT verification key is not configured") : lastError;
+        response.addHeader(HttpHeaders.SET_COOKIE, sessionCookie("", 0).toString());
     }
 
-    /**
-     * 从令牌中获取用户名
-     *
-     * @param token 令牌
-     * @return 用户名
-     */
-    public String getUsernameFromToken(String token)
+    public void revokeUserSessions(Long userId)
     {
-        Claims claims = parseToken(token);
-        return claims.getSubject();
-    }
-
-    /**
-     * 获取请求token
-     *
-     * @param request
-     * @return token
-     */
-    private String getToken(HttpServletRequest request)
-    {
-        String token = request.getHeader(header);
-        if (StringUtils.isNotEmpty(token) && token.startsWith(Constants.TOKEN_PREFIX))
-        {
-            token = token.replace(Constants.TOKEN_PREFIX, "");
-        }
-        return token;
-    }
-
-    private String getTokenKey(String uuid)
-    {
-        return CacheConstants.LOGIN_TOKEN_KEY + uuid;
-    }
-
-    private SecretKey signingKey(String value)
-    {
-        return Keys.hmacShaKeyFor(value.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private List<SecretKey> verificationKeys()
-    {
-        List<SecretKey> keys = new ArrayList<>();
-        keys.add(signingKey(secret));
-        if (StringUtils.isNotEmpty(previousSecrets))
-        {
-            Arrays.stream(previousSecrets.split(","))
-                    .map(String::trim)
-                    .filter(StringUtils::isNotEmpty)
-                    .map(this::signingKey)
-                    .forEach(keys::add);
-        }
-        return keys;
-    }
-
-    /**
-     * 角色权限变更后，刷新所有持有该角色的在线用户权限
-     *
-     * @param roleId            变更的角色ID
-     * @param permissionService 权限服务
-     */
-    public void refreshPermissionByRoleId(Long roleId, SysPermissionService permissionService)
-    {
-        // 扫描所有在线 token
-        String pattern = CacheConstants.LOGIN_TOKEN_KEY + "*";
-        Collection<String> keys = redisCache.keys(pattern);
-        if (keys == null || keys.isEmpty())
-        {
-            return;
-        }
+        Collection<String> keys = redisCache.keys(CacheConstants.LOGIN_TOKEN_KEY + "*");
+        if (keys == null) return;
         for (String key : keys)
         {
-            LoginUser loginUser = redisCache.getCacheObject(key);
-            if (loginUser == null || loginUser.getUser() == null || loginUser.getUser().isAdmin())
-            {
-                // 管理员拥有所有权限，跳过
-                continue;
-            }
-            // 判断该用户是否拥有此角色
-            boolean hasRole = loginUser.getUser().getRoles() != null
-                    && loginUser.getUser().getRoles().stream().anyMatch(r -> roleId.equals(r.getRoleId()));
-            if (!hasRole)
-            {
-                continue;
-            }
-            // 刷新权限缓存
-            loginUser.setPermissions(permissionService.getMenuPermission(loginUser.getUser()));
-            refreshToken(loginUser);
-            log.info("角色[{}]权限变更，已刷新在线用户[{}]的权限缓存", roleId, loginUser.getUsername());
+            LoginUser user = redisCache.getCacheObject(key);
+            if (user != null && userId.equals(user.getUserId())) redisCache.deleteObject(key);
         }
+    }
+
+    public void revokeUserSessions(Collection<Long> userIds)
+    {
+        if (userIds == null || userIds.isEmpty()) return;
+        Collection<String> keys = redisCache.keys(CacheConstants.LOGIN_TOKEN_KEY + "*");
+        if (keys == null) return;
+        for (String key : keys)
+        {
+            LoginUser user = redisCache.getCacheObject(key);
+            if (user != null && userIds.contains(user.getUserId())) redisCache.deleteObject(key);
+        }
+    }
+
+    public void revokeRoleSessions(Long roleId)
+    {
+        Collection<String> keys = redisCache.keys(CacheConstants.LOGIN_TOKEN_KEY + "*");
+        if (keys == null) return;
+        for (String key : keys)
+        {
+            LoginUser user = redisCache.getCacheObject(key);
+            boolean assigned = user != null && user.getUser() != null && user.getUser().getRoles() != null
+                    && user.getUser().getRoles().stream().anyMatch(role -> roleId.equals(role.getRoleId()));
+            if (assigned) redisCache.deleteObject(key);
+        }
+    }
+
+    public void refreshPermissionByRoleId(Long roleId, SysPermissionService permissionService)
+    {
+        Collection<String> keys = redisCache.keys(CacheConstants.LOGIN_TOKEN_KEY + "*");
+        if (keys == null) return;
+        for (String key : keys)
+        {
+            LoginUser user = redisCache.getCacheObject(key);
+            if (user == null || user.getUser() == null || user.getUser().isAdmin()) continue;
+            boolean assigned = user.getUser().getRoles() != null
+                    && user.getUser().getRoles().stream().anyMatch(role -> roleId.equals(role.getRoleId()));
+            if (assigned)
+            {
+                user.setPermissions(permissionService.getMenuPermission(user.getUser()));
+                refreshToken(user);
+            }
+        }
+    }
+
+    private String getSessionId(HttpServletRequest request)
+    {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) return null;
+        for (Cookie cookie : cookies)
+        {
+            if (cookieName.equals(cookie.getName())) return cookie.getValue();
+        }
+        return null;
+    }
+
+    private ResponseCookie sessionCookie(String value, long maxAge)
+    {
+        return ResponseCookie.from(cookieName, value).httpOnly(true).secure(secureCookie)
+                .sameSite("Lax").path("/").maxAge(maxAge).build();
+    }
+
+    private String getTokenKey(String sessionId)
+    {
+        return CacheConstants.LOGIN_TOKEN_KEY + sessionId;
     }
 }

@@ -53,31 +53,25 @@ def _extract_signal_from_mat(file_path: Path, signal_key: str) -> np.ndarray:
 
 
 def _load_npy_signal(file_path: Path, signal_key: str) -> np.ndarray:
-    """Load a 1-D float64 signal from a .npy file."""
-    payload = np.load(str(file_path), allow_pickle=True)
+    """Load a bounded numeric array without enabling Pickle deserialization."""
+    from utils_signal import _validate_numpy_container, validate_numeric_array
+
+    _validate_numpy_container(file_path)
+    payload = np.load(str(file_path), allow_pickle=False)
 
     if isinstance(payload, np.lib.npyio.NpzFile):
         try:
             if signal_key in payload:
-                return np.asarray(payload[signal_key], dtype=np.float64).reshape(-1)
+                return validate_numeric_array(payload[signal_key], f"{file_path.name}:{signal_key}").astype(np.float64)
             keys = [k for k in payload.files if not str(k).startswith("__")]
             if keys:
-                return np.asarray(payload[keys[0]], dtype=np.float64).reshape(-1)
+                return validate_numeric_array(payload[keys[0]], f"{file_path.name}:{keys[0]}").astype(np.float64)
         finally:
             payload.close()
         raise RuntimeError(f"No usable arrays in {file_path}")
 
     if isinstance(payload, np.ndarray):
-        if payload.dtype == object:
-            if payload.size == 1:
-                item = payload.reshape(-1)[0]
-                if isinstance(item, dict):
-                    if signal_key in item:
-                        return np.asarray(item[signal_key], dtype=np.float64).reshape(-1)
-            pieces = [np.asarray(item, dtype=np.float64).reshape(-1) for item in payload.flat]
-            if pieces:
-                return np.concatenate(pieces).astype(np.float64)
-        return np.asarray(payload, dtype=np.float64).reshape(-1)
+        return validate_numeric_array(payload, file_path.name).astype(np.float64)
 
     raise TypeError(f"Unsupported npy format: {type(payload)}")
 

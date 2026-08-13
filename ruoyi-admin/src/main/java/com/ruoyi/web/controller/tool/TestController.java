@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.context.annotation.Profile;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.R;
 import com.ruoyi.common.utils.StringUtils;
@@ -26,13 +27,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  */
 @Tag(name = "用户信息管理")
 @RestController
+@Profile({"dev", "test"})
 @RequestMapping("/test/user")
 public class TestController extends BaseController
 {
     private final static Map<Integer, UserEntity> users = new LinkedHashMap<Integer, UserEntity>();
     {
-        users.put(1, new UserEntity(1, "admin", "admin123", "15888888888"));
-        users.put(2, new UserEntity(2, "ry", "admin123", "15666666666"));
+        users.put(1, new UserEntity(1, "fixture-admin", "not-a-login-secret", "15888888888"));
+        users.put(2, new UserEntity(2, "fixture-user", "not-a-login-secret", "15666666666"));
     }
     
     @Operation(summary = "获取用户列表")

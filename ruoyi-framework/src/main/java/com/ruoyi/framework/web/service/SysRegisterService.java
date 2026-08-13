@@ -18,6 +18,7 @@ import com.ruoyi.framework.manager.AsyncManager;
 import com.ruoyi.framework.manager.factory.AsyncFactory;
 import com.ruoyi.system.service.ISysConfigService;
 import com.ruoyi.system.service.ISysUserService;
+import com.ruoyi.system.security.PasswordPolicyService;
 
 /**
  * 注册校验方法
@@ -35,6 +36,9 @@ public class SysRegisterService
 
     @Autowired
     private RedisCache redisCache;
+
+    @Autowired
+    private PasswordPolicyService passwordPolicyService;
 
     /**
      * 注册
@@ -65,11 +69,6 @@ public class SysRegisterService
         {
             msg = "账户长度必须在2到20个字符之间";
         }
-        else if (password.length() < UserConstants.PASSWORD_MIN_LENGTH
-                || password.length() > UserConstants.PASSWORD_MAX_LENGTH)
-        {
-            msg = "密码长度必须在5到20个字符之间";
-        }
         else if (!userService.checkUserNameUnique(sysUser))
         {
             msg = "保存用户'" + username + "'失败，注册账号已存在";
@@ -77,7 +76,9 @@ public class SysRegisterService
         else
         {
             sysUser.setNickName(username);
+            passwordPolicyService.validate(password, sysUser);
             sysUser.setPwdUpdateDate(DateUtils.getNowDate());
+            sysUser.setMustChangePassword(false);
             sysUser.setPassword(SecurityUtils.encryptPassword(password));
             boolean regFlag = userService.registerUser(sysUser);
             if (!regFlag)

@@ -31,6 +31,8 @@ import com.ruoyi.system.service.ISysDeptService;
 import com.ruoyi.system.service.ISysPostService;
 import com.ruoyi.system.service.ISysRoleService;
 import com.ruoyi.system.service.ISysUserService;
+import com.ruoyi.system.security.PasswordPolicyService;
+import com.ruoyi.framework.web.service.TokenService;
 
 /**
  * 鐢ㄦ埛淇℃伅
@@ -52,6 +54,12 @@ public class SysUserController extends BaseController
 
     @Autowired
     private ISysPostService postService;
+
+    @Autowired
+    private PasswordPolicyService passwordPolicyService;
+
+    @Autowired
+    private TokenService tokenService;
 
     /**
      * 鑾峰彇鐢ㄦ埛鍒楄〃
@@ -139,6 +147,8 @@ public class SysUserController extends BaseController
             return error("鏂板鐢ㄦ埛'" + user.getUserName() + "'澶辫触锛岄偖绠辫处鍙峰凡瀛樺湪");
         }
         user.setCreateBy(getUsername());
+        passwordPolicyService.validate(user.getPassword(), user);
+        user.setMustChangePassword(true);
         user.setPassword(SecurityUtils.encryptPassword(user.getPassword()));
         return toAjax(userService.insertUser(user));
     }
@@ -168,7 +178,9 @@ public class SysUserController extends BaseController
             return error("淇敼鐢ㄦ埛'" + user.getUserName() + "'澶辫触锛岄偖绠辫处鍙峰凡瀛樺湪");
         }
         user.setUpdateBy(getUsername());
-        return toAjax(userService.updateUser(user));
+        int rows = userService.updateUser(user);
+        if (rows > 0) tokenService.revokeUserSessions(user.getUserId());
+        return toAjax(rows);
     }
 
     /**
@@ -196,9 +208,13 @@ public class SysUserController extends BaseController
     {
         userService.checkUserAllowed(user);
         userService.checkUserDataScope(user.getUserId());
+        SysUser target = userService.selectUserById(user.getUserId());
+        passwordPolicyService.validate(user.getPassword(), target);
         user.setPassword(SecurityUtils.encryptPassword(user.getPassword()));
         user.setUpdateBy(getUsername());
-        return toAjax(userService.resetPwd(user));
+        int rows = userService.resetPwd(user);
+        if (rows > 0) tokenService.revokeUserSessions(user.getUserId());
+        return toAjax(rows);
     }
 
     /**
@@ -212,7 +228,9 @@ public class SysUserController extends BaseController
         userService.checkUserAllowed(user);
         userService.checkUserDataScope(user.getUserId());
         user.setUpdateBy(getUsername());
-        return toAjax(userService.updateUserStatus(user));
+        int rows = userService.updateUserStatus(user);
+        if (rows > 0) tokenService.revokeUserSessions(user.getUserId());
+        return toAjax(rows);
     }
 
     /**
@@ -241,6 +259,7 @@ public class SysUserController extends BaseController
         userService.checkUserDataScope(userId);
         roleService.checkRoleDataScope(roleIds);
         userService.insertUserAuth(userId, roleIds);
+        tokenService.revokeUserSessions(userId);
         return success();
     }
 

@@ -78,6 +78,7 @@
 import Fuse from 'fuse.js/dist/fuse.min.js'
 import path from 'path'
 import { isHttp } from '@/utils/validate'
+import { escapeHtml } from '@/utils/sanitize'
 
 export default {
   name: 'HeaderSearch',
@@ -231,10 +232,10 @@ export default {
     },
     highlightText(text) {
       if (!text) return ''
-      if (!this.search) return text
+      if (!this.search) return escapeHtml(text)
       const keyword = this.escapeRegExp(this.search)
       const reg = new RegExp(`(${keyword})`, 'gi')
-      return text.replace(reg, '<span class="highlight">$1</span>')
+      return escapeHtml(text).replace(reg, '<span class="highlight">$1</span>')
     },
     escapeRegExp(str) {
       return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

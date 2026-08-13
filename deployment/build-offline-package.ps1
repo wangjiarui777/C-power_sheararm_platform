@@ -73,7 +73,7 @@ try {
     foreach ($service in @("phm-platform","phm-inference","phm-nginx")) {
         Copy-Item -LiteralPath $winswSource -Destination "$stage\deployment\winsw\$service.exe"
     }
-    Copy-Item "ruoyi-admin\src\main\resources\db\migration" "$stage\deployment\flyway-migrations" -Recurse
+    Copy-Item "ruoyi-admin\target\classes\db\migration" "$stage\deployment\flyway-migrations" -Recurse
 
     $manifest = Get-ChildItem -LiteralPath $stage -Recurse -File | ForEach-Object {
         $hash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256

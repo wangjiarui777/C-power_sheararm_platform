@@ -13,10 +13,13 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.logout.LogoutFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.filter.CorsFilter;
 import com.ruoyi.framework.config.properties.PermitAllUrlProperties;
 import com.ruoyi.framework.security.filter.JwtAuthenticationTokenFilter;
 import com.ruoyi.framework.security.filter.SensorCollectorAuthenticationFilter;
+import com.ruoyi.framework.security.filter.PasswordChangeRequiredFilter;
 import com.ruoyi.framework.security.handle.AuthenticationEntryPointImpl;
 import com.ruoyi.framework.security.handle.LogoutSuccessHandlerImpl;
 
@@ -49,6 +52,9 @@ public class SecurityConfig
 
     @Autowired
     private SensorCollectorAuthenticationFilter sensorCollectorAuthenticationFilter;
+
+    @Autowired
+    private PasswordChangeRequiredFilter passwordChangeRequiredFilter;
     
     /**
      * 跨域过滤器
@@ -61,6 +67,9 @@ public class SecurityConfig
      */
     @Autowired
     private PermitAllUrlProperties permitAllUrl;
+
+    @Value("${security.session.secure-cookie:true}")
+    private boolean secureCookie;
 
 	/**
 	 * 身份验证实现
@@ -90,8 +99,15 @@ public class SecurityConfig
     protected SecurityFilterChain filterChain(HttpSecurity httpSecurity) throws Exception
     {
         return httpSecurity
-            // CSRF禁用，因为不使用session
-            .csrf(csrf -> csrf.disable())
+            .csrf(csrf -> {
+                CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+                repository.setCookieCustomizer(cookie -> cookie.path("/").secure(secureCookie).sameSite("Lax"));
+                csrf.csrfTokenRepository(repository).ignoringRequestMatchers(
+                    "/sensor/vibration-data/upload", "/system/vibration/upload",
+                    "/sensor/vibration-data/batchUpload", "/system/vibration/batchUpload",
+                    "/sensor/temperature-data/upload", "/system/temperature/upload",
+                    "/sensor/diagnosis/receiver/callback", "/sensor/vibration/receiver/callback");
+            })
             // 禁用HTTP响应标头
             .headers((headersCustomizer) -> {
                 headersCustomizer.cacheControl(cache -> cache.disable()).frameOptions(options -> options.sameOrigin());
@@ -104,10 +120,9 @@ public class SecurityConfig
             .authorizeHttpRequests((requests) -> {
                 permitAllUrl.getUrls().forEach(url -> requests.requestMatchers(url).permitAll());
                 // 对于登录login 注册register 验证码captchaImage 允许匿名访问
-                requests.requestMatchers("/login", "/register", "/captchaImage").permitAll()
+                requests.requestMatchers("/login", "/register", "/captchaImage", "/csrf").permitAll()
                     // 静态资源，可匿名访问
-                    .requestMatchers(HttpMethod.GET, "/", "/*.html", "/**.html", "/**.css", "/**.js").permitAll()
-                    .requestMatchers("/swagger-ui.html", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                    .requestMatchers(HttpMethod.GET, "/", "/index.html", "/**.css", "/**.js").permitAll()
                     // Druid 控制台需要 JWT 认证（Druid 自身还有登录表单）
                     .requestMatchers("/druid/**").authenticated()
                     // 除上面外的所有请求全部需要鉴权认证
@@ -117,6 +132,7 @@ public class SecurityConfig
             .logout(logout -> logout.logoutUrl("/logout").logoutSuccessHandler(logoutSuccessHandler))
             // 添加JWT filter
             .addFilterBefore(authenticationTokenFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(passwordChangeRequiredFilter, JwtAuthenticationTokenFilter.class)
             .addFilterBefore(sensorCollectorAuthenticationFilter, JwtAuthenticationTokenFilter.class)
             // 添加CORS filter
             .addFilterBefore(corsFilter, JwtAuthenticationTokenFilter.class)

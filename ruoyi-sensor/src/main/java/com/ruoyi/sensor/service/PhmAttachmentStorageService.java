@@ -19,6 +19,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruoyi.sensor.domain.entity.PhmAttachmentEntity;
 import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
 import com.ruoyi.sensor.mapper.PhmAttachmentMapper;
+import com.ruoyi.common.utils.SecurityUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
@@ -31,12 +32,16 @@ public class PhmAttachmentStorageService
     private static final Map<String, Set<String>> PURPOSE_EXTENSIONS = Map.of(
         "DIAGNOSIS_INPUT", Set.of("mat", "npy"),
         "REPORT", Set.of("pdf"),
-        "MORPHOLOGY", Set.of("png", "jpg", "jpeg", "webp")
+        "MORPHOLOGY", Set.of("png", "jpg", "jpeg", "webp"),
+        "GENERIC_IMAGE", Set.of("png", "jpg", "jpeg", "webp"),
+        "GENERIC_DOCUMENT", Set.of("pdf", "txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx")
     );
     private static final Map<String, Long> PURPOSE_LIMITS = Map.of(
         "DIAGNOSIS_INPUT", 128L * 1024 * 1024,
         "REPORT", 20L * 1024 * 1024,
-        "MORPHOLOGY", 10L * 1024 * 1024
+        "MORPHOLOGY", 10L * 1024 * 1024,
+        "GENERIC_IMAGE", 10L * 1024 * 1024,
+        "GENERIC_DOCUMENT", 20L * 1024 * 1024
     );
 
     private final Path root;
@@ -61,6 +66,17 @@ public class PhmAttachmentStorageService
         String reportType, String username) throws Exception
     {
         return store(file, purpose, bizType, bizId, null, null, reportType, username, true, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public PhmAttachmentEntity storeGeneric(MultipartFile file, String username) throws Exception
+    {
+        String originalName = safeOriginalName(file.getOriginalFilename());
+        String extension = extension(originalName);
+        String purpose = PURPOSE_EXTENSIONS.get("GENERIC_IMAGE").contains(extension)
+            ? "GENERIC_IMAGE" : "GENERIC_DOCUMENT";
+        return store(file, purpose, "user", SecurityUtils.getUserId(), null, null,
+            null, username, false, null);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -213,6 +229,17 @@ public class PhmAttachmentStorageService
         return entity != null && "DIAGNOSIS_INPUT".equals(entity.getPurpose()) ? entity : null;
     }
 
+    public PhmAttachmentEntity getAccessibleGeneric(Long id)
+    {
+        PhmAttachmentEntity entity = mapper.selectById(id);
+        if (entity == null || entity.getPurpose() == null || !entity.getPurpose().startsWith("GENERIC_"))
+        {
+            return null;
+        }
+        String username = SecurityUtils.getUsername();
+        return SecurityUtils.isAdmin() || username.equals(entity.getUploadBy()) ? entity : null;
+    }
+
     /**
      * Resolves an attachment already authorized when a diagnosis task was created.
      * The immutable SHA-256 binding prevents a queued task from being redirected
@@ -326,6 +353,21 @@ public class PhmAttachmentStorageService
         return rows;
     }
 
+    public int deleteGeneric(Long id) throws IOException
+    {
+        PhmAttachmentEntity entity = getAccessibleGeneric(id);
+        if (entity == null)
+        {
+            return 0;
+        }
+        int rows = mapper.deleteById(id);
+        if (rows > 0 && entity.getStoragePath() != null)
+        {
+            Files.deleteIfExists(Path.of(entity.getStoragePath()));
+        }
+        return rows;
+    }
+
     private boolean canAccessDevice(Long deviceId)
     {
         PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
@@ -379,9 +421,17 @@ public class PhmAttachmentStorageService
     private void validateSignature(String purpose, String extension, byte[] header)
     {
         boolean valid;
-        if ("REPORT".equals(purpose))
+        if ("REPORT".equals(purpose) || "GENERIC_DOCUMENT".equals(purpose))
         {
-            valid = startsWith(header, "%PDF-".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+            valid = switch (extension)
+            {
+                case "pdf" -> startsWith(header, "%PDF-".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                case "docx", "xlsx", "pptx" -> startsWith(header, new byte[] {'P', 'K', 3, 4});
+                case "doc", "xls", "ppt" -> startsWith(header,
+                    new byte[] {(byte) 0xd0, (byte) 0xcf, 0x11, (byte) 0xe0, (byte) 0xa1, (byte) 0xb1, 0x1a, (byte) 0xe1});
+                case "txt" -> !containsNul(header);
+                default -> false;
+            };
         }
         else if ("DIAGNOSIS_INPUT".equals(purpose))
         {
@@ -410,6 +460,21 @@ public class PhmAttachmentStorageService
         if ("REPORT".equals(purpose))
         {
             valid = "application/pdf".equals(mime);
+        }
+        else if ("GENERIC_DOCUMENT".equals(purpose))
+        {
+            valid = switch (extension)
+            {
+                case "pdf" -> "application/pdf".equals(mime);
+                case "txt" -> Set.of("text/plain", "application/octet-stream").contains(mime);
+                case "doc" -> Set.of("application/msword", "application/octet-stream").contains(mime);
+                case "xls" -> Set.of("application/vnd.ms-excel", "application/octet-stream").contains(mime);
+                case "ppt" -> Set.of("application/vnd.ms-powerpoint", "application/octet-stream").contains(mime);
+                case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document".equals(mime);
+                case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".equals(mime);
+                case "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation".equals(mime);
+                default -> false;
+            };
         }
         else if ("DIAGNOSIS_INPUT".equals(purpose))
         {
@@ -448,6 +513,18 @@ public class PhmAttachmentStorageService
             }
         }
         return true;
+    }
+
+    private boolean containsNul(byte[] source)
+    {
+        for (byte value : source)
+        {
+            if (value == 0)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static final class PathMultipartFile implements MultipartFile

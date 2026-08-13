@@ -196,6 +196,50 @@ $iotdbHomeCandidate = if ([string]::IsNullOrWhiteSpace($env:IOTDB_HOME)) {
 } else {
     $env:IOTDB_HOME
 }
+
+function Start-DependencyService {
+    param(
+        [Parameter(Mandatory = $true)][string]$DisplayName,
+        [Parameter(Mandatory = $true)][string[]]$CandidateNames,
+        [Parameter(Mandatory = $true)][int]$Port,
+        [int]$TimeoutSeconds = 30
+    )
+
+    if (Test-TcpEndpoint -HostName '127.0.0.1' -Port $Port) {
+        Write-Host "[READY] $DisplayName -> 127.0.0.1:$Port (已在运行)" -ForegroundColor Green
+        return
+    }
+
+    $service = $null
+    foreach ($candidateName in ($CandidateNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        $service = Get-Service -Name $candidateName -ErrorAction SilentlyContinue
+        if ($service) { break }
+    }
+    if ($null -eq $service) {
+        $names = ($CandidateNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ', '
+        throw "未找到 $DisplayName Windows 服务（尝试过：$names）。请安装服务或在 .env 中设置对应服务名。"
+    }
+
+    if ($service.Status -ne 'Running') {
+        Write-Host "[START] $DisplayName service=$($service.Name)" -ForegroundColor DarkCyan
+        try {
+            Start-Service -Name $service.Name -ErrorAction Stop
+        } catch {
+            throw "无法启动 $DisplayName 服务 $($service.Name)。请以管理员身份运行 PowerShell；原始错误：$($_.Exception.Message)"
+        }
+    } else {
+        Write-Host "[WAIT] $DisplayName service=$($service.Name) 已运行，等待端口就绪" -ForegroundColor DarkGray
+    }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port $Port) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 1
+    }
+    if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port $Port)) {
+        throw "$DisplayName 服务 $($service.Name) 已启动，但 127.0.0.1:$Port 在 ${TimeoutSeconds}s 内未就绪"
+    }
+    Write-Host "[READY] $DisplayName -> 127.0.0.1:$Port" -ForegroundColor Green
+}
 $script:iotdbHome = [IO.Path]::GetFullPath($iotdbHomeCandidate)
 $iotdbWindowsSbin = Join-Path $script:iotdbHome 'sbin\windows'
 $iotdbConfigNodeScript = Join-Path $iotdbWindowsSbin 'start-confignode.bat'
@@ -267,12 +311,16 @@ foreach ($model in $manifest.models) {
     Write-Host "[OK] model=$($model.type) hash=$($actualHash.Substring(0, 12))..." -ForegroundColor Green
 }
 
-if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 3306)) {
-    throw 'MySQL(127.0.0.1:3306) 未启动，后端无法连接业务数据库'
+$mysqlServiceCandidates = @('MySQL80', 'MySQL96', 'MySQL', 'mysqld')
+$redisServiceCandidates = @('Redis', 'Memurai')
+if (-not [string]::IsNullOrWhiteSpace($env:MYSQL_SERVICE_NAME)) {
+    $mysqlServiceCandidates = @([string]$env:MYSQL_SERVICE_NAME) + $mysqlServiceCandidates
 }
-if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 6379)) {
-    throw 'Redis(127.0.0.1:6379) 未启动，后端无法完成登录和缓存初始化'
+if (-not [string]::IsNullOrWhiteSpace($env:REDIS_SERVICE_NAME)) {
+    $redisServiceCandidates = @([string]$env:REDIS_SERVICE_NAME) + $redisServiceCandidates
 }
+Start-DependencyService -DisplayName 'MySQL' -CandidateNames $mysqlServiceCandidates -Port 3306
+Start-DependencyService -DisplayName 'Redis' -CandidateNames $redisServiceCandidates -Port 6379
 Write-Step '停止当前项目的旧监听进程'
 # 5001/9528 是历史架构遗留端口；仅在确认属于本项目时才清理。
 foreach ($legacyPort in @(5001, 9528)) {

@@ -43,11 +43,24 @@ sensor:
     trust-store: ${IOTDB_TRUST_STORE:}
     trust-store-password: ${IOTDB_TRUST_STORE_PASSWORD:}
 
+lowcode:
+  connector:
+    proxy-host: ${LOWCODE_OUTBOUND_PROXY_HOST}
+    proxy-port: ${LOWCODE_OUTBOUND_PROXY_PORT}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${LOWCODE_DB_URL}
+    username: ${LOWCODE_DB_USERNAME}
+    password: ${LOWCODE_DB_PASSWORD}
+    initial-size: 1
+    min-idle: 1
+    max-active: ${LOWCODE_DB_MAX_ACTIVE:10}
+
 spring:
   servlet:
     multipart:
-      max-file-size: 128MB
-      max-request-size: 130MB
+      max-file-size: ${MAX_UPLOAD_FILE_SIZE:32MB}
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE:34MB}
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -91,13 +104,13 @@ management:
     health:
       probes:
         enabled: true
-      show-details: always
+      show-details: never
   endpoints:
-    enabled-by-default: true
+    enabled-by-default: false
     web:
       base-path: /internal/actuator
       exposure:
-        include: health,info,prometheus,metrics,loggers
+        include: health,prometheus
   metrics:
     tags:
       application: phm-platform
@@ -115,7 +128,3 @@ cors:
 logging:
   file:
     path: ${LOG_PATH}
-
-token:
-  secret: ${JWT_SECRET}
-  previous-secrets: ${JWT_PREVIOUS_SECRETS:}

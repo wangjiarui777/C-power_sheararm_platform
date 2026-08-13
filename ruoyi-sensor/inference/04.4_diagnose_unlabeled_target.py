@@ -49,9 +49,12 @@ def safe_torch_load(path, map_location):
     兼容不同 PyTorch 版本的 torch.load。
     """
     try:
-        return torch.load(path, map_location=map_location, weights_only=False)
-    except TypeError:
-        return torch.load(path, map_location=map_location)
+        checkpoint = torch.load(path, map_location=map_location, weights_only=True)
+    except TypeError as exc:
+        raise RuntimeError("PyTorch with weights_only=True support is required") from exc
+    if not isinstance(checkpoint, dict):
+        raise ValueError("model artifact must be a tensor state dictionary checkpoint")
+    return checkpoint
 
 
 def parse_protect_classes(s):

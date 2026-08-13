@@ -3,7 +3,6 @@ import store from './store'
 import Message from 'element-ui/lib/message'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
-import { getToken } from '@/utils/auth'
 import { isPathMatch } from '@/utils/validate'
 import { isRelogin } from '@/utils/request'
 
@@ -17,7 +16,7 @@ const isWhiteList = (path) => {
 
 router.beforeEach((to, from, next) => {
   NProgress.start()
-  if (getToken()) {
+  if (store.getters.authenticated || store.getters.roles.length > 0) {
     to.meta.title && store.dispatch('settings/setTitle', to.meta.title)
     const isLock = store.getters.isLock
     /* has token*/
@@ -53,8 +52,20 @@ router.beforeEach((to, from, next) => {
         next()
       }
     }
+  } else if (!isWhiteList(to.path)) {
+    isRelogin.show = true
+    store.dispatch('GetInfo').then(() => {
+      isRelogin.show = false
+      store.dispatch('GenerateRoutes').then(accessRoutes => {
+        router.addRoutes(accessRoutes)
+        next({ ...to, replace: true })
+      })
+    }).catch(() => {
+      isRelogin.show = false
+      next(`/login?redirect=${encodeURIComponent(to.fullPath)}`)
+      NProgress.done()
+    })
   } else {
-    // 没有token
     if (isWhiteList(to.path)) {
       // 在免登录白名单，直接进入
       next()

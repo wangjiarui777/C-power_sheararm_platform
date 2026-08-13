@@ -15,6 +15,7 @@
       :on-remove="handleDelete"
       :show-file-list="true"
       :headers="headers"
+      :with-credentials="true"
       :file-list="fileList"
       :on-preview="handlePictureCardPreview"
       :class="{hide: this.fileList.length >= this.limit}"
@@ -45,9 +46,9 @@
 </template>
 
 <script>
-import { getToken } from "@/utils/auth"
 import { isExternal } from "@/utils/validate"
 import Sortable from 'sortablejs'
+import { getCsrfHeaders } from '@/utils/csrf'
 
 export default {
   props: {
@@ -101,9 +102,7 @@ export default {
       hideUpload: false,
       baseUrl: process.env.VUE_APP_BASE_API,
       uploadImgUrl: process.env.VUE_APP_BASE_API + this.action, // 上传的图片服务器地址
-      headers: {
-        Authorization: "Bearer " + getToken(),
-      },
+      headers: getCsrfHeaders(),
       fileList: []
     }
   },

@@ -2,14 +2,13 @@ import store from '@/store'
 import router from '@/router'
 import cache from '@/plugins/cache'
 import MessageBox from 'element-ui/lib/message-box'
-import { login, logout, getInfo } from '@/api/login'
-import { getToken, setToken, removeToken } from '@/utils/auth'
+import { bootstrapCsrf, login, logout, getInfo } from '@/api/login'
 import { isHttp, isEmpty } from "@/utils/validate"
 import defAva from '@/assets/images/profile.jpg'
 
 const user = {
   state: {
-    token: getToken(),
+    authenticated: false,
     id: '',
     name: '',
     nickName: '',
@@ -19,8 +18,8 @@ const user = {
   },
 
   mutations: {
-    SET_TOKEN: (state, token) => {
-      state.token = token
+    SET_AUTHENTICATED: (state, authenticated) => {
+      state.authenticated = authenticated
     },
     SET_ID: (state, id) => {
       state.id = id
@@ -50,9 +49,8 @@ const user = {
       const code = userInfo.code
       const uuid = userInfo.uuid
       return new Promise((resolve, reject) => {
-        login(username, password, code, uuid).then(res => {
-          setToken(res.token)
-          commit('SET_TOKEN', res.token)
+        bootstrapCsrf().then(() => login(username, password, code, uuid)).then(() => {
+          commit('SET_AUTHENTICATED', true)
           store.dispatch('lock/unlockScreen')
           resolve()
         }).catch(error => {
@@ -65,6 +63,7 @@ const user = {
     GetInfo({ commit, state }) {
       return new Promise((resolve, reject) => {
         getInfo().then(res => {
+          commit('SET_AUTHENTICATED', true)
           const user = res.user
           let avatar = user.avatar || ""
           if (!isHttp(avatar)) {
@@ -82,13 +81,13 @@ const user = {
           commit('SET_AVATAR', avatar)
           cache.session.set('pwrChrtype', res.pwdChrtype)
           /* 初始密码提示 */
-          if(res.isDefaultModifyPwd) {
-            MessageBox.confirm('您的密码还是初始密码，请修改密码！',  '安全提示', {  confirmButtonText: '确定',  cancelButtonText: '取消',  type: 'warning' }).then(() => {
+          if(res.passwordChangeRequired) {
+            MessageBox.alert('首次登录或密码已被管理员重置，请先修改密码。', '安全提示', { confirmButtonText: '去修改' }).then(() => {
               router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
-            }).catch(() => {})
+            })
           }
           /* 过期密码提示 */
-          if(!res.isDefaultModifyPwd && res.isPasswordExpired) {
+          if(!res.passwordChangeRequired && res.isPasswordExpired) {
             MessageBox.confirm('您的密码已过期，请尽快修改密码！',  '安全提示', {  confirmButtonText: '确定',  cancelButtonText: '取消',  type: 'warning' }).then(() => {
               router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
             }).catch(() => {})
@@ -103,11 +102,10 @@ const user = {
     // 退出系统
     LogOut({ commit, state }) {
       return new Promise((resolve, reject) => {
-        logout(state.token).then(() => {
-          commit('SET_TOKEN', '')
+        logout().then(() => {
+          commit('SET_AUTHENTICATED', false)
           commit('SET_ROLES', [])
           commit('SET_PERMISSIONS', [])
-          removeToken()
           resolve()
         }).catch(error => {
           reject(error)
@@ -118,8 +116,7 @@ const user = {
     // 前端 登出
     FedLogOut({ commit }) {
       return new Promise(resolve => {
-        commit('SET_TOKEN', '')
-        removeToken()
+        commit('SET_AUTHENTICATED', false)
         resolve()
       })
     }

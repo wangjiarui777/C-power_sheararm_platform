@@ -572,7 +572,7 @@
 </template>
 
 <script>
-import { isArray } from 'util'
+const isArray = Array.isArray
 import draggable from 'vuedraggable'
 import TreeNodeDialog from './TreeNodeDialog'
 import { isNumberStr } from '@/utils/index'

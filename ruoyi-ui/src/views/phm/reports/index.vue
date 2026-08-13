@@ -87,16 +87,15 @@
             <el-option label="运行报告" value="run" />
           </el-select>
         </el-form-item>
-        <el-form-item label="报告名称">
-          <el-input v-model="reportForm.fileName" />
-        </el-form-item>
-        <el-form-item label="文件地址">
-          <el-input v-model="reportForm.fileUrl" placeholder="/profile/upload/xxx.pdf 或 http(s) 地址" />
+        <el-form-item label="安全附件">
+          <el-input v-model="reportForm.fileUrl" readonly placeholder="请通过下方按钮上传，系统将回填附件 ID 地址" />
         </el-form-item>
         <el-form-item label="上传 PDF">
           <el-upload
             :action="uploadUrl"
             :headers="uploadHeaders"
+            :data="uploadData"
+            :with-credentials="true"
             :limit="1"
             accept=".pdf"
             :show-file-list="true"
@@ -106,21 +105,18 @@
             <div slot="tip" class="el-upload__tip">支持上传 PDF 服务报告，上传成功后自动回填文件地址。</div>
           </el-upload>
         </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="reportForm.remark" type="textarea" :rows="3" />
-        </el-form-item>
       </el-form>
       <div slot="footer">
         <el-button @click="reportVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveReport">保存</el-button>
+        <el-button type="primary" @click="saveReport">完成</el-button>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script>
-import { getRealtimeReport, getHistoryReport, listServiceReports, saveServiceReport, deleteAttachment } from '@/api/phm'
-import { getToken } from '@/utils/auth'
+import { getRealtimeReport, getHistoryReport, listServiceReports, deleteAttachment } from '@/api/phm'
+import { getCsrfHeaders } from '@/utils/csrf'
 
 export default {
   name: 'PhmReports',
@@ -134,9 +130,14 @@ export default {
       historySummary: {},
       reports: [],
       reportVisible: false,
-      reportForm: { reportType: 'diagnosis', fileName: '', fileUrl: '', fileExt: 'pdf', remark: '' },
-      uploadUrl: process.env.VUE_APP_BASE_API + '/common/upload',
-      uploadHeaders: { Authorization: 'Bearer ' + getToken() }
+      reportForm: { reportType: 'diagnosis', attachmentId: null, fileName: '', fileUrl: '', fileExt: 'pdf' },
+      uploadUrl: process.env.VUE_APP_BASE_API + '/phm/attachments/upload',
+      uploadHeaders: getCsrfHeaders()
+    }
+  },
+  computed: {
+    uploadData() {
+      return { purpose: 'REPORT', bizType: 'report', reportType: this.reportForm.reportType }
     }
   },
   created() {
@@ -178,16 +179,18 @@ export default {
       }
     },
     async saveReport() {
-      await saveServiceReport(this.reportForm)
-      this.$message.success('服务报告已登记')
+      if (!this.reportForm.attachmentId) return this.$message.warning('请先上传 PDF 报告')
+      this.$message.success('服务报告已安全登记')
       this.reportVisible = false
-      this.reportForm = { reportType: 'diagnosis', fileName: '', fileUrl: '', fileExt: 'pdf', remark: '' }
+      this.reportForm = { reportType: 'diagnosis', attachmentId: null, fileName: '', fileUrl: '', fileExt: 'pdf' }
       this.loadReports()
     },
     handleReportUploadSuccess(res, file) {
       if (res.code === 200) {
-        this.reportForm.fileUrl = res.url
-        this.reportForm.fileName = this.reportForm.fileName || res.originalFilename || file.name
+        const data = res.data || {}
+        this.reportForm.attachmentId = data.attachmentId
+        this.reportForm.fileUrl = `/phm/attachments/${data.attachmentId}/content`
+        this.reportForm.fileName = this.reportForm.fileName || data.fileName || file.name
         this.reportForm.fileExt = 'pdf'
         this.$message.success('PDF 上传成功')
       } else {
@@ -229,7 +232,7 @@ export default {
       document.body.removeChild(link)
     },
     removeReport(row) {
-      this.$confirm(`确认删除服务报告“${row.fileName || row.id}”？不会删除服务器上的原始文件。`, '提示', {
+      this.$confirm(`确认删除服务报告“${row.fileName || row.id}”及其受控存储文件？`, '提示', {
         type: 'warning'
       }).then(async() => {
         await deleteAttachment(row.id)

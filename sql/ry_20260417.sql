@@ -66,8 +66,11 @@ create table sys_user (
 -- ----------------------------
 -- 初始化-用户信息表数据
 -- ----------------------------
-insert into sys_user values(1,  103, 'admin', '若依', '00', 'ry@163.com', '15888888888', '1', '', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '0', '0', '127.0.0.1', sysdate(), sysdate(), 'admin', sysdate(), '', null, '管理员');
-insert into sys_user values(2,  105, 'ry',    '若依', '00', 'ry@qq.com',  '15666666666', '1', '', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '0', '0', '127.0.0.1', sysdate(), sysdate(), 'admin', sysdate(), '', null, '测试员');
+-- Bootstrap accounts are deliberately disabled and have no usable password.
+-- ProductionAdminBootstrap replaces the admin sentinel exactly once from the
+-- INITIAL_ADMIN_PASSWORD secret and forces an immediate password change.
+insert into sys_user values(1,  103, 'admin', '系统管理员', '00', '', '', '1', '', '!BOOTSTRAP_REQUIRED!', '1', '0', '', null, null, 'bootstrap', sysdate(), '', null, '待安全引导的管理员');
+insert into sys_user values(2,  105, 'ry',    '示例账号',   '00', '', '', '1', '', '!ACCOUNT_DISABLED!',   '1', '0', '', null, null, 'bootstrap', sysdate(), '', null, '默认停用');
 
 
 -- ----------------------------
@@ -551,7 +554,7 @@ create table sys_config (
 ) engine=innodb auto_increment=100 comment = '参数配置表';
 
 insert into sys_config values(1, '主框架页-默认皮肤样式名称',     'sys.index.skinName',               'skin-blue',     'Y', 'admin', sysdate(), '', null, '蓝色 skin-blue、绿色 skin-green、紫色 skin-purple、红色 skin-red、黄色 skin-yellow' );
-insert into sys_config values(2, '用户管理-账号初始密码',         'sys.user.initPassword',            '123456',        'Y', 'admin', sysdate(), '', null, '初始化密码 123456' );
+insert into sys_config values(2, '用户管理-账号初始密码',         'sys.user.initPassword',            '',              'Y', 'admin', sysdate(), '', null, '禁止固定初始密码；创建账号时必须输入一次性密码' );
 insert into sys_config values(3, '主框架页-侧边栏主题',           'sys.index.sideTheme',              'theme-dark',    'Y', 'admin', sysdate(), '', null, '深色主题theme-dark，浅色主题theme-light' );
 insert into sys_config values(4, '账号自助-验证码开关',           'sys.account.captchaEnabled',       'true',          'Y', 'admin', sysdate(), '', null, '是否开启验证码功能（true开启，false关闭）');
 insert into sys_config values(5, '账号自助-是否开启用户注册功能', 'sys.account.registerUser',         'false',         'Y', 'admin', sysdate(), '', null, '是否开启注册用户功能（true开启，false关闭）');

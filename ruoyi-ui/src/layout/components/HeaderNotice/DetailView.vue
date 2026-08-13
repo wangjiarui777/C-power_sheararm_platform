@@ -42,7 +42,7 @@
         </div>
 
         <div class="notice-body">
-          <div v-if="hasContent" class="notice-content" v-html="detail.noticeContent" />
+          <div v-if="hasContent" class="notice-content" v-html="safeNoticeContent" />
           <div v-else class="notice-empty notice-empty--inner">
             <i class="el-icon-document"></i> 暂无内容
           </div>
@@ -54,6 +54,7 @@
 
 <script>
 import { getNotice } from '@/api/system/notice'
+import { sanitizeNoticeHtml } from '@/utils/sanitize'
 
 export default {
   name: 'NoticeDetailView',
@@ -72,6 +73,9 @@ export default {
     hasContent() {
       const c = this.detail && this.detail.noticeContent
       return c != null && String(c).trim() !== ''
+    },
+    safeNoticeContent() {
+      return sanitizeNoticeHtml(this.detail && this.detail.noticeContent)
     }
   },
   methods: {

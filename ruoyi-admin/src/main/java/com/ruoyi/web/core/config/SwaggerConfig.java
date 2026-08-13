@@ -3,13 +3,11 @@ package com.ruoyi.web.core.config;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import com.ruoyi.common.config.RuoYiConfig;
-import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
-import io.swagger.v3.oas.models.security.SecurityRequirement;
-import io.swagger.v3.oas.models.security.SecurityScheme;
 
 /**
  * Swagger2的接口配置
@@ -17,6 +15,7 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
  * @author ruoyi
  */
 @Configuration
+@Profile({"dev", "test"})
 public class SwaggerConfig
 {
     /** 系统基础配置 */
@@ -29,21 +28,7 @@ public class SwaggerConfig
     @Bean
     public OpenAPI customOpenApi()
     {
-        return new OpenAPI().components(new Components()
-            // 设置认证的请求头
-            .addSecuritySchemes("apikey", securityScheme()))
-            .addSecurityItem(new SecurityRequirement().addList("apikey"))
-            .info(getApiInfo());
-    }
-    
-    @Bean
-    public SecurityScheme securityScheme()
-    {
-        return new SecurityScheme()
-            .type(SecurityScheme.Type.APIKEY)
-            .name("Authorization")
-            .in(SecurityScheme.In.HEADER)
-            .scheme("Bearer");
+        return new OpenAPI().info(getApiInfo());
     }
     
     /**

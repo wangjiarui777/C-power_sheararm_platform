@@ -12,6 +12,7 @@
       :on-success="handleUploadSuccess"
       :show-file-list="false"
       :headers="headers"
+      :with-credentials="true"
       class="upload-file-uploader"
       ref="fileUpload"
       v-if="!disabled"
@@ -42,8 +43,8 @@
 </template>
 
 <script>
-import { getToken } from "@/utils/auth"
 import Sortable from 'sortablejs'
+import { getCsrfHeaders } from '@/utils/csrf'
 
 export default {
   name: "FileUpload",
@@ -96,9 +97,7 @@ export default {
       uploadList: [],
       baseUrl: process.env.VUE_APP_BASE_API,
       uploadFileUrl: process.env.VUE_APP_BASE_API + this.action, // 上传文件服务器地址
-      headers: {
-        Authorization: "Bearer " + getToken(),
-      },
+      headers: getCsrfHeaders(),
       fileList: []
     }
   },

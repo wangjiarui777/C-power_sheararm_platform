@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import com.ruoyi.system.domain.SysNotice;
 import com.ruoyi.system.mapper.SysNoticeMapper;
 import com.ruoyi.system.service.ISysNoticeService;
+import com.ruoyi.system.security.NoticeHtmlSanitizer;
 
 /**
  * 公告 服务层实现
@@ -17,6 +18,9 @@ public class SysNoticeServiceImpl implements ISysNoticeService
 {
     @Autowired
     private SysNoticeMapper noticeMapper;
+
+    @Autowired
+    private NoticeHtmlSanitizer noticeHtmlSanitizer;
 
     /**
      * 查询公告信息
@@ -51,6 +55,7 @@ public class SysNoticeServiceImpl implements ISysNoticeService
     @Override
     public int insertNotice(SysNotice notice)
     {
+        notice.setNoticeContent(noticeHtmlSanitizer.sanitize(notice.getNoticeContent()));
         return noticeMapper.insertNotice(notice);
     }
 
@@ -63,6 +68,7 @@ public class SysNoticeServiceImpl implements ISysNoticeService
     @Override
     public int updateNotice(SysNotice notice)
     {
+        notice.setNoticeContent(noticeHtmlSanitizer.sanitize(notice.getNoticeContent()));
         return noticeMapper.updateNotice(notice);
     }
 

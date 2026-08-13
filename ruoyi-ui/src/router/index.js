@@ -101,6 +101,20 @@ export const constantRoutes = [
 // 动态路由，基于用户权限动态去加载
 export const dynamicRoutes = [
   {
+    path: '/lowcode/app',
+    component: Layout,
+    hidden: true,
+    permissions: ['lowcode:runtime:query'],
+    children: [
+      {
+        path: ':appCode',
+        component: () => import('@/views/tool/lowcode/runtime'),
+        name: 'LowCodeRuntime',
+        meta: { title: '低代码应用', activeMenu: '/tool/lowcode' }
+      }
+    ]
+  },
+  {
     path: '/phm/brain',
     component: Layout,
     hidden: true,

@@ -100,9 +100,12 @@ def make_device(device_arg: str) -> torch.device:
 
 def safe_torch_load(path: Path, map_location: torch.device):
     try:
-        return torch.load(path, map_location=map_location, weights_only=False)
-    except TypeError:
-        return torch.load(path, map_location=map_location)
+        checkpoint = torch.load(path, map_location=map_location, weights_only=True)
+    except TypeError as exc:
+        raise RuntimeError("PyTorch with weights_only=True support is required") from exc
+    if not isinstance(checkpoint, dict):
+        raise ValueError("model artifact must be a tensor state dictionary checkpoint")
+    return checkpoint
 
 
 def clean_state_dict(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:

@@ -10,6 +10,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.env.Environment;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
+import org.springframework.core.annotation.Order;
 import org.springframework.util.StringUtils;
 
 /**
@@ -17,6 +18,7 @@ import org.springframework.util.StringUtils;
  */
 @Component
 @Profile("prod")
+@Order(20)
 public class ProductionConfigurationValidator implements ApplicationRunner
 {
     private final Environment environment;
@@ -40,19 +42,24 @@ public class ProductionConfigurationValidator implements ApplicationRunner
     static List<String> validate(Environment env)
     {
         List<String> errors = new ArrayList<>();
-        requireSecret(env, errors, "token.secret", 32);
-        validatePreviousJwtSecrets(env, errors);
         requireSecret(env, errors, "sensor.collector.master-key", 32);
         requireSecret(env, errors, "sensor.inference.internal-token", 32);
         requireSecret(env, errors, "spring.datasource.druid.master.password", 8);
         requireSecret(env, errors, "spring.data.redis.password", 8);
         requireSecret(env, errors, "sensor.iotdb.password", 8);
+        requireSecret(env, errors, "lowcode.datasource.password", 16);
 
         requireValue(env, errors, "spring.datasource.druid.master.url");
         requireValue(env, errors, "spring.datasource.druid.master.username");
         requireValue(env, errors, "spring.data.redis.host");
         requireValue(env, errors, "sensor.iotdb.node-urls");
         requireValue(env, errors, "sensor.iotdb.username");
+        requireValue(env, errors, "lowcode.datasource.url");
+        requireValue(env, errors, "lowcode.datasource.username");
+        requireValue(env, errors, "lowcode.connector.proxy-host");
+        int proxyPort = env.getProperty("lowcode.connector.proxy-port", Integer.class, 0);
+        if (proxyPort < 1 || proxyPort > 65535) errors.add("lowcode.connector.proxy-port must be between 1 and 65535");
+        validateLowCodeDataSource(env, errors);
         validateWritablePath(env, errors, "ruoyi.profile");
         validateWritablePath(env, errors, "logging.file.path");
         validateWritablePath(env, errors, "sensor.attachment.root");
@@ -179,6 +186,22 @@ public class ProductionConfigurationValidator implements ApplicationRunner
         else if ("0.0.0.0".equals(bindAddress.trim()) || "::".equals(bindAddress.trim()))
         {
             errors.add("sensor.channel-tcp.bind-address must target the dedicated industrial interface");
+        }
+    }
+
+    private static void validateLowCodeDataSource(Environment env, List<String> errors)
+    {
+        String lowCodeUrl = env.getProperty("lowcode.datasource.url", "").trim();
+        String systemUrl = env.getProperty("spring.datasource.druid.master.url", "").trim();
+        String lowCodeUser = env.getProperty("lowcode.datasource.username", "").trim();
+        String systemUser = env.getProperty("spring.datasource.druid.master.username", "").trim();
+        if (lowCodeUrl.equalsIgnoreCase(systemUrl))
+        {
+            errors.add("lowcode.datasource.url must target a dedicated schema");
+        }
+        if (lowCodeUser.equalsIgnoreCase(systemUser))
+        {
+            errors.add("lowcode.datasource.username must use a dedicated least-privilege account");
         }
     }
 }

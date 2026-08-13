@@ -108,6 +108,7 @@
             v-hasPermi="['phm:config:add']"
             :action="attachmentUploadUrl"
             :headers="uploadHeaders"
+            :with-credentials="true"
             :data="attachmentUploadData"
             accept=".jpg,.jpeg,.png,.webp"
             :show-file-list="false"
@@ -171,6 +172,7 @@
                 <el-upload
                   :action="uploadUrl"
                   :headers="uploadHeaders"
+                  :with-credentials="true"
                   accept=".jpg,.jpeg,.png,.webp,.svg"
                   :show-file-list="false"
                   :on-success="res => handleSystemLogoUploadSuccess(res, scope.row)"
@@ -206,6 +208,7 @@
               <el-upload
                 :action="uploadUrl"
                 :headers="uploadHeaders"
+                :with-credentials="true"
                 :limit="1"
                 accept=".jpg,.jpeg,.png,.webp"
                 :show-file-list="true"
@@ -286,7 +289,7 @@ import {
   listAttachments, getAttachmentContent, deleteAttachment,
   listSystemConfig, saveSystemConfig
 } from '@/api/phm'
-import { getToken } from '@/utils/auth'
+import { getCsrfHeaders } from '@/utils/csrf'
 
 export default {
   name: 'PhmConfig',
@@ -317,7 +320,7 @@ export default {
       attachmentPreviews: {},
       uploadUrl: process.env.VUE_APP_BASE_API + '/common/upload',
       attachmentUploadUrl: process.env.VUE_APP_BASE_API + '/phm/attachments/upload',
-      uploadHeaders: { Authorization: 'Bearer ' + getToken() },
+      uploadHeaders: getCsrfHeaders(),
       deviceRules: {
         deviceCode: [{ required: true, message: '请输入设备编码', trigger: 'blur' }],
         deviceName: [{ required: true, message: '请输入设备名称', trigger: 'blur' }]

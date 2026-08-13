@@ -1,5 +1,9 @@
 import request from '@/utils/request'
 
+export function bootstrapCsrf() {
+  return request({ url: '/csrf', method: 'get' })
+}
+
 // 登录方法
 export function login(username, password, code, uuid) {
   const data = {

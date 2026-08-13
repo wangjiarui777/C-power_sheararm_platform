@@ -389,6 +389,7 @@ public class PhmController extends BaseController
             .build();
         return ResponseEntity.ok()
             .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+            .header("X-Content-Type-Options", "nosniff")
             .contentType(MediaType.APPLICATION_OCTET_STREAM)
             .contentLength(resource.contentLength())
             .body(resource);
@@ -402,7 +403,7 @@ public class PhmController extends BaseController
         return toAjax(phmService.saveAttachment(attachment, getUsernameSafe()));
     }
 
-    @PreAuthorize("@ss.hasPermi('phm:config:remove')")
+    @PreAuthorize("@ss.hasAnyPermi('phm:config:remove,phm:report:edit')")
     @Log(title = "PHM附件删除", businessType = BusinessType.DELETE)
     @DeleteMapping("/attachments/{attachmentId}")
     public AjaxResult removeAttachment(@PathVariable Long attachmentId)

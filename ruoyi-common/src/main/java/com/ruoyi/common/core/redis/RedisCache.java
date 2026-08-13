@@ -104,6 +104,12 @@ public class RedisCache
         return redisTemplate.hasKey(key);
     }
 
+    public long increment(final String key, final long delta)
+    {
+        Long value = redisTemplate.opsForValue().increment(key, delta);
+        return value == null ? 0 : value;
+    }
+
     /**
      * 获得缓存的基本对象。
      *

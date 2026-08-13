@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import com.ruoyi.common.annotation.Log;
-import com.ruoyi.common.config.RuoYiConfig;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.common.core.domain.entity.SysUser;
@@ -20,11 +19,11 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
-import com.ruoyi.common.utils.file.FileUploadUtils;
-import com.ruoyi.common.utils.file.FileUtils;
-import com.ruoyi.common.utils.file.MimeTypeUtils;
 import com.ruoyi.framework.web.service.TokenService;
 import com.ruoyi.system.service.ISysUserService;
+import com.ruoyi.system.security.PasswordPolicyService;
+import com.ruoyi.sensor.domain.entity.PhmAttachmentEntity;
+import com.ruoyi.sensor.service.PhmAttachmentStorageService;
 
 /**
  * 个人信息 业务处理
@@ -40,6 +39,12 @@ public class SysProfileController extends BaseController
 
     @Autowired
     private TokenService tokenService;
+
+    @Autowired
+    private PasswordPolicyService passwordPolicyService;
+
+    @Autowired
+    private PhmAttachmentStorageService attachmentStorageService;
 
     /**
      * 个人信息
@@ -106,13 +111,15 @@ public class SysProfileController extends BaseController
         {
             return error("新密码不能与旧密码相同");
         }
+        passwordPolicyService.validate(newPassword, user);
         newPassword = SecurityUtils.encryptPassword(newPassword);
         if (userService.resetUserPwd(userId, newPassword) > 0)
         {
             // 更新缓存用户密码&密码最后更新时间
             loginUser.getUser().setPwdUpdateDate(DateUtils.getNowDate());
+            loginUser.getUser().setMustChangePassword(false);
             loginUser.getUser().setPassword(newPassword);
-            tokenService.setLoginUser(loginUser);
+            tokenService.revokeUserSessions(userId);
             return success();
         }
         return error("修改密码异常，请联系管理员");
@@ -128,14 +135,15 @@ public class SysProfileController extends BaseController
         if (!file.isEmpty())
         {
             LoginUser loginUser = getLoginUser();
-            String avatar = FileUploadUtils.upload(RuoYiConfig.getAvatarPath(), file, MimeTypeUtils.IMAGE_EXTENSION, true);
+            PhmAttachmentEntity attachment = attachmentStorageService.storeGeneric(file, loginUser.getUsername());
+            if (!"GENERIC_IMAGE".equals(attachment.getPurpose()))
+            {
+                attachmentStorageService.deleteGeneric(attachment.getId());
+                return error("头像必须是校验通过的 PNG、JPEG 或 WebP 图片");
+            }
+            String avatar = "/attachments/" + attachment.getId() + "/content";
             if (userService.updateUserAvatar(loginUser.getUserId(), avatar))
             {
-                String oldAvatar = loginUser.getUser().getAvatar();
-                if (StringUtils.isNotEmpty(oldAvatar))
-                {
-                    FileUtils.deleteFile(RuoYiConfig.getProfile() + FileUtils.stripPrefix(oldAvatar));
-                }
                 AjaxResult ajax = AjaxResult.success();
                 ajax.put("imgUrl", avatar);
                 // 更新缓存用户头像

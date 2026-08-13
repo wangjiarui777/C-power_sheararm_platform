@@ -13,6 +13,31 @@ ruoyi:
   # 验证码类型 math 数字计算 char 字符验证
   captchaType: math
 
+# 低代码动态运行时：生产默认只读，开发环境可通过环境变量显式开启。
+lowcode:
+  runtime:
+    write-enabled: ${LOWCODE_RUNTIME_WRITE_ENABLED:false}
+  connector:
+    proxy-host: ${LOWCODE_OUTBOUND_PROXY_HOST:}
+    proxy-port: ${LOWCODE_OUTBOUND_PROXY_PORT:0}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${LOWCODE_DB_URL:jdbc:mysql://localhost:3306/ry-lowcode?useUnicode=true&characterEncoding=utf8&useSSL=true&serverTimezone=GMT%2B8}
+    username: ${LOWCODE_DB_USERNAME:lowcode_runtime}
+    password: ${LOWCODE_DB_PASSWORD:}
+    initial-size: 1
+    min-idle: 1
+    max-active: 10
+
+security:
+  session:
+    cookie-name: RUOYI_SESSION
+    secure-cookie: ${SESSION_COOKIE_SECURE:true}
+
+# 认证令牌配置。SameUrlDataInterceptor 依赖此请求头名称；默认兼容 RuoYi 前端。
+token:
+  header: ${TOKEN_HEADER:Authorization}
+
 sensor:
   attachment:
     root: ${SENSOR_ATTACHMENT_ROOT:./.local-data/attachments}
@@ -160,12 +185,6 @@ user:
 sys:
   account:
     captchaEnabled: true
-
-token:
-  header: Authorization
-  secret: ${JWT_SECRET:}
-  previous-secrets: ${JWT_PREVIOUS_SECRETS:}
-  expireTime: 30
 
 # 开发环境配置
 server:

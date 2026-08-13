@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import numpy as np
+import os
+import zipfile
 import scipy.io
 
 
@@ -121,30 +123,69 @@ def load_signal(path, signal_key="sig_acc_5120"):
     return load_npy_signal(path, signal_key=signal_key)
 
 
+MAX_SIGNAL_FILE_BYTES = int(os.environ.get("INFERENCE_MAX_SIGNAL_FILE_BYTES", 64 * 1024 * 1024))
+MAX_SIGNAL_ELEMENTS = int(os.environ.get("INFERENCE_MAX_SIGNAL_ELEMENTS", 10_000_000))
+MAX_NPZ_EXPANDED_BYTES = int(os.environ.get("INFERENCE_MAX_NPZ_EXPANDED_BYTES", 128 * 1024 * 1024))
+MAX_NPZ_COMPRESSION_RATIO = float(os.environ.get("INFERENCE_MAX_NPZ_COMPRESSION_RATIO", 100.0))
+
+
+def _validate_numpy_container(path):
+    """Reject oversized files and suspicious NPZ archives before NumPy parses them."""
+    path = Path(path)
+    size = path.stat().st_size
+    if size <= 0 or size > MAX_SIGNAL_FILE_BYTES:
+        raise ValueError(f"Signal file size is outside the allowed range: {size} bytes")
+    if path.suffix.lower() == ".npz":
+        if not zipfile.is_zipfile(path):
+            raise ValueError("Invalid NPZ container")
+        with zipfile.ZipFile(path) as archive:
+            expanded = 0
+            for entry in archive.infolist():
+                if entry.is_dir() or not entry.filename.endswith(".npy"):
+                    raise ValueError("NPZ may contain only NPY array entries")
+                expanded += entry.file_size
+                compressed = max(entry.compress_size, 1)
+                if entry.file_size / compressed > MAX_NPZ_COMPRESSION_RATIO:
+                    raise ValueError("NPZ compression ratio exceeds the safety limit")
+            if expanded > MAX_NPZ_EXPANDED_BYTES:
+                raise ValueError("NPZ expanded size exceeds the safety limit")
+
+
+def validate_numeric_array(value, source_name="<array>"):
+    """Return a finite, bounded 1-D float32 array without deserializing objects."""
+    array = np.asarray(value)
+    if array.dtype.hasobject or array.dtype.fields is not None:
+        raise ValueError(f"Object and structured arrays are forbidden: {source_name}")
+    if not np.issubdtype(array.dtype, np.number) or np.issubdtype(array.dtype, np.complexfloating):
+        raise ValueError(f"Only real numeric arrays are supported: {source_name}")
+    if array.ndim == 0 or array.ndim > 2:
+        raise ValueError(f"Signal arrays must have one or two dimensions: {source_name}")
+    if array.size == 0 or array.size > MAX_SIGNAL_ELEMENTS:
+        raise ValueError(f"Signal element count is outside the allowed range: {array.size}")
+    result = np.asarray(array, dtype=np.float32).reshape(-1)
+    if not np.isfinite(result).all():
+        raise ValueError(f"Signal contains NaN or infinite values: {source_name}")
+    return result
+
+
 def load_npy_signal(path, signal_key="sig_acc_5120"):
-    """Load a vibration signal from a .npy or .npz file."""
-    payload = np.load(str(path), allow_pickle=True)
+    """Load a numeric vibration signal without enabling Pickle deserialization."""
+    path = Path(path)
+    _validate_numpy_container(path)
+    payload = np.load(str(path), allow_pickle=False)
 
     if isinstance(payload, np.lib.npyio.NpzFile):
         try:
             keys = [k for k in payload.files if not str(k).startswith("__")]
             if not keys:
                 raise KeyError(f"No valid arrays found in: {path}")
-            arrays = {key: payload[key] for key in keys}
+            arrays = {key: validate_numeric_array(payload[key], f"{path.name}:{key}") for key in keys}
             return _extract_signal_from_dict(arrays, source_name=path.name, preferred_signal_key=signal_key)
         finally:
             payload.close()
 
     if isinstance(payload, np.ndarray):
-        if payload.dtype == object:
-            if payload.size == 1:
-                item = payload.reshape(-1)[0]
-                if isinstance(item, dict):
-                    return _extract_signal_from_dict(item, source_name=path.name, preferred_signal_key=signal_key)
-            pieces = [np.asarray(item, dtype=np.float32).reshape(-1) for item in payload.flat]
-            if pieces:
-                return np.concatenate(pieces)
-        return np.asarray(payload, dtype=np.float32).reshape(-1)
+        return validate_numeric_array(payload, path.name)
 
     raise TypeError(f"Unsupported npy file format: {type(payload)}")
 

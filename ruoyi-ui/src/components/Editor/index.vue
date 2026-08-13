@@ -8,6 +8,7 @@
       name="file"
       :show-file-list="false"
       :headers="headers"
+      :with-credentials="true"
       style="display: none"
       ref="upload"
       v-if="this.type == 'url'"
@@ -23,7 +24,7 @@ import Quill from "quill"
 import "quill/dist/quill.core.css"
 import "quill/dist/quill.snow.css"
 import "quill/dist/quill.bubble.css"
-import { getToken } from "@/utils/auth"
+import { getCsrfHeaders } from '@/utils/csrf'
 
 export default {
   name: "Editor",
@@ -62,9 +63,7 @@ export default {
   data() {
     return {
       uploadUrl: process.env.VUE_APP_BASE_API + "/common/upload", // 上传的图片服务器地址
-      headers: {
-        Authorization: "Bearer " + getToken()
-      },
+      headers: getCsrfHeaders(),
       Quill: null,
       currentValue: "",
       options: {
@@ -159,7 +158,7 @@ export default {
     },
     // 上传前校检格式和大小
     handleBeforeUpload(file) {
-      const type = ["image/jpeg", "image/jpg", "image/png", "image/svg"]
+      const type = ["image/jpeg", "image/jpg", "image/png"]
       const isJPG = type.includes(file.type)
       // 检验文件格式
       if (!isJPG) {
@@ -211,7 +210,7 @@ export default {
     insertImage(file) {
       const formData = new FormData()
       formData.append("file", file)
-      axios.post(this.uploadUrl, formData, { headers: { "Content-Type": "multipart/form-data", Authorization: this.headers.Authorization } }).then(res => {
+      axios.post(this.uploadUrl, formData, { withCredentials: true, headers: { "Content-Type": "multipart/form-data", ...getCsrfHeaders() } }).then(res => {
         this.handleUploadSuccess(res.data)
       })
     }

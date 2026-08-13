@@ -13,12 +13,10 @@ class ProductionConfigurationValidatorTest
     void rejectsMissingAndDevelopmentSecrets()
     {
         MockEnvironment environment = validEnvironment()
-                .withProperty("token.secret", "short")
                 .withProperty("sensor.collector.master-key", "dev-collector-key");
 
         List<String> errors = ProductionConfigurationValidator.validate(environment);
 
-        assertTrue(errors.stream().anyMatch(item -> item.contains("token.secret")));
         assertTrue(errors.stream().anyMatch(item -> item.contains("sensor.collector.master-key")));
     }
 
@@ -59,7 +57,6 @@ class ProductionConfigurationValidatorTest
     private MockEnvironment validEnvironment()
     {
         return new MockEnvironment()
-                .withProperty("token.secret", "jwt-secret-0123456789-0123456789-abcdef")
                 .withProperty("sensor.collector.token", "collector-token-0123456789-0123456789")
                 .withProperty("sensor.collector.master-key", "collector-master-0123456789-0123456789")
                 .withProperty("sensor.inference.internal-token", "inference-token-0123456789-0123456789")
@@ -71,6 +68,11 @@ class ProductionConfigurationValidatorTest
                 .withProperty("sensor.iotdb.node-urls", "iotdb:6667")
                 .withProperty("sensor.iotdb.username", "ruoyi")
                 .withProperty("sensor.iotdb.password", "iotdb-password")
+                .withProperty("lowcode.datasource.url", "jdbc:mysql://lowcode-db:3306/lowcode_runtime")
+                .withProperty("lowcode.datasource.username", "lowcode_runtime")
+                .withProperty("lowcode.datasource.password", "lowcode-password-0123456789")
+                .withProperty("lowcode.connector.proxy-host", "egress-proxy.internal")
+                .withProperty("lowcode.connector.proxy-port", "8443")
                 .withProperty("ruoyi.profile", "D:/ruoyi/data")
                 .withProperty("logging.file.path", "D:/ruoyi/logs")
                 .withProperty("sensor.attachment.root", "D:/ruoyi-secure/attachments")

@@ -6,7 +6,10 @@ const payload = {
   collectionTime: new Date().toISOString().slice(0, 19).replace('T', ' '),
   remark: 'collector upload'
 }
-const collectorToken = process.env.SENSOR_COLLECTOR_TOKEN || 'dev-collector-token'
+const collectorToken = process.env.SENSOR_COLLECTOR_TOKEN
+if (!collectorToken) {
+  throw new Error('SENSOR_COLLECTOR_TOKEN must be supplied by the runtime secret store')
+}
 
 async function uploadOnce() {
   await fetch('http://localhost:80/sensor/vibration-data/upload', {

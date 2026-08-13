@@ -1,6 +1,6 @@
 <template>
   <el-dialog :title="title" :visible.sync="visible" :width="width" append-to-body @close="handleClose">
-    <el-upload ref="uploadRef" :limit="1" accept=".xlsx, .xls" :headers="headers" :action="uploadUrl" :disabled="isUploading" :on-progress="handleProgress" :on-success="handleSuccess" :auto-upload="false" drag>
+    <el-upload ref="uploadRef" :limit="1" accept=".xlsx, .xls" :headers="headers" :with-credentials="true" :action="uploadUrl" :disabled="isUploading" :on-progress="handleProgress" :on-success="handleSuccess" :auto-upload="false" drag>
       <i class="el-icon-upload"></i>
       <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
       <div class="el-upload__tip text-center" slot="tip">
@@ -19,7 +19,7 @@
 </template>
 
 <script>
-import { getToken } from '@/utils/auth'
+import { getCsrfHeaders } from '@/utils/csrf'
 
 export default {
   props: {
@@ -59,7 +59,7 @@ export default {
       visible: false,
       isUploading: false,
       updateSupport: false,
-      headers: { Authorization: 'Bearer ' + getToken() }
+      headers: getCsrfHeaders()
     }
   },
   computed: {

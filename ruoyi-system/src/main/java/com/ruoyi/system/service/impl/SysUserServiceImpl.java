@@ -31,6 +31,7 @@ import com.ruoyi.system.mapper.SysUserRoleMapper;
 import com.ruoyi.system.service.ISysConfigService;
 import com.ruoyi.system.service.ISysDeptService;
 import com.ruoyi.system.service.ISysUserService;
+import com.ruoyi.system.security.PasswordPolicyService;
 
 /**
  * 用户 业务层处理
@@ -65,6 +66,9 @@ public class SysUserServiceImpl implements ISysUserService
 
     @Autowired
     protected Validator validator;
+
+    @Autowired
+    private PasswordPolicyService passwordPolicyService;
 
     /**
      * 根据条件分页查询用户列表
@@ -261,6 +265,7 @@ public class SysUserServiceImpl implements ISysUserService
     @Transactional
     public int insertUser(SysUser user)
     {
+        if (user.getMustChangePassword() == null) user.setMustChangePassword(true);
         // 新增用户信息
         int rows = userMapper.insertUser(user);
         // 新增用户岗位关联
@@ -377,7 +382,7 @@ public class SysUserServiceImpl implements ISysUserService
     @Override
     public int resetPwd(SysUser user)
     {
-        return userMapper.resetUserPwd(user.getUserId(), user.getPassword());
+        return userMapper.resetUserPwdByAdmin(user.getUserId(), user.getPassword());
     }
 
     /**
@@ -518,6 +523,8 @@ public class SysUserServiceImpl implements ISysUserService
                     BeanValidators.validateWithException(validator, user);
                     deptService.checkDeptDataScope(user.getDeptId());
                     String password = configService.selectConfigByKey("sys.user.initPassword");
+                    passwordPolicyService.validate(password, user);
+                    user.setMustChangePassword(true);
                     user.setPassword(SecurityUtils.encryptPassword(password));
                     user.setCreateBy(operName);
                     userMapper.insertUser(user);

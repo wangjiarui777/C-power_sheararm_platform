@@ -77,6 +77,9 @@ public class SysUser extends BaseEntity
     /** 密码最后更新时间 */
     private Date pwdUpdateDate;
 
+    /** Account may only access password-change and logout endpoints until cleared. */
+    private Boolean mustChangePassword;
+
     /** 部门对象 */
     @Excels({
         @Excel(name = "部门名称", targetAttr = "deptName", type = Type.EXPORT),
@@ -260,6 +263,16 @@ public class SysUser extends BaseEntity
         this.pwdUpdateDate = pwdUpdateDate;
     }
 
+    public Boolean getMustChangePassword()
+    {
+        return mustChangePassword;
+    }
+
+    public void setMustChangePassword(Boolean mustChangePassword)
+    {
+        this.mustChangePassword = mustChangePassword;
+    }
+
     public SysDept getDept()
     {
         return dept;
@@ -327,6 +340,7 @@ public class SysUser extends BaseEntity
             .append("loginIp", getLoginIp())
             .append("loginDate", getLoginDate())
             .append("pwdUpdateDate", getPwdUpdateDate())
+            .append("mustChangePassword", getMustChangePassword())
             .append("createBy", getCreateBy())
             .append("createTime", getCreateTime())
             .append("updateBy", getUpdateBy())

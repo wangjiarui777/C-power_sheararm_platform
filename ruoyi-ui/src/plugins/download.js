@@ -2,7 +2,6 @@ import axios from 'axios'
 import Loading from 'element-ui/lib/loading'
 import Message from 'element-ui/lib/message'
 import { saveAs } from 'file-saver'
-import { getToken } from '@/utils/auth'
 import errorCode from '@/utils/errorCode'
 import { blobValidate } from "@/utils/chuangli"
 
@@ -16,7 +15,7 @@ export default {
       method: 'get',
       url: url,
       responseType: 'blob',
-      headers: { 'Authorization': 'Bearer ' + getToken() }
+      withCredentials: true
     }).then((res) => {
       const isBlob = blobValidate(res.data)
       if (isBlob) {
@@ -33,7 +32,7 @@ export default {
       method: 'get',
       url: url,
       responseType: 'blob',
-      headers: { 'Authorization': 'Bearer ' + getToken() }
+      withCredentials: true
     }).then((res) => {
       const isBlob = blobValidate(res.data)
       if (isBlob) {
@@ -51,7 +50,7 @@ export default {
       method: 'get',
       url: url,
       responseType: 'blob',
-      headers: { 'Authorization': 'Bearer ' + getToken() }
+      withCredentials: true
     }).then((res) => {
       const isBlob = blobValidate(res.data)
       if (isBlob) {

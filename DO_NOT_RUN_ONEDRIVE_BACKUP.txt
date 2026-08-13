@@ -1,6 +1,0 @@
-此目录仅作为 OneDrive 备份副本，请勿从这里启动或开发项目。
-
-本地主工程：C:\Users\123\Desktop\BiShe\RuoYi-Vue-master
-纯本地快照：C:\Users\123\LocalBackups\RuoYi-Vue-master-20260716-local-snapshot
-
-OneDrive 自动启动已关闭，避免再次迁移或清理本地主工程文件。

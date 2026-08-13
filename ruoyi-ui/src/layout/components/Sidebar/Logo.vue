@@ -13,7 +13,7 @@
 
 <script>
 import logoImg from '@/assets/logo/logo.png'
-import variables from '@/assets/styles/variables.scss'
+import * as variables from '@/assets/styles/variables.scss'
 
 export default {
   name: 'SidebarLogo',

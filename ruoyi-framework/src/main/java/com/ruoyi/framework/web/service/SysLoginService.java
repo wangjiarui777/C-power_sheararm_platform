@@ -62,6 +62,7 @@ public class SysLoginService
      */
     public String login(String username, String password, String code, String uuid)
     {
+        enforceLoginRateLimit(username);
         // 验证码校验
         validateCaptcha(username, code, uuid);
         // 登录前置校验
@@ -97,6 +98,21 @@ public class SysLoginService
         recordLoginInfo(loginUser.getUserId());
         // 生成token
         return tokenService.createToken(loginUser);
+    }
+
+    private void enforceLoginRateLimit(String username)
+    {
+        String ip = IpUtils.getIpAddr();
+        checkWindow(CacheConstants.RATE_LIMIT_KEY + "login:ip:" + ip, 20, 60);
+        checkWindow(CacheConstants.RATE_LIMIT_KEY + "login:user:" + StringUtils.nvl(username, "<empty>").toLowerCase(), 10, 300);
+        checkWindow(CacheConstants.RATE_LIMIT_KEY + "login:global", 500, 60);
+    }
+
+    private void checkWindow(String key, long limit, int seconds)
+    {
+        long count = redisCache.increment(key, 1);
+        if (count == 1) redisCache.expire(key, seconds, java.util.concurrent.TimeUnit.SECONDS);
+        if (count > limit) throw new ServiceException("登录请求过于频繁，请稍后再试");
     }
 
     /**
@@ -142,8 +158,7 @@ public class SysLoginService
             throw new UserNotExistsException();
         }
         // 密码如果不在指定范围内 错误
-        if (password.length() < UserConstants.PASSWORD_MIN_LENGTH
-                || password.length() > UserConstants.PASSWORD_MAX_LENGTH)
+        if (password.length() < 5 || password.length() > UserConstants.PASSWORD_MAX_LENGTH)
         {
             AsyncManager.me().execute(AsyncFactory.recordLogininfor(username, Constants.LOGIN_FAIL, MessageUtils.message("user.password.not.match")));
             throw new UserPasswordNotMatchException();
