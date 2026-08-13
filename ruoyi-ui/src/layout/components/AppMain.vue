@@ -51,13 +51,13 @@ export default {
   width: 100%;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
+  background: transparent;
 
   &:fullscreen,
   &:-webkit-full-screen,
   &:-moz-full-screen,
   &:-ms-fullscreen {
-    background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
+    background: var(--color-canvas);
     overflow-y: auto;
   }
 }
@@ -131,11 +131,11 @@ export default {
 }
 
 ::-webkit-scrollbar-track {
-  background-color: #171717;
+  background-color: var(--color-canvas-deep);
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #b8c3d4;
+  background-color: var(--color-border-strong);
   border-radius: 3px;
 }
 </style>

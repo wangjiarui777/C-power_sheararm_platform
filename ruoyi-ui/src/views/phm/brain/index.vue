@@ -315,6 +315,7 @@ export default {
       this.$router.push({
         path: '/analysis-toolkit/bearing-diagnosis',
         query: {
+          view: 'detail',
           deviceCode: this.device.deviceCode,
           pointId: this.activePoint && this.activePoint.point ? this.activePoint.point.id : undefined,
           channelId: this.activePoint && this.activePoint.point ? this.activePoint.point.channelId : undefined,

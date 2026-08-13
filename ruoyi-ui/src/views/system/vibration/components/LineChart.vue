@@ -6,6 +6,7 @@
 
 <script>
 import echarts from '@/utils/echarts'
+import { industrialChartTheme } from '@/utils/industrialTheme'
 
 export default {
   name: 'LineChart',
@@ -52,9 +53,13 @@ export default {
       if (!this.chart) return
       const xData = this.chartData.xData || []
       const yData = this.chartData.yData || []
+      const theme = industrialChartTheme
       this.chart.setOption({
         tooltip: {
-          trigger: 'axis'
+          trigger: 'axis',
+          backgroundColor: theme.tooltipBg,
+          borderColor: theme.tooltipBorder,
+          textStyle: { color: theme.text }
         },
         grid: {
           left: '3%',
@@ -66,15 +71,15 @@ export default {
           type: 'category',
           boundaryGap: false,
           data: xData,
-          axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } },
-          axisLabel: { color: 'rgba(235,255,255,0.72)' }
+          axisLine: { lineStyle: { color: theme.border } },
+          axisLabel: { color: theme.muted }
         },
         yAxis: {
           type: 'value',
           scale: true,
           splitLine: { show: false },
-          axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } },
-          axisLabel: { color: 'rgba(235,255,255,0.72)' }
+          axisLine: { lineStyle: { color: theme.border } },
+          axisLabel: { color: theme.muted }
         },
         series: [{
           name: 'Vibration Value',
@@ -89,17 +94,17 @@ export default {
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: 'rgba(0,255,255,0.42)' },
-                { offset: 1, color: 'rgba(0,255,255,0)' }
+                { offset: 0, color: 'rgba(56, 189, 248, 0.28)' },
+                { offset: 1, color: 'rgba(56, 189, 248, 0)' }
               ]
             }
           },
           lineStyle: {
             width: 3,
-            color: '#00FFFF'
+            color: theme.vibration
           },
           itemStyle: {
-            color: '#00FFFF'
+            color: theme.vibration
           },
           data: yData
         }]

@@ -1,9 +1,13 @@
 import echarts from '@/utils/echarts'
 import { getDiagnosisOptions, getInferenceHealth, inferWithAttachment, listMatFiles, uploadDiagnosisToInferenceService, fetchHistory, getServiceURL, createDiagnosisBatch, getDiagnosisBatch, retryDiagnosisBatch } from '@/api/system/bearingDiagnosis'
 import { translateDiagnosisLabel, translateAlarmLevel, translateRiskLevel, translateAll } from '@/utils/diagnosis-translations'
+import MeasurementPointOverview from './MeasurementPointOverview.vue'
 
 export default {
   name: 'InferenceResultPage',
+  components: {
+    MeasurementPointOverview
+  },
 
   data() {
     return {
@@ -118,6 +122,10 @@ export default {
   // 计算属性
   // =========================================================================
   computed: {
+    detailMode() {
+      const query = (this.$route && this.$route.query) || {}
+      return query.view === 'detail' || Boolean(query.pointId || query.pointIds)
+    },
     /** 格式化最后一次更新时间 */
     lastUpdateText() {
       return this.lastUpdate ? this.parseTime(this.lastUpdate) : ''
@@ -297,6 +305,19 @@ export default {
     })
   },
 
+  watch: {
+    detailMode(isDetail) {
+      if (isDetail) {
+        this.restoreDiagnosisContext()
+        this.$nextTick(() => {
+          requestAnimationFrame(() => this.initCharts())
+        })
+        return
+      }
+      this.disposeDetailCharts()
+    }
+  },
+
   /** 组件销毁前清理：移除事件监听、释放 WebSocket 连接、释放 ECharts 实例 */
   beforeDestroy() {
     window.removeEventListener('resize', this.handleResize)
@@ -313,6 +334,17 @@ export default {
   // 方法
   // =========================================================================
   methods: {
+    backToOverview() {
+      this.$router.push({ path: this.$route.path })
+    },
+    disposeDetailCharts() {
+      if (this.timeChart) this.timeChart.dispose()
+      if (this.freqChart) this.freqChart.dispose()
+      if (this.healthTrendChart) this.healthTrendChart.dispose()
+      this.timeChart = null
+      this.freqChart = null
+      this.healthTrendChart = null
+    },
     formatFileSize(bytes) {
       const value = Number(bytes)
       if (!Number.isFinite(value) || value <= 0) return '0 B'
@@ -425,7 +457,7 @@ export default {
       } catch (error) {
         // 隐私模式或存储配额不足不影响页面使用。
       }
-      if (this.$route && this.$router) {
+      if (this.detailMode && this.$route && this.$router) {
         const query = Object.assign({}, this.$route.query)
         ;['deviceCode', 'pointId', 'pointIds', 'channelId', 'modelType', 'modelVersion'].forEach(key => delete query[key])
         Object.keys(context).forEach(key => {

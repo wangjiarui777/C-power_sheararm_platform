@@ -15,6 +15,10 @@
 先确认 IoTDB 集群可连通，然后执行同目录下的 `iotdb-init.sql`。脚本中的每条
 SQL 都保持为单行，可直接输入 IoTDB 2.0.x Table CLI；脚本可重复执行。
 
+初始化脚本会创建遥测指标、振动帧和模型诊断结果三张表。诊断结果默认保留
+3650 天，可通过 `IOTDB_DIAGNOSIS_TTL_DAYS` 调整；模型输出写入失败时由
+MySQL 表 `diagnosis_iotdb_sync` 持久化记录并自动补偿，不会将已完成推理改为失败。
+
 Windows PowerShell 示例：
 
 ```powershell

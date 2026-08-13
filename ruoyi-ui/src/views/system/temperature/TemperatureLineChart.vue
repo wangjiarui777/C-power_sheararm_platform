@@ -6,6 +6,7 @@
 
 <script>
 import echarts from '@/utils/echarts'
+import { industrialChartTheme } from '@/utils/industrialTheme'
 
 export default {
   name: 'TemperatureLineChart',
@@ -48,30 +49,36 @@ export default {
     renderChart() {
       if (!this.chart) return
       const { xData, yData } = this.chartData
+      const theme = industrialChartTheme
       this.chart.setOption({
-        tooltip: { trigger: 'axis' },
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: theme.tooltipBg,
+          borderColor: theme.tooltipBorder,
+          textStyle: { color: theme.text }
+        },
         grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
         xAxis: {
           type: 'category',
           boundaryGap: false,
           data: xData || [],
-          axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } },
-          axisLabel: { color: 'rgba(235,255,255,0.72)' }
+          axisLine: { lineStyle: { color: theme.border } },
+          axisLabel: { color: theme.muted }
         },
         yAxis: {
           type: 'value',
           scale: true,
           splitLine: { show: false },
-          axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } },
-          axisLabel: { color: 'rgba(235,255,255,0.72)' }
+          axisLine: { lineStyle: { color: theme.border } },
+          axisLabel: { color: theme.muted }
         },
         series: [{
           name: 'Temperature Value',
           type: 'line',
           smooth: true,
           showSymbol: false,
-          lineStyle: { width: 3, color: '#00FFFF' },
-          itemStyle: { color: '#00FFFF' },
+          lineStyle: { width: 3, color: theme.temperature },
+          itemStyle: { color: theme.temperature },
           areaStyle: {
             color: {
               type: 'linear',
@@ -80,8 +87,8 @@ export default {
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: 'rgba(0,255,255,0.42)' },
-                { offset: 1, color: 'rgba(0,255,255,0)' }
+                { offset: 0, color: 'rgba(20, 184, 166, 0.28)' },
+                { offset: 1, color: 'rgba(20, 184, 166, 0)' }
               ]
             }
           },

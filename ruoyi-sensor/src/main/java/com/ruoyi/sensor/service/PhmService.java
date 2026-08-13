@@ -2,6 +2,7 @@ package com.ruoyi.sensor.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
 import com.ruoyi.sensor.domain.dto.PhmAlarmActionRequest;
 import com.ruoyi.sensor.domain.entity.PhmAlarmEventEntity;
 import com.ruoyi.sensor.domain.entity.PhmAlarmHandleRecordEntity;
@@ -50,6 +51,8 @@ public interface PhmService
     void recalculateDiagnosisState(String deviceCode);
 
     EnhancedInferenceRecordEntity getLatestDiagnosis(String deviceCode);
+
+    List<EnhancedInferenceRecordEntity> listLatestDiagnosesByPointIds(Collection<Long> pointIds);
 
     List<EnhancedInferenceRecordEntity> listDiagnosisHistory(DateRange range, String deviceCode);
 

@@ -28,6 +28,12 @@ sensor:
     # 必须完成模型验收与至少14天影子运行后，才可在生产显式打开。
     auto-alarm-enabled: ${SENSOR_DIAGNOSIS_AUTO_ALARM_ENABLED:false}
     multi-point-enabled: ${SENSOR_DIAGNOSIS_MULTI_POINT_ENABLED:false}
+    read-mode: ${SENSOR_DIAGNOSIS_READ_MODE:iotdb-primary}
+    iotdb-sync:
+      poll-delay-ms: ${SENSOR_DIAGNOSIS_IOTDB_SYNC_POLL_DELAY_MS:5000}
+      batch-size: ${SENSOR_DIAGNOSIS_IOTDB_SYNC_BATCH_SIZE:100}
+      lease-seconds: ${SENSOR_DIAGNOSIS_IOTDB_SYNC_LEASE_SECONDS:60}
+      degraded-after-seconds: ${SENSOR_DIAGNOSIS_IOTDB_SYNC_DEGRADED_AFTER_SECONDS:60}
     batch:
       max-points: ${SENSOR_DIAGNOSIS_BATCH_MAX_POINTS:8}
     executor:
@@ -83,6 +89,7 @@ sensor:
     database: monitoring
     telemetry-ttl-days: ${IOTDB_TELEMETRY_TTL_DAYS:1095}
     frame-ttl-days: ${IOTDB_FRAME_TTL_DAYS:90}
+    diagnosis-ttl-days: ${IOTDB_DIAGNOSIS_TTL_DAYS:3650}
     node-urls: iotdb-dn-1:6667,iotdb-dn-2:6667,iotdb-dn-3:6667
     username: root
     password: ${IOTDB_PASSWORD:}

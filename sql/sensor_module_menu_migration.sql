@@ -10,7 +10,7 @@ FROM sys_menu m
 JOIN (
     SELECT parent_id, path, COALESCE(component, '') component, MIN(menu_id) keep_id
     FROM sys_menu
-    WHERE path IN ('monitoring-center', 'analysis-toolkit', 'phm', 'index', 'vibration',
+    WHERE path IN ('monitoring-center', 'analysis-toolkit', 'phm', 'index', 'oil', 'vibration',
                    'temperature', 'bearing-diagnosis', 'cluster', 'alarms', 'events',
                    'reports', 'config', 'brain')
     GROUP BY parent_id, path, COALESCE(component, '')
@@ -45,7 +45,15 @@ SELECT menu_id INTO @monitor_index FROM sys_menu WHERE parent_id = @monitor_menu
 INSERT INTO sys_menu
     (menu_name, parent_id, order_num, path, component, query, route_name, is_frame,
      is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-SELECT '振动分析', @monitor_menu, 2, 'vibration', 'system/vibration/index', '', 'VibrationData',
+SELECT '油液监测', @monitor_menu, 2, 'oil', 'monitoring-center/oil/index', '', 'OilMonitoring',
+       1, 0, 'C', '0', '0', 'sensor:monitoring:view', 'monitor', 'admin', NOW(), '在线油液监测预留页面'
+WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE parent_id = @monitor_menu AND path = 'oil');
+SELECT menu_id INTO @oil_menu FROM sys_menu WHERE parent_id = @monitor_menu AND path = 'oil' LIMIT 1;
+
+INSERT INTO sys_menu
+    (menu_name, parent_id, order_num, path, component, query, route_name, is_frame,
+     is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
+SELECT '振动分析', @monitor_menu, 3, 'vibration', 'system/vibration/index', '', 'VibrationData',
        1, 0, 'C', '0', '0', 'sensor:vibration:list', 'chart', 'admin', NOW(), '振动数据与分析'
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE parent_id = @monitor_menu AND path = 'vibration');
 SELECT menu_id INTO @vibration_menu FROM sys_menu WHERE parent_id = @monitor_menu AND path = 'vibration' LIMIT 1;
@@ -53,10 +61,25 @@ SELECT menu_id INTO @vibration_menu FROM sys_menu WHERE parent_id = @monitor_men
 INSERT INTO sys_menu
     (menu_name, parent_id, order_num, path, component, query, route_name, is_frame,
      is_cache, menu_type, visible, status, perms, icon, create_by, create_time, remark)
-SELECT '温度分析', @monitor_menu, 3, 'temperature', 'system/temperature/index', '', 'TemperatureData',
+SELECT '温度分析', @monitor_menu, 4, 'temperature', 'system/temperature/index', '', 'TemperatureData',
        1, 0, 'C', '0', '0', 'sensor:temperature:list', 'chart', 'admin', NOW(), '温度数据与分析'
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE parent_id = @monitor_menu AND path = 'temperature');
 SELECT menu_id INTO @temperature_menu FROM sys_menu WHERE parent_id = @monitor_menu AND path = 'temperature' LIMIT 1;
+
+UPDATE sys_menu
+SET order_num = CASE path
+    WHEN 'index' THEN 1 WHEN 'oil' THEN 2 WHEN 'vibration' THEN 3 WHEN 'temperature' THEN 4
+    ELSE order_num END
+WHERE parent_id = @monitor_menu
+  AND path IN ('index', 'oil', 'vibration', 'temperature');
+
+-- Roles that already have access to any monitoring menu receive the oil page.
+INSERT IGNORE INTO sys_role_menu (role_id, menu_id)
+SELECT DISTINCT rm.role_id, @oil_menu
+FROM sys_role_menu rm
+WHERE @oil_menu IS NOT NULL
+  AND rm.menu_id IN (@monitor_menu, @monitor_index, @vibration_menu, @temperature_menu)
+  AND rm.role_id IS NOT NULL;
 
 INSERT INTO sys_menu
     (menu_name, parent_id, order_num, path, component, query, route_name, is_frame,

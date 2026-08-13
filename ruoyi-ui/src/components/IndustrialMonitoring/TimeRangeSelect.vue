@@ -13,6 +13,6 @@ export default { name: 'MonitoringTimeRangeSelect', props: { value: { type: Stri
 </script>
 
 <style scoped>
-:deep(.el-radio-button__inner){border-color:#2b3d4b;background:#101a23;color:#aebdca}
-:deep(.el-radio-button__orig-radio:checked + .el-radio-button__inner){border-color:#4a90e2;background:#4a90e2;color:#fff;box-shadow:none}
+::v-deep .el-radio-button__inner{border-color:var(--color-border);background:var(--color-surface-soft);color:var(--color-muted)}
+::v-deep .el-radio-button__orig-radio:checked + .el-radio-button__inner{border-color:var(--color-accent);background:var(--color-accent);color:var(--color-on-accent);box-shadow:none}
 </style>

@@ -3,6 +3,7 @@ package com.ruoyi.sensor.domain.entity;
 import java.math.BigDecimal;
 import java.util.Date;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -14,6 +15,8 @@ public class PhmDeviceEntity
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long deptId;
+    @TableField(exist = false)
+    private String deptName;
     private String deviceCode;
     private String deviceName;
     private String deviceType;

@@ -49,10 +49,10 @@ export default {
 </script>
 
 <style scoped>
-.point-card{display:grid;gap:10px;min-height:154px;padding:13px;border:1px solid #283a48;border-top:3px solid #71808d;border-radius:9px;background:#101a23;color:#dce7ee;text-align:left;cursor:pointer}
-.point-card.active{border-color:#4a90e2;box-shadow:0 0 0 1px rgba(74,144,226,.22)}.point-card.normal{border-top-color:#32b67a}.point-card.warning{border-top-color:#e7a23b}.point-card.alarm{border-top-color:#e05252}
+.point-card{display:grid;gap:10px;min-height:154px;padding:14px;border:1px solid var(--color-border);border-top:3px solid var(--color-muted);border-radius:var(--radius-lg);background:var(--color-surface);color:var(--color-text);text-align:left;cursor:pointer}
+.point-card.active{border-color:var(--color-accent-strong);box-shadow:inset 3px 0 0 var(--color-accent)}.point-card.normal{border-top-color:var(--color-success)}.point-card.warning{border-top-color:var(--color-warning)}.point-card.alarm{border-top-color:var(--color-danger)}
 .point-top,.threshold,.point-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}.point-name{font-weight:700}
-.quality{padding:2px 6px;border-radius:10px;background:#253543;color:#aebdca;font-size:11px}.quality.good{color:#77d7aa}.quality.stale{color:#f0bd68}.quality.bad,.quality.offline{color:#f08a8a}
-.point-value strong{font-family:"DIN Alternate",Consolas,monospace;font-size:30px;line-height:1}.point-value small{margin-left:6px;color:#8ea2b3}
-.threshold,.point-foot{color:#8195a6;font-size:11px}.point-foot{padding-top:8px;border-top:1px solid #22323e}
+.quality{padding:2px 7px;border-radius:999px;background:var(--color-surface-raised);color:var(--color-muted);font-size:11px}.quality.good{color:var(--color-success)}.quality.stale{color:var(--color-warning)}.quality.bad,.quality.offline{color:var(--color-danger)}
+.point-value strong{font-family:var(--font-data);font-size:30px;line-height:1}.point-value small{margin-left:6px;color:var(--color-muted)}
+.threshold,.point-foot{color:var(--color-muted);font-size:11px}.point-foot{padding-top:8px;border-top:1px solid var(--color-border)}
 </style>

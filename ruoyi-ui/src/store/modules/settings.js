@@ -1,14 +1,15 @@
 import defaultSettings from '@/settings'
 import { useDynamicTitle } from '@/utils/dynamicTitle'
 
-const { sideTheme, appearanceMode, showSettings, navType, tagsView, tagsViewPersist, tagsIcon, tagsViewStyle, fixedHeader, sidebarLogo, dynamicTitle, footerVisible, footerContent } = defaultSettings
+const { showSettings, navType, tagsView, tagsViewPersist, tagsIcon, tagsViewStyle, fixedHeader, sidebarLogo, dynamicTitle, footerVisible, footerContent } = defaultSettings
 
 const storageSetting = JSON.parse(localStorage.getItem('layout-setting')) || ''
 const state = {
   title: '',
-  theme: storageSetting.theme || '#22D3EE',
-  appearanceMode: storageSetting.appearanceMode || appearanceMode || (storageSetting.sideTheme === 'theme-light' ? 'light' : 'industrial'),
-  sideTheme: storageSetting.sideTheme || sideTheme,
+  // Visual identity is intentionally fixed. Legacy persisted values are ignored.
+  theme: '#22D3EE',
+  appearanceMode: 'industrial',
+  sideTheme: 'theme-dark',
   showSettings: showSettings,
   navType: storageSetting.navType === undefined ? navType : storageSetting.navType,
   tagsView: storageSetting.tagsView === undefined ? tagsView : storageSetting.tagsView,

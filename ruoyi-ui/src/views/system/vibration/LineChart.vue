@@ -6,6 +6,7 @@
 
 <script>
 import echarts from '@/utils/echarts'
+import { industrialChartTheme } from '@/utils/industrialTheme'
 
 export default {
   name: 'LineChart',
@@ -51,22 +52,28 @@ export default {
       if (!this.chart) {
         this.chart = echarts.init(this.$refs.chart)
       }
+      const theme = industrialChartTheme
       const option = {
-        tooltip: { trigger: 'axis' },
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: theme.tooltipBg,
+          borderColor: theme.tooltipBorder,
+          textStyle: { color: theme.text }
+        },
         grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
         xAxis: {
           type: 'category',
           data: this.chartData.xData || [],
           boundaryGap: false,
-          axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } },
-          axisLabel: { color: 'rgba(235,255,255,0.72)' }
+          axisLine: { lineStyle: { color: theme.border } },
+          axisLabel: { color: theme.muted }
         },
         yAxis: {
           type: 'value',
           name: '振动值',
-          axisLine: { lineStyle: { color: 'rgba(0,255,255,0.35)' } },
+          axisLine: { lineStyle: { color: theme.border } },
           splitLine: { show: false },
-          axisLabel: { color: 'rgba(235,255,255,0.72)' }
+          axisLabel: { color: theme.muted }
         },
         series: [
           {
@@ -77,10 +84,10 @@ export default {
             data: this.chartData.yData || [],
             lineStyle: {
               width: 3,
-              color: '#00FFFF'
+              color: theme.vibration
             },
             itemStyle: {
-              color: '#00FFFF'
+              color: theme.vibration
             },
             areaStyle: {
               color: {
@@ -90,8 +97,8 @@ export default {
                 x2: 0,
                 y2: 1,
                 colorStops: [
-                  { offset: 0, color: 'rgba(0,255,255,0.42)' },
-                  { offset: 1, color: 'rgba(0,255,255,0)' }
+                  { offset: 0, color: 'rgba(56, 189, 248, 0.28)' },
+                  { offset: 1, color: 'rgba(56, 189, 248, 0)' }
                 ]
               }
             }

@@ -28,5 +28,7 @@ class PhmDataScopeContractTest
         }
         assertTrue(xml.contains("${params.dataScope}"));
         assertTrue(xml.contains("FROM phm_device d"));
+        assertTrue(xml.contains("LEFT JOIN sys_dept sd ON sd.dept_id = d.dept_id"));
+        assertTrue(xml.contains("sd.dept_name AS dept_name"));
     }
 }

@@ -9,6 +9,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.math.BigDecimal;
 import com.ruoyi.sensor.domain.dto.TelemetryEnvelope;
 import com.ruoyi.sensor.domain.dto.VibrationFrameEnvelope;
 import org.junit.jupiter.api.Test;
@@ -62,6 +63,23 @@ class IoTdbTimeSeriesStoreIntegrationTest
             frame.setSequence(sampleTime.getTime());
             assertTrue(store.writeVibrationFrame(frame));
 
+            DiagnosisResultSnapshot diagnosis = new DiagnosisResultSnapshot();
+            diagnosis.setRecordId(Math.abs(UUID.randomUUID().getMostSignificantBits()));
+            diagnosis.setDeviceCode(deviceCode);
+            diagnosis.setPointId(1L);
+            diagnosis.setChannelId(1);
+            diagnosis.setAnalysisMode("gear");
+            diagnosis.setModelVersion("v1.0.0");
+            diagnosis.setDiagnosisResult("齿轮点蚀");
+            diagnosis.setConfidence(new BigDecimal("98.25"));
+            diagnosis.setHealthIndex(62);
+            diagnosis.setRiskLevel("高");
+            diagnosis.setEvidence("[{\"title\":\"频谱边带\"}]");
+            diagnosis.setSampleTime(sampleTime);
+            diagnosis.setCreateTime(new Date());
+            diagnosis.setUpdateTime(new Date());
+            assertTrue(store.writeDiagnosisResult(diagnosis));
+
             List<Map<String, Object>> trend = store.queryTelemetryTrend(
                 deviceCode, "CH-1", "vibration",
                 new Date(sampleTime.getTime() - 1000L), new Date(sampleTime.getTime() + 1000L), 10);
@@ -73,6 +91,11 @@ class IoTdbTimeSeriesStoreIntegrationTest
             assertEquals(4096, loaded.getSampleRate());
             assertEquals(frame.getWaveform(), loaded.getWaveform());
             assertEquals(frame.getSpectrum(), loaded.getSpectrum());
+            DiagnosisResultSnapshot loadedDiagnosis = store.loadLatestDiagnosis(deviceCode);
+            assertNotNull(loadedDiagnosis);
+            assertEquals(diagnosis.getRecordId(), loadedDiagnosis.getRecordId());
+            assertEquals("齿轮点蚀", loadedDiagnosis.getDiagnosisResult());
+            assertEquals(98.25D, loadedDiagnosis.getConfidence().doubleValue(), 0.000001D);
             assertNotNull(store.getStatus().getLastSuccessfulWriteTime());
             assertNotNull(store.getStatus().getLastSuccessfulOperationTime());
         }
@@ -106,6 +129,7 @@ class IoTdbTimeSeriesStoreIntegrationTest
         ReflectionTestUtils.setField(store, "sessionPoolSize", 2);
         ReflectionTestUtils.setField(store, "telemetryTtlDays", 1);
         ReflectionTestUtils.setField(store, "frameTtlDays", 1);
+        ReflectionTestUtils.setField(store, "diagnosisTtlDays", 1);
         ReflectionTestUtils.setField(store, "timestampPrecision", "us");
         return store;
     }

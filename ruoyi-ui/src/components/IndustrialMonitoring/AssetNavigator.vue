@@ -62,15 +62,15 @@ export default {
 </script>
 
 <style scoped>
-.asset-nav{height:100%;min-height:0;padding:12px;border:1px solid #273846;border-radius:10px;background:#15212c}
+.asset-nav{height:100%;min-height:0;padding:12px;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface)}
 .asset-tools{display:grid;grid-template-columns:minmax(0,1fr) 108px;gap:8px;margin-bottom:12px}
 .asset-list{display:grid;gap:16px;max-height:calc(100vh - 260px);overflow:auto;padding-right:3px}
-.org-title{display:flex;justify-content:space-between;margin:0 4px 7px;color:#8ea2b3;font-size:12px}
-.device-row{display:grid;grid-template-columns:9px minmax(0,1fr) 14px;align-items:center;gap:10px;width:100%;margin:6px 0;padding:10px;border:1px solid #263744;border-radius:8px;background:#0f1922;color:#dce7ee;text-align:left;cursor:pointer}
-.device-row.active{border-color:#4a90e2;box-shadow:inset 3px 0 #4a90e2}
+.org-title{display:flex;justify-content:space-between;margin:0 4px 7px;color:var(--color-muted);font-size:12px}
+.device-row{display:grid;grid-template-columns:9px minmax(0,1fr) 14px;align-items:center;gap:10px;width:100%;margin:6px 0;padding:10px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface-soft);color:var(--color-text);text-align:left;cursor:pointer}
+.device-row.active{border-color:var(--color-accent-strong);box-shadow:inset 3px 0 var(--color-accent)}
 .device-row span,.device-row strong,.device-row small{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.device-row small{margin-top:4px;color:#8094a5}
-.state-dot{width:8px;height:8px;border-radius:50%;background:#71808d}.state-dot.normal{background:#32b67a}.state-dot.warning{background:#e7a23b}.state-dot.alarm{background:#e05252}
-.empty{padding:24px 10px;color:#8094a5;text-align:center}
-:deep(.el-input__inner),:deep(.el-select .el-input__inner){border-color:#2b3d4b;background:#0f1922;color:#dce7ee}
+.device-row small{margin-top:4px;color:var(--color-muted)}
+.state-dot{width:8px;height:8px;border-radius:50%;background:var(--color-muted)}.state-dot.normal{background:var(--color-success)}.state-dot.warning{background:var(--color-warning)}.state-dot.alarm{background:var(--color-danger)}
+.empty{padding:24px 10px;color:var(--color-muted);text-align:center}
+::v-deep .el-input__inner,::v-deep .el-select .el-input__inner{border-color:var(--color-border);background:var(--color-surface-soft);color:var(--color-text)}
 </style>

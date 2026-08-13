@@ -2,7 +2,9 @@
 # start-all.ps1 - 当前开发架构的一键启动器
 #
 # 架构：Vue(80) -> Spring Boot(8080) -> FastAPI 统一推理(5000)
+#                         -> Apache IoTDB ConfigNode/DataNode(10710/6667)
 #       采集接收端口 8888/8890/8891/9000 由 Spring Boot 开发配置启动。
+#       诊断测点总览由 Vue 路由承载，聚合接口随 Spring Boot 一并启动。
 # 所有模型、附件、上传文件、日志和运行状态都保存在本项目目录内。
 # =============================================================================
 
@@ -20,6 +22,7 @@ $inferenceDir = Join-Path $projectRoot 'ruoyi-sensor\inference'
 $frontendDir = Join-Path $projectRoot 'ruoyi-ui'
 $adminJar = Join-Path $projectRoot 'ruoyi-admin\target\ruoyi-admin.jar'
 $pythonExe = Join-Path $projectRoot '.venv\Scripts\python.exe'
+$defaultIotdbHome = 'C:\iotdb\apache-iotdb-2.0.8-all-bin'
 $modelRoot = Join-Path $projectRoot '.local-models'
 $dataRoot = Join-Path $projectRoot '.local-data'
 $attachmentRoot = Join-Path $dataRoot 'attachments'
@@ -27,6 +30,7 @@ $uploadRoot = Join-Path $dataRoot 'uploadPath'
 $logRoot = Join-Path $dataRoot 'logs'
 $runRoot = Join-Path $dataRoot 'run'
 $pidFile = Join-Path $runRoot 'service-pids.json'
+$diagnosisOverviewPath = '/analysis-toolkit/bearing-diagnosis'
 
 if ($projectRoot -match '(?i)\\OneDrive\\') {
     throw "拒绝从 OneDrive 路径启动。请从本地项目目录运行：C:\Users\123\Desktop\BiShe\RuoYi-Vue-master"
@@ -104,6 +108,8 @@ function Test-IsProjectProcess {
     if ($null -eq $process) { return $false }
     $commandLine = [string]$process.CommandLine
     if ($commandLine.IndexOf($projectRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    if (-not [string]::IsNullOrWhiteSpace($script:iotdbHome) -and
+        $commandLine.IndexOf($script:iotdbHome, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
     # 开发环境的 MAT 接收器以类名启动，命令行不包含工作目录。
     return $commandLine -match '(^|\s)CwruMatReceiver(\s|$)'
 }
@@ -185,6 +191,16 @@ function Start-LoggedProcess {
 
 Import-LocalEnvironment -Path (Join-Path $projectRoot '.env')
 
+$iotdbHomeCandidate = if ([string]::IsNullOrWhiteSpace($env:IOTDB_HOME)) {
+    $defaultIotdbHome
+} else {
+    $env:IOTDB_HOME
+}
+$script:iotdbHome = [IO.Path]::GetFullPath($iotdbHomeCandidate)
+$iotdbWindowsSbin = Join-Path $script:iotdbHome 'sbin\windows'
+$iotdbConfigNodeScript = Join-Path $iotdbWindowsSbin 'start-confignode.bat'
+$iotdbDataNodeScript = Join-Path $iotdbWindowsSbin 'start-datanode.bat'
+
 # 强制使用项目内路径和当前三进程架构，避免继承到 OneDrive 或历史服务配置。
 $env:SPRING_PROFILES_ACTIVE = 'dev'
 $env:SENSOR_ATTACHMENT_ROOT = $attachmentRoot
@@ -214,7 +230,18 @@ Write-Step '环境和本地资源预检'
 $mavenExe = Assert-Command -Name 'mvn'
 $javaExe = Assert-Command -Name 'java'
 $npmExe = Assert-Command -Name 'npm.cmd'
+$cmdExe = Assert-Command -Name 'cmd.exe'
 if (-not (Test-Path -LiteralPath $pythonExe)) { throw "缺少项目 Python：$pythonExe" }
+if (-not (Test-Path -LiteralPath $iotdbConfigNodeScript) -or
+    -not (Test-Path -LiteralPath $iotdbDataNodeScript)) {
+    throw "IoTDB 启动脚本不完整：$iotdbWindowsSbin。请在 .env 中设置正确的 IOTDB_HOME。"
+}
+$env:IOTDB_HOME = $script:iotdbHome
+$env:CONFIGNODE_HOME = $script:iotdbHome
+if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+    $javaBin = Split-Path -Parent $javaExe
+    $env:JAVA_HOME = Split-Path -Parent $javaBin
+}
 if (-not (Test-Path -LiteralPath (Join-Path $frontendDir 'node_modules'))) {
     throw '缺少 ruoyi-ui/node_modules，请先在 ruoyi-ui 目录执行 npm ci'
 }
@@ -246,10 +273,6 @@ if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 3306)) {
 if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 6379)) {
     throw 'Redis(127.0.0.1:6379) 未启动，后端无法完成登录和缓存初始化'
 }
-if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 6667)) {
-    Write-Warning 'IoTDB(127.0.0.1:6667) 未启动；时序功能将按现有代码降级，其他服务可继续启动。'
-}
-
 Write-Step '停止当前项目的旧监听进程'
 # 5001/9528 是历史架构遗留端口；仅在确认属于本项目时才清理。
 foreach ($legacyPort in @(5001, 9528)) {
@@ -258,7 +281,7 @@ foreach ($legacyPort in @(5001, 9528)) {
         Stop-Listener -Port $legacyPort
     }
 }
-foreach ($portToStop in @($FrontendPort, 5000, 8080, 8888, 8890, 8891, 9000)) {
+foreach ($portToStop in @($FrontendPort, 5000, 6667, 8080, 8888, 8890, 8891, 9000, 10710)) {
     Stop-Listener -Port $portToStop
 }
 
@@ -278,6 +301,36 @@ if (-not (Test-Path -LiteralPath $adminJar)) { throw "后端 JAR 不存在：$ad
 
 $started = @()
 try {
+    Write-Step '启动 Apache IoTDB ConfigNode'
+    $iotdbConfigNode = Start-LoggedProcess -Name 'iotdb-confignode' -FilePath $cmdExe `
+        -ArgumentList @('/d', '/c', "`"$iotdbConfigNodeScript`" -f") `
+        -WorkingDirectory $script:iotdbHome
+    $started += $iotdbConfigNode
+    $configDeadline = (Get-Date).AddSeconds(90)
+    while (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 10710) -and
+        (Get-Date) -lt $configDeadline) {
+        Start-Sleep -Seconds 1
+    }
+    if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 10710)) {
+        throw 'IoTDB ConfigNode 在 90s 内未就绪（127.0.0.1:10710）'
+    }
+    Write-Host '[READY] IoTDB ConfigNode -> 127.0.0.1:10710' -ForegroundColor Green
+
+    Write-Step '启动 Apache IoTDB DataNode'
+    $iotdbDataNode = Start-LoggedProcess -Name 'iotdb-datanode' -FilePath $cmdExe `
+        -ArgumentList @('/d', '/c', "`"$iotdbDataNodeScript`" -f") `
+        -WorkingDirectory $script:iotdbHome
+    $started += $iotdbDataNode
+    $dataDeadline = (Get-Date).AddSeconds(120)
+    while (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 6667) -and
+        (Get-Date) -lt $dataDeadline) {
+        Start-Sleep -Seconds 1
+    }
+    if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port 6667)) {
+        throw 'IoTDB DataNode 在 120s 内未就绪（127.0.0.1:6667）'
+    }
+    Write-Host '[READY] IoTDB DataNode -> 127.0.0.1:6667' -ForegroundColor Green
+
     Write-Step '启动统一 Python 推理服务'
     $inference = Start-LoggedProcess -Name 'inference' -FilePath $pythonExe `
         -ArgumentList @('inference_service.py') -WorkingDirectory $inferenceDir
@@ -298,6 +351,8 @@ try {
         -ArgumentList @('run', 'dev', '--', '--port', [string]$FrontendPort) -WorkingDirectory $frontendDir
     $started += $frontend
     Wait-HttpReady -Name 'Vue 前端' -Url "http://127.0.0.1:$FrontendPort/" -TimeoutSeconds 120
+    Wait-HttpReady -Name '诊断测点总览' `
+        -Url "http://127.0.0.1:$FrontendPort$diagnosisOverviewPath" -TimeoutSeconds 30
 
     # npm.cmd 与 Python venv 启动器可能会派生真正的服务进程，因此记录实际监听 PID，
     # 避免后续停止或排障时拿到已经退出的包装进程。
@@ -305,6 +360,8 @@ try {
         frontend = Get-PortProcessId -Port $FrontendPort
         backend = Get-PortProcessId -Port 8080
         inference = Get-PortProcessId -Port 5000
+        iotdbConfigNode = Get-PortProcessId -Port 10710
+        iotdbDataNode = Get-PortProcessId -Port 6667
         matReceiver = Get-PortProcessId -Port 8888
         tcpCollector = Get-PortProcessId -Port 8890
         tcpCollectorLegacy = Get-PortProcessId -Port 8891
@@ -318,8 +375,11 @@ try {
     Write-Host '  当前架构全部启动并通过就绪检查' -ForegroundColor Green
     Write-Host '========================================' -ForegroundColor Green
     Write-Host "  前端:      http://localhost:$FrontendPort" -ForegroundColor White
+    Write-Host "  测点总览:  http://localhost:$FrontendPort$diagnosisOverviewPath" -ForegroundColor White
     Write-Host '  后端:      http://localhost:8080' -ForegroundColor White
     Write-Host '  统一推理:  http://127.0.0.1:5000/internal/*' -ForegroundColor White
+    Write-Host '  IoTDB RPC: 127.0.0.1:6667' -ForegroundColor White
+    Write-Host '  IoTDB CN:  127.0.0.1:10710' -ForegroundColor White
     Write-Host "  日志:      $logRoot" -ForegroundColor DarkCyan
     Write-Host "  PID 状态:  $pidFile" -ForegroundColor DarkCyan
     if (Get-PortProcessId -Port 8888) { Write-Host '  MAT接收:   127.0.0.1:8888' -ForegroundColor DarkGray }
@@ -330,8 +390,12 @@ try {
     foreach ($service in $started) {
         Show-LogTail -Path $service.stderr
         Show-LogTail -Path $service.stdout
+        $startedProcess = $service.process
+        if ($startedProcess -and -not $startedProcess.HasExited) {
+            Stop-Process -Id $startedProcess.Id -Force -ErrorAction SilentlyContinue
+        }
     }
-    foreach ($cleanupPort in @($FrontendPort, 5000, 8080, 8888, 8890, 8891, 9000)) {
+    foreach ($cleanupPort in @($FrontendPort, 5000, 6667, 8080, 8888, 8890, 8891, 9000, 10710)) {
         $cleanupOwner = Get-PortProcessId -Port $cleanupPort
         if ($cleanupOwner -and (Test-IsProjectProcess -Id $cleanupOwner)) {
             Stop-Process -Id $cleanupOwner -Force -ErrorAction SilentlyContinue

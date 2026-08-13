@@ -30,6 +30,13 @@ export function getDiagnosisOptions() {
   })
 }
 
+export function getDiagnosisOverview() {
+  return request({
+    url: '/sensor/diagnosis/overview',
+    method: 'get'
+  })
+}
+
 export function listMatFiles(modelType = 'gear', deviceCode, pointId) {
   return request({
     url: '/sensor/diagnosis/inference/files',

@@ -5,8 +5,7 @@ import './assets/styles/element-variables.scss'
 
 import '@/assets/styles/index.scss' // global css
 import '@/assets/styles/ruoyi.scss' // RuoYi base layout css
-import '@/assets/styles/industrial-dark.scss' // dark industrial theme
-import '@/assets/styles/theme-modes.scss' // reversible light/dark/industrial modes
+import '@/assets/styles/industrial-theme.scss' // unified industrial theme
 import App from './App'
 import store from './store'
 import router from './router'

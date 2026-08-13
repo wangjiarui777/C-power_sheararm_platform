@@ -253,9 +253,9 @@ export default {
   height: 50px;
   overflow: hidden;
   position: relative;
-  background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
-  border-bottom: 1px solid #d7dee8;
-  box-shadow: 0 4px 14px rgba(31, 41, 55, .08);
+  background: rgba(17, 28, 48, .96);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: none;
   display: flex;
   align-items: center;
   // padding: 0 8px;
@@ -311,7 +311,7 @@ export default {
       padding: 0 8px;
       height: 100%;
       font-size: 18px;
-      color: #ffffff;
+      color: var(--color-text);
       vertical-align: text-bottom;
 
       &.hover-effect {
@@ -319,7 +319,7 @@ export default {
         transition: background .3s;
 
         &:hover {
-          background: #1f1f1f
+          background: var(--color-accent-soft)
         }
       }
     }
@@ -331,7 +331,7 @@ export default {
 
       .el-icon-bell {
         font-size: 19px;
-        color: #ffffff;
+        color: var(--color-text);
       }
     }
 
@@ -357,7 +357,7 @@ export default {
           left: 2px;
           font-size: 14px;
           font-weight: bold;
-          color: #ffffff;
+          color: var(--color-text);
         }
 
         .el-icon-caret-bottom {

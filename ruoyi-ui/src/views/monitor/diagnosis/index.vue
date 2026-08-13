@@ -1,8 +1,11 @@
 <template>
-  <div class="app-container diagnosis-page">
+  <div class="diagnosis-route-page">
+    <measurement-point-overview v-if="!detailMode" />
+    <div v-else class="app-container diagnosis-page">
     <!-- ===== 顶栏：状态指示 + 文件信息 + 操作按钮 ===== -->
     <div class="top-bar">
       <div class="top-left">
+        <el-button class="overview-back" type="text" icon="el-icon-arrow-left" @click="backToOverview">测点总览</el-button>
         <span class="top-eyebrow">振动诊断</span>
         <span class="top-divider">|</span>
         <!-- 诊断状态标签：待机/分析中/推理失败/已完成，颜色随状态变化 -->
@@ -370,6 +373,7 @@
         <el-button type="primary" :loading="uploading || polling" :disabled="!fileMappingComplete" @click="startBatchAnalysis">开始批量诊断</el-button>
       </span>
     </el-dialog>
+    </div>
   </div>
 </template>
 

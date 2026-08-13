@@ -8,76 +8,27 @@
           </div>
           <div class="nav-wrap">
             <el-tooltip content="左侧菜单" placement="bottom">
-              <div class="item left" @click="handleNavType(1)" :style="{'--theme': theme}" :class="{ activeItem: navType == 1 }">
+              <div class="item left" @click="handleNavType(1)" :class="{ activeItem: navType == 1 }">
                 <b></b><b></b>
               </div>
             </el-tooltip>
 
             <el-tooltip content="混合菜单" placement="bottom">
-              <div class="item mix" @click="handleNavType(2)" :style="{'--theme': theme}" :class="{ activeItem: navType == 2 }">
+              <div class="item mix" @click="handleNavType(2)" :class="{ activeItem: navType == 2 }">
                 <b></b><b></b>
               </div>
             </el-tooltip>
             <el-tooltip content="顶部菜单" placement="bottom">
-              <div class="item top" @click="handleNavType(3)" :style="{'--theme': theme}" :class="{ activeItem: navType == 3 }">
+              <div class="item top" @click="handleNavType(3)" :class="{ activeItem: navType == 3 }">
                 <b></b><b></b>
               </div>
             </el-tooltip>
           </div>
-          <div class="setting-drawer-title">
-            <h3 class="drawer-title">主题风格设置</h3>
-          </div>
-          <div class="drawer-item appearance-mode">
-            <span>全站外观</span>
-            <el-radio-group v-model="appearanceMode" size="mini" class="drawer-switch">
-              <el-radio-button label="light">浅色</el-radio-button>
-              <el-radio-button label="dark">暗色</el-radio-button>
-              <el-radio-button label="industrial">工业</el-radio-button>
-            </el-radio-group>
-          </div>
-          <div class="setting-drawer-block-checbox">
-            <div class="setting-drawer-block-checbox-item" @click="handleTheme('theme-dark')">
-              <img src="@/assets/images/dark.svg" alt="dark">
-              <div v-if="sideTheme === 'theme-dark'" class="setting-drawer-block-checbox-selectIcon" style="display: block;">
-                <i aria-label="图标: check" class="anticon anticon-check">
-                  <svg viewBox="64 64 896 896" data-icon="check" width="1em" height="1em" :fill="theme" aria-hidden="true" focusable="false" class="">
-                    <path d="M912 190h-69.9c-9.8 0-19.1 4.5-25.1 12.2L404.7 724.5 207 474a32 32 0 0 0-25.1-12.2H112c-6.7 0-10.4 7.7-6.3 12.9l273.9 347c12.8 16.2 37.4 16.2 50.3 0l488.4-618.9c4.1-5.1.4-12.8-6.3-12.8z"/>
-                  </svg>
-                </i>
-              </div>
-            </div>
-            <div class="setting-drawer-block-checbox-item" @click="handleTheme('theme-light')">
-              <img src="@/assets/images/light.svg" alt="light">
-              <div v-if="sideTheme === 'theme-light'" class="setting-drawer-block-checbox-selectIcon" style="display: block;">
-                <i aria-label="图标: check" class="anticon anticon-check">
-                  <svg viewBox="64 64 896 896" data-icon="check" width="1em" height="1em" :fill="theme" aria-hidden="true" focusable="false" class="">
-                    <path d="M912 190h-69.9c-9.8 0-19.1 4.5-25.1 12.2L404.7 724.5 207 474a32 32 0 0 0-25.1-12.2H112c-6.7 0-10.4 7.7-6.3 12.9l273.9 347c12.8 16.2 37.4 16.2 50.3 0l488.4-618.9c4.1-5.1.4-12.8-6.3-12.8z"/>
-                  </svg>
-                </i>
-              </div>
-            </div>
-          </div>
-
-          <div class="drawer-item">
-            <span>主题颜色</span>
-            <theme-picker style="float: right;height: 26px;margin: -3px 8px 0 0;" @change="themeChange" />
-          </div>
-
-          <div class="drawer-item">
-            <span>工业主题预设</span>
-            <div class="setting-preset-grid">
-              <div
-                v-for="preset in themePresets"
-                :key="preset.value"
-                class="setting-preset"
-                :class="{ active: theme === preset.value }"
-                :style="{ '--preset-color': preset.value }"
-                @click="applyPreset(preset)"
-              >
-                <div class="setting-preset-chip"></div>
-                <div class="setting-preset-title">{{ preset.label }}</div>
-                <div class="setting-preset-desc">{{ preset.description }}</div>
-              </div>
+          <div class="setting-theme-note">
+            <i class="el-icon-monitor"></i>
+            <div>
+              <strong>工业深色外观</strong>
+              <span>已为长时间监测和值守场景统一启用</span>
             </div>
           </div>
         </div>
@@ -139,24 +90,12 @@
 </template>
 
 <script>
-import ThemePicker from '@/components/ThemePicker'
-
 export default {
-  components: { ThemePicker },
   expose: ['openSetting'],
   data() {
     return {
-      theme: this.$store.state.settings.theme,
-      appearanceMode: this.$store.state.settings.appearanceMode,
-      sideTheme: this.$store.state.settings.sideTheme,
       navType: this.$store.state.settings.navType,
-      showSettings: false,
-      themePresets: [
-        { label: '工业监测蓝', value: '#22D3EE', description: '默认推荐，适合监测总览、波形频谱与夜间值守。' },
-        { label: '控制室深蓝', value: '#3B82F6', description: '对比更稳，适合长时间运行台与报表页。' },
-        { label: '维保预警橙', value: '#F59E0B', description: '强调处置与预警，适合告警闭环高关注场景。' },
-        { label: '诊断紫', value: '#8B5CF6', description: '适合模型分析、证据对比和诊断专题页面。' }
-      ]
+      showSettings: false
     }
   },
   computed: {
@@ -251,13 +190,6 @@ export default {
     }
   },
   watch: {
-    appearanceMode(val) {
-      this.$store.dispatch('settings/changeSetting', {
-        key: 'appearanceMode',
-        value: val
-      })
-      document.documentElement.setAttribute('data-theme', val)
-    },
     navType: {
       handler(val) {
         if (val == 1) {
@@ -277,33 +209,12 @@ export default {
     }
   },
   methods: {
-    themeChange(val) {
-      this.$store.dispatch('settings/changeSetting', {
-        key: 'theme',
-        value: val
-      })
-      this.theme = val
-    },
-    handleTheme(val) {
-      this.$store.dispatch('settings/changeSetting', {
-        key: 'sideTheme',
-        value: val
-      })
-      this.sideTheme = val
-    },
     handleNavType(val) {
       this.$store.dispatch('settings/changeSetting', {
         key: 'navType',
         value: val
       })
       this.navType = val
-    },
-    applyPreset(preset) {
-      this.themeChange(preset.value)
-      this.appearanceMode = 'industrial'
-      if (this.sideTheme !== 'theme-dark') {
-        this.handleTheme('theme-dark')
-      }
     },
     openSetting() {
       this.showSettings = true
@@ -327,10 +238,7 @@ export default {
             "fixedHeader":${this.fixedHeader},
             "sidebarLogo":${this.sidebarLogo},
             "dynamicTitle":${this.dynamicTitle},
-            "footerVisible":${this.footerVisible},
-            "sideTheme":"${this.sideTheme}",
-            "appearanceMode":"${this.appearanceMode}",
-            "theme":"${this.theme}"
+            "footerVisible":${this.footerVisible}
           }`
       )
       setTimeout(this.$modal.closeLoading(), 1000)
@@ -349,44 +257,12 @@ export default {
 .setting-drawer-content {
   .setting-drawer-title {
     margin-bottom: 12px;
-    color: rgba(0, 0, 0, .85);
+    color: var(--color-heading);
     font-size: 14px;
     line-height: 22px;
     font-weight: bold;
   }
 
-  .setting-drawer-block-checbox {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    margin-top: 10px;
-    margin-bottom: 20px;
-
-    .setting-drawer-block-checbox-item {
-      position: relative;
-      margin-right: 16px;
-      border-radius: 2px;
-      cursor: pointer;
-
-      img {
-        width: 48px;
-        height: 48px;
-      }
-
-      .setting-drawer-block-checbox-selectIcon {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 100%;
-        height: 100%;
-        padding-top: 15px;
-        padding-left: 24px;
-        color: #ffffff;
-        font-weight: 700;
-        font-size: 14px;
-      }
-    }
-  }
 }
 
 .drawer-container {
@@ -397,13 +273,13 @@ export default {
 
   .drawer-title {
     margin-bottom: 12px;
-    color: rgba(0, 0, 0, .85);
+    color: var(--color-heading);
     font-size: 14px;
     line-height: 22px;
   }
 
   .drawer-item {
-    color: rgba(0, 0, 0, .65);
+    color: var(--color-text);
     font-size: 14px;
     padding: 12px 0;
   }
@@ -422,7 +298,7 @@ export default {
   margin-bottom: 20px;
 
   .activeItem {
-    border: 2px solid #{'var(--theme)'} !important;
+    border: 2px solid var(--color-accent) !important;
   }
 
   .item {
@@ -432,7 +308,7 @@ export default {
     width: 56px;
     height: 48px;
     border-radius: 4px;
-    background: #171717;
+    background: var(--color-surface-soft);
     border: 2px solid transparent;
   }
 
@@ -440,11 +316,11 @@ export default {
     b:first-child {
       display: block;
       height: 30%;
-      background: #1a1a1a;
+      background: var(--color-border);
     }
     b:last-child {
       width: 30%;
-      background: #1b2a47;
+      background: var(--color-surface-raised);
       position: absolute;
       height: 100%;
       top: 0;
@@ -456,11 +332,11 @@ export default {
       border-radius: 4px 4px 0 0;
       display: block;
       height: 30%;
-      background: #1b2a47;
+      background: var(--color-surface-raised);
     }
     b:last-child {
       width: 30%;
-      background: #1b2a47;
+      background: var(--color-surface-raised);
       position: absolute;
       height: 70%;
       border-radius: 0 0 0 4px;
@@ -470,9 +346,40 @@ export default {
     b:first-child {
       display: block;
       height: 30%;
-      background: #1b2a47;
+      background: var(--color-surface-raised);
       border-radius: 4px 4px 0 0;
     }
+  }
+}
+
+.setting-theme-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 20px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+
+  > i {
+    color: var(--color-accent);
+    font-size: 22px;
+  }
+
+  strong,
+  span {
+    display: block;
+  }
+
+  strong {
+    color: var(--color-heading);
+  }
+
+  span {
+    margin-top: 3px;
+    color: var(--color-muted);
+    font-size: 12px;
   }
 }
 </style>

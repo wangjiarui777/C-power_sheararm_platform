@@ -3,6 +3,7 @@ package com.ruoyi.sensor.web;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -195,6 +196,9 @@ public class VibrationDiagnosisController
             option.put("deviceCode", device.getDeviceCode());
             option.put("deviceName", device.getDeviceName());
             option.put("deviceType", device.getDeviceType());
+            option.put("deptId", device.getDeptId());
+            option.put("deptName", device.getDeptName());
+            option.put("orgName", device.getOrgName());
             option.put("status", device.getStatus());
             option.put("location", device.getLocation());
             return option;
@@ -254,6 +258,132 @@ public class VibrationDiagnosisController
         result.put("modelVersions", versionOptions);
         result.put("multiPointEnabled", multiPointEnabled);
         result.put("maxBatchPoints", Math.max(1, diagnosisBatchMaxPoints));
+        return AjaxResult.success(result);
+    }
+
+    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
+    @GetMapping("/overview")
+    public AjaxResult diagnosisOverview()
+    {
+        List<PhmDeviceEntity> devices = new ArrayList<>(
+            dataScopeService.listDevices(new PhmDeviceScopeQuery()));
+        devices.sort(Comparator
+            .comparing((PhmDeviceEntity device) -> hasText(device.getDeptName())
+                ? device.getDeptName() : "未分配部门")
+            .thenComparing(device -> stringValue(device.getDeviceCode(), "")));
+
+        Map<Long, PhmDeviceEntity> devicesById = new LinkedHashMap<>();
+        for (PhmDeviceEntity device : devices)
+        {
+            if (device.getId() != null)
+            {
+                devicesById.put(device.getId(), device);
+            }
+        }
+
+        List<PhmMeasurePointEntity> points = phmService.listMeasurePoints(null).stream()
+            .filter(point -> devicesById.containsKey(point.getDeviceId()))
+            .filter(point -> !Boolean.FALSE.equals(point.getEnabled()))
+            .filter(point -> "vibration".equalsIgnoreCase(stringValue(point.getSignalType(), "").trim()))
+            .sorted(Comparator
+                .comparing(PhmMeasurePointEntity::getDisplayOrder,
+                    Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(PhmMeasurePointEntity::getChannelId,
+                    Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(point -> stringValue(point.getPointCode(), "")))
+            .toList();
+
+        List<Long> pointIds = points.stream()
+            .map(PhmMeasurePointEntity::getId)
+            .filter(java.util.Objects::nonNull)
+            .toList();
+        List<EnhancedInferenceRecordEntity> latestRecords = pointIds.isEmpty()
+            ? List.of() : phmService.listLatestDiagnosesByPointIds(pointIds);
+        Map<Long, EnhancedInferenceRecordEntity> latestByPointId = new LinkedHashMap<>();
+        if (latestRecords != null)
+        {
+            for (EnhancedInferenceRecordEntity record : latestRecords)
+            {
+                if (record != null && record.getPointId() != null)
+                {
+                    latestByPointId.put(record.getPointId(), record);
+                }
+            }
+        }
+
+        Map<Long, List<PhmMeasurePointEntity>> pointsByDevice = new LinkedHashMap<>();
+        for (PhmMeasurePointEntity point : points)
+        {
+            pointsByDevice.computeIfAbsent(point.getDeviceId(), ignored -> new ArrayList<>()).add(point);
+        }
+
+        Map<String, Map<String, Object>> departmentsByKey = new LinkedHashMap<>();
+        int visibleDeviceCount = 0;
+        for (PhmDeviceEntity device : devices)
+        {
+            List<PhmMeasurePointEntity> devicePoints = pointsByDevice.get(device.getId());
+            if (devicePoints == null || devicePoints.isEmpty())
+            {
+                continue;
+            }
+            String departmentKey = device.getDeptId() == null
+                ? "unassigned" : "dept-" + device.getDeptId();
+            Map<String, Object> department = departmentsByKey.computeIfAbsent(departmentKey, ignored -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("deptId", device.getDeptId());
+                row.put("deptName", hasText(device.getDeptName()) ? device.getDeptName() : "未分配部门");
+                row.put("devices", new ArrayList<Map<String, Object>>());
+                return row;
+            });
+
+            Map<String, Object> deviceRow = new LinkedHashMap<>();
+            deviceRow.put("id", device.getId());
+            deviceRow.put("deviceCode", device.getDeviceCode());
+            deviceRow.put("deviceName", device.getDeviceName());
+            deviceRow.put("deviceType", device.getDeviceType());
+            deviceRow.put("orgName", device.getOrgName());
+            deviceRow.put("location", device.getLocation());
+            deviceRow.put("status", device.getStatus());
+            List<Map<String, Object>> pointRows = new ArrayList<>();
+            for (PhmMeasurePointEntity point : devicePoints)
+            {
+                Map<String, Object> pointRow = new LinkedHashMap<>();
+                pointRow.put("id", point.getId());
+                pointRow.put("pointCode", point.getPointCode());
+                pointRow.put("pointName", point.getPointName());
+                pointRow.put("channelId", point.getChannelId());
+                pointRow.put("signalType", point.getSignalType());
+                pointRow.put("enabled", point.getEnabled());
+
+                EnhancedInferenceRecordEntity latest = latestByPointId.get(point.getId());
+                Map<String, Object> diagnosis = new LinkedHashMap<>();
+                diagnosis.put("dataStatus", latest == null ? "no_data" : "available");
+                if (latest != null)
+                {
+                    diagnosis.put("diagnosisResult", latest.getDiagnosisResult());
+                    diagnosis.put("riskLevel", latest.getRiskLevel());
+                    diagnosis.put("alarmLevel", latest.getAlarmLevel());
+                    diagnosis.put("healthIndex", latest.getHealthIndex());
+                    diagnosis.put("confidence", latest.getConfidence());
+                    diagnosis.put("diagnosisTime",
+                        latest.getSampleTime() == null ? latest.getCreateTime() : latest.getSampleTime());
+                }
+                pointRow.put("latestDiagnosis", diagnosis);
+                pointRows.add(pointRow);
+            }
+            deviceRow.put("points", pointRows);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> departmentDevices =
+                (List<Map<String, Object>>) department.get("devices");
+            departmentDevices.add(deviceRow);
+            visibleDeviceCount++;
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("departments", new ArrayList<>(departmentsByKey.values()));
+        result.put("departmentCount", departmentsByKey.size());
+        result.put("deviceCount", visibleDeviceCount);
+        result.put("pointCount", points.size());
         return AjaxResult.success(result);
     }
 
@@ -1200,6 +1330,17 @@ public class VibrationDiagnosisController
         latest.put("healthIndex", requiredNumber(nested, "healthIndex"));
         latest.put("riskLevel", firstRequiredText(nested, "riskLevel", "risk_level"));
         latest.put("alarmLevel", firstOptionalText(nested, "alarmLevel", "alarm_level"));
+        latest.put("sampleRate", optionalNumber(nested, "sampleRate", "sample_rate"));
+        latest.put("closedPrediction", firstOptionalText(nested, "closedPrediction", "closed_prediction"));
+        latest.put("decisionReason", firstOptionalText(nested, "decisionReason", "decision_reason"));
+        latest.put("unknownRatio", optionalNumber(nested, "unknownRatio", "unknown_ratio"));
+        latest.put("segmentConsistency", optionalNumber(nested, "segmentConsistency", "segment_consistency"));
+        latest.put("meanMahalanobis", optionalNumber(nested, "meanMahalanobis", "mean_mahalanobis"));
+        latest.put("meanEntropy", optionalNumber(nested, "meanEntropy", "mean_entropy"));
+        Object topProbabilities = nested.containsKey("topProbabilities")
+            ? nested.get("topProbabilities") : nested.get("top_probabilities");
+        latest.put("topProbabilities", topProbabilities instanceof List
+            ? topProbabilities : new ArrayList<>());
         latest.put("status", "SUCCEEDED");
         latest.put("resultStatus", "VALID");
         latest.put("latestRms", optionalNumber(nested, "rms", "latestRms"));

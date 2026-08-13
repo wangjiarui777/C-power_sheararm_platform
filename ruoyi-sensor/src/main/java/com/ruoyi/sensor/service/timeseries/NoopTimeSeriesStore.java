@@ -33,6 +33,12 @@ public class NoopTimeSeriesStore implements TimeSeriesStore
     }
 
     @Override
+    public boolean writeDiagnosisResult(DiagnosisResultSnapshot result)
+    {
+        return false;
+    }
+
+    @Override
     public List<Map<String, Object>> queryTelemetryTrend(String deviceCode, String pointCode, String metricCode,
                                                          Date from, Date to, int limit)
     {
@@ -47,6 +53,18 @@ public class NoopTimeSeriesStore implements TimeSeriesStore
 
     @Override
     public List<VibrationFrameSnapshot> loadRecentVibrationFrames(String deviceCode, Integer channelId, int limit)
+    {
+        throw new TimeSeriesStoreUnavailableException("Time-series storage is disabled");
+    }
+
+    @Override
+    public DiagnosisResultSnapshot loadLatestDiagnosis(String deviceCode)
+    {
+        throw new TimeSeriesStoreUnavailableException("Time-series storage is disabled");
+    }
+
+    @Override
+    public List<DiagnosisResultSnapshot> queryDiagnosisHistory(String deviceCode, Date from, Date to, int limit)
     {
         throw new TimeSeriesStoreUnavailableException("Time-series storage is disabled");
     }

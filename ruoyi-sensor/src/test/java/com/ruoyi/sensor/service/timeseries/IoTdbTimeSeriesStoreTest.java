@@ -103,6 +103,7 @@ class IoTdbTimeSeriesStoreTest
         ReflectionTestUtils.setField(store, "sessionPoolSize", 1);
         ReflectionTestUtils.setField(store, "telemetryTtlDays", 1);
         ReflectionTestUtils.setField(store, "frameTtlDays", 1);
+        ReflectionTestUtils.setField(store, "diagnosisTtlDays", 1);
         ReflectionTestUtils.setField(store, "timestampPrecision", "us");
         return store;
     }

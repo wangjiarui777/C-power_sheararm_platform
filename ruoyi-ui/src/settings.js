@@ -5,12 +5,12 @@ module.exports = {
   title: process.env.VUE_APP_TITLE,
 
   /**
-   * 侧边栏主题 深色主题theme-dark，浅色主题theme-light
+   * 侧边栏固定使用深色主题
    */
   sideTheme: 'theme-dark',
 
   /**
-   * 全站外观：light、dark、industrial
+   * 全站固定使用工业深色外观
    */
   appearanceMode: 'industrial',
 

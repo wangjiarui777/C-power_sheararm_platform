@@ -6,6 +6,7 @@ import java.text.SimpleDateFormat;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -58,6 +59,8 @@ import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
 import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 import com.ruoyi.sensor.service.PhmService;
 import com.ruoyi.sensor.service.PhmDataScopeService;
+import com.ruoyi.sensor.service.DiagnosisIotdbSyncService;
+import com.ruoyi.sensor.service.DiagnosisResultReadService;
 import com.ruoyi.sensor.service.support.PhmDeviceEventPolicy;
 import com.ruoyi.sensor.service.support.PhmDiagnosisLinkagePolicy;
 import com.ruoyi.sensor.websocket.SensorWebSocketHandler;
@@ -84,6 +87,12 @@ public class PhmServiceImpl implements PhmService
 
     @Autowired
     private EnhancedInferenceRecordMapper enhancedInferenceRecordMapper;
+
+    @Autowired
+    private DiagnosisIotdbSyncService diagnosisIotdbSyncService;
+
+    @Autowired
+    private DiagnosisResultReadService diagnosisResultReadService;
 
     @Autowired
     private ModelReleaseMapper modelReleaseMapper;
@@ -654,15 +663,22 @@ public class PhmServiceImpl implements PhmService
         record.setModelVersion(stringValue(diagnosis.get("modelVersion"), null));
         record.setSourceFile(stringValue(diagnosis.get("filePath"), stringValue(diagnosis.get("filename"), null)));
         record.setAnalysisMode(stringValue(diagnosis.get("modelType"), null));
+        record.setSampleRate(toNullableDouble(diagnosis.get("sampleRate"), diagnosis.get("sample_rate")));
         record.setDiagnosisResult(stringValue(diagnosis.get("diagnosisResult"), null));
+        record.setClosedPrediction(stringValue(diagnosis.get("closedPrediction"), null));
         record.setConfidence(toBigDecimal(diagnosis.get("confidence")));
         record.setHealthIndex(toInteger(diagnosis.get("healthIndex"), null));
         record.setRiskLevel(stringValue(diagnosis.get("riskLevel"), null));
         record.setAlarmLevel(stringValue(diagnosis.get("alarmLevel"), null));
         record.setDiagnosisDetail(stringValue(diagnosis.get("diagnosisDetail"), ""));
         record.setDecisionReason(stringValue(diagnosis.get("decisionReason"), stringValue(diagnosis.get("diagnosisDetail"), "")));
+        record.setUnknownRatio(toBigDecimal(diagnosis.get("unknownRatio")));
+        record.setSegmentConsistency(toBigDecimal(diagnosis.get("segmentConsistency")));
+        record.setMeanMahalanobis(toBigDecimal(diagnosis.get("meanMahalanobis")));
+        record.setMeanEntropy(toBigDecimal(diagnosis.get("meanEntropy")));
         record.setRms(toNullableDouble(diagnosis.get("latestRms"), diagnosis.get("rms")));
         record.setPeak(toNullableDouble(diagnosis.get("latestPeak"), diagnosis.get("peak")));
+        record.setTopProbabilities(JSON.toJSONString(diagnosis.getOrDefault("topProbabilities", new ArrayList<>())));
         record.setEvidence(JSON.toJSONString(diagnosis.getOrDefault("evidence", new ArrayList<>())));
         record.setWaveJson(null);
         record.setSpectrumJson(null);
@@ -686,6 +702,7 @@ public class PhmServiceImpl implements PhmService
         metadata.put("resultStatus", diagnosis.get("resultStatus"));
         record.setRemark(JSON.toJSONString(metadata));
         enhancedInferenceRecordMapper.insert(record);
+        diagnosisIotdbSyncService.enqueue(record.getId());
         return record;
     }
 
@@ -1770,10 +1787,7 @@ public class PhmServiceImpl implements PhmService
         {
             return null;
         }
-        return enhancedInferenceRecordMapper.selectOne(new LambdaQueryWrapper<EnhancedInferenceRecordEntity>()
-                .eq(EnhancedInferenceRecordEntity::getDeviceCode, deviceCode)
-                .orderByDesc(EnhancedInferenceRecordEntity::getCreateTime)
-                .last("limit 1"));
+        return diagnosisResultReadService.latest(deviceCode);
     }
 
     @Override
@@ -1783,24 +1797,22 @@ public class PhmServiceImpl implements PhmService
     }
 
     @Override
+    public List<EnhancedInferenceRecordEntity> listLatestDiagnosesByPointIds(Collection<Long> pointIds)
+    {
+        if (pointIds == null || pointIds.isEmpty())
+        {
+            return new ArrayList<>();
+        }
+        return enhancedInferenceRecordMapper.selectLatestByPointIds(pointIds);
+    }
+
+    @Override
     public List<EnhancedInferenceRecordEntity> listDiagnosisHistory(PhmService.DateRange range, String deviceCode)
     {
-        LambdaQueryWrapper<EnhancedInferenceRecordEntity> query = new LambdaQueryWrapper<>();
-        if (StringUtils.hasText(deviceCode))
-        {
-            query.eq(EnhancedInferenceRecordEntity::getDeviceCode, deviceCode.trim());
-        }
-        if (range != null && range.startTime() != null)
-        {
-            query.ge(EnhancedInferenceRecordEntity::getCreateTime, range.startTime());
-        }
-        if (range != null && range.endTime() != null)
-        {
-            query.le(EnhancedInferenceRecordEntity::getCreateTime, range.endTime());
-        }
-        return enhancedInferenceRecordMapper.selectList(query
-                .orderByDesc(EnhancedInferenceRecordEntity::getCreateTime)
-                .last("limit 5000"));
+        return diagnosisResultReadService.history(
+            StringUtils.hasText(deviceCode) ? deviceCode.trim() : null,
+            range == null ? null : range.startTime(),
+            range == null ? null : range.endTime(), 5000);
     }
 
     private String buildAlarmNo(String prefix, Date time)

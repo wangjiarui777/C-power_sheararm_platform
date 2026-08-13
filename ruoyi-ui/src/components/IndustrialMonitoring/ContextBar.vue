@@ -53,12 +53,12 @@ export default {
 </script>
 
 <style scoped>
-.context-bar { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:14px 18px; border:1px solid #273846; border-radius:10px; background:#15212c; color:#e9f0f5; }
+.context-bar { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 20px; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-surface); color:var(--color-text); }
 .context-title h1 { margin:2px 0 3px; font-size:22px; line-height:1.1; letter-spacing:.02em; }
-.context-title p,.eyebrow,.context-meta span { margin:0; color:#8ea2b3; font-size:12px; }
+.context-title p,.eyebrow,.context-meta span { margin:0; color:var(--color-muted); font-size:12px; }
 .eyebrow { letter-spacing:.12em; text-transform:uppercase; }
 .context-meta { display:flex; align-items:center; justify-content:flex-end; gap:16px; flex-wrap:wrap; }
 .context-meta div { display:grid; gap:3px; min-width:80px; }
-.context-meta strong { font-family:"DIN Alternate",Consolas,monospace; font-size:13px; font-weight:600; }
+.context-meta strong { font-family:var(--font-data); font-size:13px; font-weight:600; }
 @media(max-width:1000px){.context-bar{align-items:flex-start;flex-direction:column}.context-meta{justify-content:flex-start}}
 </style>

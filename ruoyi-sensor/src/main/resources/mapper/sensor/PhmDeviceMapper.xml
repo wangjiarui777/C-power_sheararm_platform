@@ -6,8 +6,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectScopedDeviceList"
             parameterType="com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery"
             resultType="com.ruoyi.sensor.domain.entity.PhmDeviceEntity">
-        SELECT d.*
+        SELECT d.*, sd.dept_name AS dept_name
         FROM phm_device d
+        LEFT JOIN sys_dept sd ON sd.dept_id = d.dept_id
         WHERE 1 = 1
         <if test="deviceId != null">
             AND d.id = #{deviceId}
