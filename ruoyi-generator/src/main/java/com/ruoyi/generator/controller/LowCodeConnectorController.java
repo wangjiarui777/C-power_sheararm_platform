@@ -22,13 +22,13 @@ public class LowCodeConnectorController extends BaseController
     private final LowCodeConnectorService connectors;
     public LowCodeConnectorController(LowCodeConnectorService connectors) { this.connectors = connectors; }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:connector')")
     @GetMapping public AjaxResult list() { return success(connectors.list()); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:connector')")
     @Log(title = "低代码连接器", businessType = BusinessType.UPDATE)
     @PutMapping public AjaxResult save(@RequestBody Map<String, Object> input) { return success(connectors.save(input)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:connector')")
     @PostMapping("/{code}/test") public AjaxResult test(@PathVariable String code) { return success(connectors.test(code)); }
 }

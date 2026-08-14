@@ -64,7 +64,19 @@ public class LowCodeProjectService
         String appCode = requiredCode(request.get("appCode"), "appCode");
         String name = requiredText(request.get("projectName"), "projectName", 128);
         String preset = String.valueOf(request.getOrDefault("preset", "generic-crud"));
+        if (!preset.equals("generic-crud") && !preset.equals("sensor-diagnosis"))
+        {
+            throw new IllegalArgumentException("不支持的低代码预置: " + preset);
+        }
+        if (jdbc.queryForObject("SELECT COUNT(*) FROM lc_project WHERE app_code=?", Integer.class, appCode) > 0)
+        {
+            throw new IllegalArgumentException("应用编码已存在: " + appCode);
+        }
         String metadata = request.get("metadata") == null ? template(preset) : canonical(request.get("metadata"));
+        if (metadata.length() > 1024 * 1024)
+        {
+            throw new IllegalArgumentException("项目元数据不能超过 1MB");
+        }
         String username = SecurityUtils.getUsername();
         LocalDateTime now = LocalDateTime.now();
         GeneratedKeyHolder projectKey = new GeneratedKeyHolder();
@@ -90,6 +102,10 @@ public class LowCodeProjectService
         Long draftId = number(project.get("draftVersionId"));
         if (draftId == null) throw new IllegalArgumentException("项目没有可编辑草稿");
         String json = canonical(metadata);
+        if (json.length() > 1024 * 1024)
+        {
+            throw new IllegalArgumentException("项目元数据不能超过 1MB");
+        }
         String username = SecurityUtils.getUsername();
         jdbc.update("""
             UPDATE lc_version SET metadata_json=?,checksum=?,validation_json=NULL,create_by=?,create_time=NOW()

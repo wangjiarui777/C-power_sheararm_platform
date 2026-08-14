@@ -1087,7 +1087,7 @@ public class VibrationDiagnosisController
         }
     }
 
-    @PreAuthorize("@ss.hasPermi('sensor:diagnosis:view')")
+    @PreAuthorize("@ss.hasAnyPermi('sensor:history:list,sensor:diagnosis:view')")
     @GetMapping("/inference/history")
     public AjaxResult inferenceHistory(@RequestParam(required = false, name = "start_time") String startTime,
         @RequestParam(required = false, name = "end_time") String endTime,

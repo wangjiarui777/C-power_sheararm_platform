@@ -8,9 +8,51 @@ import errorCode from '@/utils/errorCode'
 import { tansParams, blobValidate } from "@/utils/chuangli"
 import cache from '@/plugins/cache'
 import { saveAs } from 'file-saver'
+import Cookies from 'js-cookie'
 
 let downloadLoadingInstance
 let passwordChangeRedirecting = false
+let csrfBootstrapPromise = null
+
+// The login page bootstraps CSRF once, but a browser can restore a valid
+// RUOYI_SESSION after a full-page refresh without restoring Axios' in-memory
+// header.  Spring Security then rejects the first role/user/menu mutation with
+// a bare 403.  Refresh the token lazily for every state-changing request so
+// this does not depend on the login page having been visited in this tab.
+function ensureCsrfHeader(config) {
+  const method = String(config.method || 'get').toLowerCase()
+  const stateChanging = ['post', 'put', 'patch', 'delete'].includes(method)
+  if (!stateChanging || config.url === '/csrf') return Promise.resolve(config)
+
+  const headerName = 'X-XSRF-TOKEN'
+  const existing = (config.headers && (config.headers[headerName] || config.headers[headerName.toLowerCase()]))
+    || service.defaults.headers.common[headerName]
+    || Cookies.get('XSRF-TOKEN')
+  if (existing) {
+    config.headers = config.headers || {}
+    config.headers[headerName] = existing
+    return Promise.resolve(config)
+  }
+
+  if (!csrfBootstrapPromise) {
+    csrfBootstrapPromise = service.get('/csrf', {
+      headers: { isToken: false, repeatSubmit: false }
+    }).then(data => {
+      const token = data && data.token ? data.token : Cookies.get('XSRF-TOKEN')
+      if (token) service.defaults.headers.common[headerName] = token
+      return token
+    }).finally(() => {
+      csrfBootstrapPromise = null
+    })
+  }
+  return csrfBootstrapPromise.then(token => {
+    if (token) {
+      config.headers = config.headers || {}
+      config.headers[headerName] = token
+    }
+    return config
+  })
+}
 
 function redirectToPasswordChange() {
   if (passwordChangeRedirecting) return
@@ -45,6 +87,7 @@ const service = axios.create({
 
 // request拦截器
 service.interceptors.request.use(config => {
+  return ensureCsrfHeader(config).then(() => {
   // 是否需要防止数据重复提交
   const isRepeatSubmit = (config.headers || {}).repeatSubmit === false
   // 间隔时间(ms)，小于此时间视为重复提交
@@ -84,7 +127,8 @@ service.interceptors.request.use(config => {
       }
     }
   }
-  return config
+    return config
+  })
 }, error => {
     console.log(error)
     Promise.reject(error)
@@ -151,6 +195,11 @@ service.interceptors.response.use(res => {
         const passwordError = new Error('PASSWORD_CHANGE_REQUIRED')
         passwordError.passwordChangeRequired = true
         return Promise.reject(passwordError)
+      }
+      if (statusCode === '403') {
+        message = '当前账号没有执行此低代码操作的权限，请联系管理员分配对应功能权限'
+        Message({ message: message, type: 'warning', duration: 5000 })
+        return Promise.reject(error)
       }
       if (statusCode !== '500') {
         message = "系统接口" + statusCode + "异常"

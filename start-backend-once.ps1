@@ -1,0 +1,21 @@
+$projectRoot = (Get-Location).Path
+$env:SPRING_PROFILES_ACTIVE = 'dev'
+$env:MYSQL_PASSWORD = 'admin123'
+$env:JWT_SECRET = 'dev-jwt-secret-key-for-local-development-use-only-32bytes'
+$env:IOTDB_PASSWORD = 'root'
+$env:REDIS_HOST = '127.0.0.1'
+$env:REDIS_PORT = '6380'
+$env:SESSION_COOKIE_SECURE = 'false'
+$env:LOG_PATH = 'C:\ruoyi\logs'
+$env:SENSOR_INFERENCE_INTERNAL_TOKEN = 'dev-inference-token-not-for-production'
+$env:INFERENCE_INTERNAL_TOKEN = 'dev-inference-token-not-for-production'
+$env:SENSOR_GEAR_INFER_URL = 'http://127.0.0.1:5000/internal/infer'
+$env:SENSOR_BEARING_INFER_URL = 'http://127.0.0.1:5000/internal/infer'
+$env:SENSOR_ATTACHMENT_ROOT = Join-Path $projectRoot '.local-data\attachments'
+$env:RUOYI_PROFILE = Join-Path $projectRoot '.local-data\uploadPath'
+$env:INFERENCE_MODEL_ROOT = Join-Path $projectRoot '.local-models'
+$env:INFERENCE_ALLOWED_INPUT_ROOTS = Join-Path $projectRoot '.local-data\attachments\objects'
+$env:VUE_APP_BASE_URL = 'http://127.0.0.1:8080'
+New-Item -ItemType Directory -Force -Path $env:LOG_PATH | Out-Null
+$jar = Join-Path $projectRoot 'ruoyi-admin\target\ruoyi-admin.jar'
+Start-Process -FilePath 'java.exe' -ArgumentList @('-jar', $jar, '--spring.profiles.active=dev') -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $projectRoot 'backend-fixed.out.log') -RedirectStandardError (Join-Path $projectRoot 'backend-fixed.err.log') | Select-Object -ExpandProperty Id

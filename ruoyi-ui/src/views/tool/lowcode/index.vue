@@ -7,8 +7,8 @@
         <p>把数据对象、页面规则和诊断动作封装为可审计的发布版本。</p>
       </div>
       <div class="lc-header-actions">
-        <el-button icon="el-icon-plus" @click="openCreate">新建项目</el-button>
-        <el-button type="primary" icon="el-icon-check" :disabled="!current.id" @click="save">保存草稿</el-button>
+        <el-button v-hasPermi="['tool:lowcode:design']" icon="el-icon-plus" @click="openCreate">新建项目</el-button>
+        <el-button v-hasPermi="['tool:lowcode:design']" type="primary" icon="el-icon-check" :disabled="!current.id" @click="save">保存草稿</el-button>
       </div>
     </header>
 
@@ -18,9 +18,9 @@
         <div><b>{{ step.label }}</b><small>{{ step.caption }}</small></div>
       </div>
       <div class="release-actions">
-        <el-button size="small" :disabled="!current.id" @click="validateCurrent">完整校验</el-button>
-        <el-button size="small" :disabled="!current.id" @click="showDiff">查看差异</el-button>
-        <el-button size="small" type="success" :disabled="!validation.valid" @click="publishCurrent">发布版本</el-button>
+        <el-button v-hasPermi="['tool:lowcode:validate']" size="small" :disabled="!current.id" @click="validateCurrent">完整校验</el-button>
+        <el-button v-hasPermi="['tool:lowcode:design']" size="small" :disabled="!current.id" @click="showDiff">查看差异</el-button>
+        <el-button v-hasPermi="['tool:lowcode:publish']" size="small" type="success" :disabled="!validation.valid" @click="publishCurrent">发布版本</el-button>
       </div>
     </section>
 
@@ -105,7 +105,7 @@
             <div v-if="validation.errors && validation.errors.length" class="validation-list">
               <article v-for="error in validation.errors" :key="error.code + error.path"><b>{{ error.code }}</b><span>{{ error.message }}</span><code>{{ error.path }}</code></article>
             </div>
-            <el-table :data="current.versions || []"><el-table-column prop="versionNo" label="版本" width="90" /><el-table-column prop="versionState" label="状态" width="120" /><el-table-column prop="checksum" label="校验和" show-overflow-tooltip /><el-table-column prop="publishBy" label="发布人" width="120" /><el-table-column label="操作" width="100"><template slot-scope="scope"><el-button v-if="scope.row.versionState === 'PUBLISHED' && scope.row.id !== current.activeVersionId" type="text" @click="rollback(scope.row.id)">回滚</el-button></template></el-table-column></el-table>
+            <el-table :data="current.versions || []"><el-table-column prop="versionNo" label="版本" width="90" /><el-table-column prop="versionState" label="状态" width="120" /><el-table-column prop="checksum" label="校验和" show-overflow-tooltip /><el-table-column prop="publishBy" label="发布人" width="120" /><el-table-column label="操作" width="100"><template slot-scope="scope"><el-button v-hasPermi="['tool:lowcode:rollback']" v-if="scope.row.versionState === 'PUBLISHED' && scope.row.id !== current.activeVersionId" type="text" @click="rollback(scope.row.id)">回滚</el-button></template></el-table-column></el-table>
             <el-collapse class="advanced-json"><el-collapse-item title="高级：查看并编辑统一元数据 JSON"><el-input v-model="metadataText" type="textarea" :rows="18" @change="applyMetadataText" /></el-collapse-item></el-collapse>
           </el-tab-pane>
         </el-tabs>
@@ -115,7 +115,7 @@
 
     <el-dialog title="创建低代码项目" :visible.sync="createVisible" width="520px">
       <el-form label-position="top"><el-form-item label="项目名称"><el-input v-model="createForm.projectName" /></el-form-item><el-form-item label="应用编码"><el-input v-model="createForm.appCode" placeholder="例如 sensor-point-config" /></el-form-item><el-form-item label="业务预置"><el-radio-group v-model="createForm.preset"><el-radio label="generic-crud">通用 CRUD</el-radio><el-radio label="sensor-diagnosis">测点诊断配置</el-radio></el-radio-group></el-form-item></el-form>
-      <span slot="footer"><el-button @click="createVisible = false">取消</el-button><el-button type="primary" @click="create">创建草稿</el-button></span>
+      <span slot="footer"><el-button @click="createVisible = false">取消</el-button><el-button v-hasPermi="['tool:lowcode:design']" type="primary" @click="create">创建草稿</el-button></span>
     </el-dialog>
     <el-dialog title="安全 DDL 预览" :visible.sync="ddlVisible" width="760px"><pre class="ddl-output">{{ ddlStatements.join('\n\n') || '当前结构不需要新增 DDL。' }}</pre><span slot="footer"><el-button @click="ddlVisible = false">关闭</el-button></span></el-dialog>
   </div>
@@ -140,11 +140,16 @@ export default {
     async refresh() { const res = await listProjects(); this.projects = res.data || [] },
     async selectProject(id) { const res = await getProject(id); this.current = res.data; this.metadata = JSON.parse(this.current.draft.metadataJson); this.syncText(); this.validation = this.current.draft.validationJson ? JSON.parse(this.current.draft.validationJson) : {} },
     openCreate() { this.createForm = { projectName: '', appCode: '', preset: 'generic-crud' }; this.createVisible = true },
-    async create() { const res = await createProject(this.createForm); this.createVisible = false; await this.refresh(); await this.selectProject(res.data.id) },
-    async save() { await saveDraft(this.current.id, this.metadata); this.$modal.msgSuccess('草稿已保存'); await this.selectProject(this.current.id) },
-    async validateCurrent() { await this.save(); const res = await validateProject(this.current.id); this.validation = res.data; this.activeWorkspace = 'release'; if (this.validation.valid) this.$modal.msgSuccess('完整校验通过'); else this.$modal.msgError(`发现 ${this.validation.errors.length} 个问题`) },
+    async create() {
+      if (this._creating) return
+      if (!this.createForm.projectName.trim() || !/^[A-Za-z][A-Za-z0-9_-]{1,63}$/.test(this.createForm.appCode)) { this.$modal.msgError('请填写合法的项目名称和应用编码'); return }
+      this._creating = true
+      try { const res = await createProject(this.createForm); this.createVisible = false; await this.refresh(); await this.selectProject(res.data.id) } finally { this._creating = false }
+    },
+    async save() { if (this._saving) return; this._saving = true; try { await saveDraft(this.current.id, this.metadata); this.$modal.msgSuccess('草稿已保存'); await this.selectProject(this.current.id) } finally { this._saving = false } },
+    async validateCurrent() { if (this._validating) return; this._validating = true; try { await this.save(); const res = await validateProject(this.current.id); this.validation = res.data; this.activeWorkspace = 'release'; if (this.validation.valid) this.$modal.msgSuccess('完整校验通过'); else this.$modal.msgError(`发现 ${this.validation.errors.length} 个问题`) } finally { this._validating = false } },
     async showDiff() { const res = await diffProject(this.current.id); this.$alert(`<pre style="max-height:420px;overflow:auto">${this.escape(JSON.stringify(res.data, null, 2))}</pre>`, '版本差异', { dangerouslyUseHTMLString: true }) },
-    async publishCurrent() { await publishProject(this.current.id); this.$modal.msgSuccess('已发布；新的可编辑草稿已创建'); await this.refresh(); await this.selectProject(this.current.id) },
+    async publishCurrent() { if (this._publishing) return; this._publishing = true; try { await publishProject(this.current.id); this.$modal.msgSuccess('已发布；新的可编辑草稿已创建'); await this.refresh(); await this.selectProject(this.current.id) } finally { this._publishing = false } },
     async rollback(versionId) { await this.$modal.confirm('回滚只切换活动元数据版本，不会反向修改表结构。确认继续？'); await rollbackProject(this.current.id, versionId); this.$modal.msgSuccess('已回滚'); await this.selectProject(this.current.id) },
     addField() { this.metadata.model.fields.push({ _key: Date.now(), name: '', label: '', type: 'text', list: true, query: false, required: false, readOnly: false, insert: true, edit: true }) },
     removeField(index) { this.metadata.model.fields.splice(index, 1) },

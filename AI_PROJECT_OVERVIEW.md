@@ -3,9 +3,10 @@
 > [!CAUTION]
 > **本文件包含本机运行密码、令牌和绝对路径。仅限当前计算机上的受信任 AI 与开发者使用。**
 > 不得提交、暂存、推送、上传、截图、粘贴到工单或聊天，也不得打入构建产物。
-> 文件当前受 Git 跟踪；阅读、修改或分享前必须先确认 `git status --short`。
+> 文件当前受 Git 跟踪（`git ls-files` 可确认）；阅读、修改或分享前必须先确认 `git status --short`。
+> 建议后续将本文移出 Git 跟踪，仅保留本地未跟踪副本（见 §10.3）。
 
-本文是 RuoYi-Vue 工业设备健康管理项目的可验证知识地图。
+本文是 RuoYi-Vue 工业设备健康管理（PHM）项目的可验证知识地图。
 它帮助 AI 快速回答四类问题：项目如何运行、代码在哪里、改动影响什么、怎样证明改动正确。
 它不是产品宣传页，也不替代源码、配置、迁移、测试和部署脚本。
 
@@ -30,14 +31,17 @@ git status --short
 git log -1 --oneline --decorate
 ```
 
-本文核对时的工作区快照：
+本文核对时的工作区快照（2026-08-14）：
 
-- 日期：2026-08-13；
 - 分支：`main`；
-- `HEAD`：`8b35449`（`docs: add AI project overview`）；
-- `AI_PROJECT_OVERVIEW.md` 已被 Git 跟踪且已有用户修改；
-- 根 `pom.xml`、`run-all.ps1`、`run-admin.ps1`、旧 `deploy/` 和 `phm-pages-demo.html` 当前处于删除状态；
-- `AI_PROJECT_OVERVIEW.md.bak-20260813` 是未跟踪备份，不是权威文档。
+- `HEAD`：`f977c47`（`Prevent first-login password gate request and icon regressions`）；
+- 根 `pom.xml` 已恢复并在 Git 跟踪中，Maven 多模块构建可执行；
+- `start-all.ps1` 可执行，支持 `-SkipBuild` / `-ForcePortCleanup` / `-FrontendPort`；
+- 工作区存在未提交改动：低代码控制器与权限迁移 `V2026081402__LowCodePermissionBoundary.java`（未跟踪）、`ruoyi-ui/src/views/monitoring-center/history-data/`（未跟踪）、`deployment/LOWCODE-OPERATIONS.md`（未跟踪）、`VibrationDiagnosisController` 历史下载权限放宽、`request.js` 403 提示等；
+- `setup/` 目录已删除；`run-all.ps1`、`run-admin.ps1` 已删除；
+- 新增安全文档：`SECURITY_AUDIT_REPORT_2026-08-13.md`、`SECURITY_EXCEPTIONS.md`、`SECURITY_REMEDIATION_TRACKER.md`；
+- `deployment/` 存在完整离线部署脚本、Nginx/Prometheus/WinSW 配置和协议文档；
+- `AI_PROJECT_OVERVIEW.md.bak-20260813` 已不存在，不是权威文档。
 
 快照只说明检查时的磁盘事实。
 若 Git 状态已经变化，以重新执行命令的结果为准，不要机械沿用上述值。
@@ -50,9 +54,9 @@ git log -1 --oneline --decorate
 2. 当前实际生效的 Spring/Vue/Python 配置；
 3. Flyway 迁移、Mapper 和数据库约束；
 4. 自动化测试与 CI 工作流；
-5. `start-all.ps1`、部署和打包脚本；
+5. `start-all.ps1`、`deployment/` 部署和打包脚本；
 6. 本文件；
-7. 根 README、历史 SQL、旧计划和日志。
+7. 根 README、`sql/` 历史 SQL、安全文档和旧日志。
 
 脚本存在不等于脚本已经端到端验证。
 页面存在不等于后端接口和数据表已经实现。
@@ -90,7 +94,7 @@ git log -1 --oneline --decorate
 
 ### 1.1 项目定位
 
-本项目基于 RuoYi-Vue 3.9.2 深度改造，是面向工业设备的健康管理与状态监测平台。
+本项目基于 RuoYi-Vue 3.9.2 深度改造，是面向工业设备的健康管理与状态监测平台（PHM）。
 主要业务包括：
 
 - 用户、角色、菜单、权限和数据范围；
@@ -98,10 +102,11 @@ git log -1 --oneline --decorate
 - Redis Stream 异步处理与 WebSocket 实时展示；
 - PHM 健康状态、告警、事件、报表和附件；
 - 齿轮、轴承模型推理及诊断任务；
+- 低代码工作台（独立数据源、版本化元数据、连接器）；
 - MySQL 业务记录和 IoTDB 时序投影；
-- Windows 本地启动及离线部署设计。
+- Windows 本地一键启动及离线部署设计。
 
-油液监测目前只有前端预留页和菜单，不是已经落地的完整业务服务。
+油液监测目前只有前端预留页和菜单，不是已经落地的完整业务服务（见 §5.1）。
 
 ### 1.2 运行组件
 
@@ -119,7 +124,7 @@ flowchart LR
 
     U --> N
     N --> J
-    U -->|"开发代理、JWT、REST、WS"| J
+    U -->|"开发代理、会话 Cookie、CSRF、REST、WS"| J
     E -->|"采集器认证、HMAC、帧协议"| J
     J -->|"内部令牌 /internal/infer"| P
     J --> M
@@ -136,23 +141,27 @@ Python 只负责模型推理，不持有业务数据库权限。
 ### 1.3 代码地图
 
 - 后端入口、公共能力和系统管理分别位于 `ruoyi-admin`、`ruoyi-common`、`ruoyi-framework`、`ruoyi-system`；Quartz 和代码生成分别位于 `ruoyi-quartz`、`ruoyi-generator`。
-- 工业业务核心在 `ruoyi-sensor`；其 `mock` 是独立 Maven 模拟器，`inference` 是独立 FastAPI/PyTorch 目录。
-- Vue 2 应用在 `ruoyi-ui`；离线设计、环境准备和历史 SQL 分别在 `deployment`、`setup`、`sql`。`sql` 不是生产迁移主入口。
+- 工业业务核心在 `ruoyi-sensor`；其 `mock` 是独立 Maven 模拟器（`vibration-simulator`），`inference` 是独立 FastAPI/PyTorch 目录。
+- Vue 2 应用在 `ruoyi-ui`；离线设计、Nginx/WinSW/监控配置在 `deployment`；历史 SQL 在 `sql`（不是生产迁移主入口）。
+- 安全文档：`SECURITY_AUDIT_REPORT_2026-08-13.md`、`SECURITY_EXCEPTIONS.md`、`SECURITY_REMEDIATION_TRACKER.md`。
+- 低代码 V2：后端在 `ruoyi-generator/lowcode`，公共 SPI 在 `ruoyi-common/lowcode`，前端在 `ruoyi-ui/src/views/tool/lowcode`。
 
-### 1.4 当前关键阻断
+### 1.4 当前关键注意点
 
-1. 根 `pom.xml` 当前不存在，根 Maven reactor、默认 CI Java 构建、离线打包和 `start-all.ps1` 的 Java 构建步骤均会受阻。
-2. 文档历史上引用的 `run-all.ps1`、`run-admin.ps1` 和旧 `deploy/` 已删除。
+1. 根 `pom.xml` 已恢复，根 Maven reactor、CI Java 构建、`start-all.ps1` 的构建步骤均可用。
+2. 认证已从 JWT 迁移为 Redis 不透明会话 Cookie（`RUOYI_SESSION`）+ CSRF 双提交；`.env` 中的 `JWT_SECRET` 已无代码引用。
 3. 油液页面调用的是拟定 `/sensor/oil-monitoring/*` 契约，Java 端没有对应 Controller 或油液遥测表。
-4. 本地 `.venv` 与 `requirements.txt` 声明存在版本漂移，不能把“可导入”当作依赖一致。
-5. 离线打包脚本引用错误迁移路径，签名验证脚本没有验证包内哈希和结构。
+4. `.venv` 与 `requirements.txt` 声明存在版本漂移（numpy/scipy/torch 均偏高），且 `.venv` 未安装 `pytest`，不能把“可导入”当作依赖一致。
+5. 离线打包脚本已改为使用编译产物中的 Flyway 迁移目录，但干净 Windows VM 端到端演练仍未在仓库留下机器可验证结果。
+6. 工作区存在未提交改动（低代码权限边界、历史数据下载页、低代码运维文档），改动前先看 §0.1 快照。
 
 ---
 ## 2. 能力成熟度矩阵
 
 | 能力 | 状态 | 当前证据 | 主要限制 |
 |---|---|---|---|
-| 登录、JWT、动态菜单 | `STABLE` | RuoYi Security、TokenService、前端守卫 | 依赖 MySQL、Redis |
+| 登录、会话 Cookie、动态菜单 | `STABLE` | Security 配置、TokenService、CSRF 过滤器、前端守卫 | 依赖 MySQL、Redis |
+| 首次登录强制改密（428 门禁） | `IMPLEMENTED` | `PasswordChangeRequiredFilter`、迁移 `V2026081302`、E2E | 端到端账号流需黑盒验收 |
 | 用户、角色、部门、字典 | `STABLE` | system 模块及原有测试 | 数据迁移仍需谨慎 |
 | 振动/温度 CRUD | `STABLE` | Controller、Mapper、页面 | 兼容前缀仍存在 |
 | HTTP 采集认证 | `IMPLEMENTED` | CollectorAccessService、认证过滤器 | 需要真实凭据联调 |
@@ -163,35 +172,38 @@ Python 只负责模型推理，不持有业务数据库权限。
 | 8888 MAT 接收器 | `EXPERIMENTAL` | CwruMatReceiver、启动钩子 | 仅开发/受控网络 |
 | PHM 设备和测点 | `IMPLEMENTED` | PhmController、Service、迁移和测试 | 依赖数据范围正确配置 |
 | 告警、事件、报表 | `IMPLEMENTED` | PHM 服务、页面、导出测试 | 完整业务闭环需环境冒烟 |
-| 附件安全存储 | `IMPLEMENTED` | Storage、Scanner、测试 | 病毒扫描器为外部依赖 |
+| 附件安全存储 | `IMPLEMENTED` | `/attachments` CRUD、随机键、所有权鉴权、病毒扫描、测试 | 病毒扫描器为外部依赖 |
 | WebSocket 票据与推送 | `IMPLEMENTED` | Redis 一次性票据、WS 测试 | Origin 和 Redis 必须可用 |
 | 齿轮/轴承推理 | `IMPLEMENTED` `LOCAL_ONLY` | FastAPI、模型清单、Python 测试 | 依赖本地模型、令牌和白名单 |
 | 诊断批次与多测点 | `IMPLEMENTED` | Java 服务、迁移、测试 | 需完整数据和推理服务 |
 | 诊断文件摄取 | `IMPLEMENTED` | DiagnosisFileIngestionService 及测试 | 默认开关和目录需核对 |
 | MySQL→IoTDB 诊断同步 | `IMPLEMENTED` | outbox、重试、健康指示器、测试 | 两个历史同名迁移易混淆 |
 | IoTDB 主读/MySQL 回退 | `IMPLEMENTED` | DiagnosisResultReadService 及测试 | 需真实 IoTDB 集成验证 |
+| 历史数据查询下载 | `IMPLEMENTED` | 迁移 `V2026072301`、前端页面、`sensor:history:list/export` | 页面当前未跟踪，接口权限已放宽 |
+| 低代码工作台 V2 | `IMPLEMENTED` | 独立数据源、版本化元数据、连接器、资源白名单、迁移和测试 | 生产写默认关闭，需独立 schema 与出站代理 |
 | 油液监测 | `RESERVED` | 前端页、API 封装、菜单迁移 | 无 Java Controller、服务和数据表 |
 | 算法批处理脚本 | `EXPERIMENTAL` `LOCAL_ONLY` | `04*_diagnose_*.py` | 依赖未完整声明，输入数据很大 |
 | 边缘网关模拟器 | `EXPERIMENTAL` | 独立 mock Maven 模块 | 不代表真实采集器 |
-| 一键本地启动 | `BROKEN` `LOCAL_ONLY` | `start-all.ps1` | 根 POM 删除且依赖本机服务 |
-| Windows 离线部署 | `IMPLEMENTED` `BROKEN` | deployment 脚本与说明 | 路径/校验问题，未证明端到端成功 |
+| 一键本地启动 | `IMPLEMENTED` | `start-all.ps1` 可执行并通过就绪检查 | 依赖本机服务、模型和 .venv |
+| Windows 离线部署 | `IMPLEMENTED` | deployment 脚本与说明 | 干净 VM 端到端演练未留机器证据 |
+
 ---
 ## 3. 运行组件与关键数据流
 
-### 3.1 登录、菜单和权限
+### 3.1 登录、会话、CSRF 和权限
 
-流程：
+认证已从 JWT 迁移为 **Redis 不透明会话 Cookie**，流程：
 
-1. Vue 通过 `src/api/login.js` 请求登录；
-2. Spring Security 验证用户，`TokenService` 建立 Redis 不透明会话；
-3. Redis 保存登录会话和验证码等短期状态；
-4. `src/utils/request.js` 自动携带 HttpOnly 会话 Cookie 和 CSRF 请求头；
-5. `src/permission.js` 拉取用户、角色和后端动态菜单；
-6. Vuex 生成路由并调用 `router.addRoutes`；
+1. Vue 通过 `src/api/login.js` 先调用 `GET /csrf` 获取双提交令牌（放入 Axios 默认请求头）；
+2. `POST /login` 使用 Redis 验证码 + 用户名/密码 + CSRF 头；验证通过后 `TokenService` 在 Redis 建立不透明会话；
+3. `RUOYI_SESSION` 以 `HttpOnly; Secure(按配置); SameSite` Cookie 下发（`security.session.cookie-name`，开发环境 `SESSION_COOKIE_SECURE=false`）；
+4. 每次请求 `JwtAuthenticationTokenFilter` 从 Cookie 解析会话；Spring Security CSRF 校验 `X-XSRF-TOKEN`；
+5. `PasswordChangeRequiredFilter` 拦截 `must_change_password` 用户，要求先改密（428 / 前端弹窗跳转 `user/profile?activeTab=resetPwd`）；
+6. `src/permission.js` 拉取用户、角色和后端动态菜单，Vuex 生成路由；
 7. Controller 使用 `@PreAuthorize` 校验权限；
 8. PHM 服务对设备、测点、附件和历史数据再做数据范围检查。
 
-菜单通常来自 MySQL `sys_menu`。
+菜单来自 MySQL `sys_menu`。
 新增业务页面不能只改前端路由；通常还需新增 Flyway 菜单迁移、权限码和角色授权。
 
 ### 3.2 遥测采集
@@ -236,16 +248,16 @@ sequenceDiagram
 
 通道帧使用独立 Redis Stream：
 
-- 主流：`monitoring:vibration-frame:stream`；
+- 主流：`monitoring:vibration-frame:stream`（默认 max-length 100000）；
 - 死信：`monitoring:vibration-frame:dlq`；
 - 幂等：`monitoring:vibration-frame:id:<frameId>`。
 
 主要入口：
 | 入口 | 默认端口 | 状态 | 说明 |
 |---|---:|---|---|
-| `SensorTcpServer` | 8891 | `IMPLEMENTED` | 签名通道帧、HMAC、nonce、防重放 |
+| `SensorTcpServer` | 8891 | `IMPLEMENTED` | 签名通道帧、HMAC、nonce、防重放（dev 默认开，prod 默认关） |
 | `TcpVibrationReceiverService` | 8890 | `LEGACY` | 历史接收器，生产默认关闭 |
-| `CwruMatReceiver` | 8888 | `EXPERIMENTAL` | 开发用 MAT 文件接收 |
+| `CwruMatReceiver` | 8888 | `EXPERIMENTAL` | 开发用 MAT 文件接收（dev 自动 javac + 启动） |
 | `sensor.netty.port` | 9000 | `LEGACY` | 配置残留，没有代码监听 |
 修改帧协议时必须同步：
 
@@ -259,14 +271,14 @@ sequenceDiagram
 ### 3.4 Java 到 Python 推理
 
 1. 用户或批次任务向 Java 发起诊断；
-2. Java 校验 JWT、权限、设备数据范围、输入路径和模型参数；
+2. Java 校验会话、权限、设备数据范围、输入路径和模型参数；
 3. Java 携带内部令牌调用统一 FastAPI `/internal/infer`；
 4. Python 校验令牌、输入白名单、文件和模型 ready 状态；
 5. Python 加载齿轮或轴承模型，返回诊断 JSON；
 6. Java 持久化结果、关联设备/测点/通道/模型，并按策略联动告警；
 7. Java 通过 WebSocket 推送状态和结果。
 
-Python 内部接口：
+Python 内部接口（全部要求 `X-Internal-Token`）：
 
 - `GET /internal/health/live`；
 - `GET /internal/health/ready`；
@@ -278,7 +290,7 @@ Python 内部接口：
 
 模型清单位于 `ruoyi-sensor/inference/models-manifest.json`。
 模型本体位于 `.local-models/`，不进入普通源码提交。
-启动时必须校验 artifact、版本和 SHA-256。
+启动时必须校验 artifact、版本和 SHA-256（`start-all.ps1` 会做）。
 
 ### 3.5 诊断结果同步与读取
 
@@ -295,7 +307,7 @@ MySQL 是诊断业务记录的耐久真相，IoTDB 是时序查询投影。
 
 读取流程：
 
-- 默认 `iotdb-primary`；
+- 默认 `iotdb-primary`（`SENSOR_DIAGNOSIS_READ_MODE`）；
 - 优先读取 IoTDB；
 - 合并 MySQL 中尚未同步的耐久记录；
 - 按记录 ID 去重；
@@ -314,7 +326,8 @@ MySQL 是诊断业务记录的耐久真相，IoTDB 是时序查询投影。
 - `/ws/sensor`；
 - `/ws/monitoring`。
 
-长期 JWT、内部推理令牌和采集器密钥不得进入 WebSocket URL。
+实现是 Spring WebSocket（`WebSocketConfig` 注册 handler + 握手拦截器，非 `@ServerEndpoint`）。
+长期会话 Cookie、内部推理令牌和采集器密钥不得进入 WebSocket URL。
 
 修改消息结构时至少检查：
 
@@ -323,6 +336,16 @@ MySQL 是诊断业务记录的耐久真相，IoTDB 是时序查询投影。
 - 各推送服务；
 - `ruoyi-ui/src/utils/sensor-websocket.js`；
 - Navbar、monitoring store、PHM 告警、监测工作台、油液预留页和多通道页面。
+
+### 3.7 低代码运行时
+
+1. 设计器（`/tool/lowcode/projects`）在独立数据源中创建/校验/发布版本化元数据；
+2. 发布时写入 `lc_*` 表（独立 schema），生产默认 `lowcode.runtime.write-enabled=false`；
+3. 运行时（`/lowcode/runtime/{appCode}/...`）只操作白名单表 `lc_resource_allowlist`；
+4. 连接器出站请求强制经 `LOWCODE_OUTBOUND_PROXY_HOST`，且经过地址/路径校验；
+5. 平台侧动作（如 `iotdb.telemetry.trend`、诊断动作）以 `LowCodeActionHandler` 注册，在 Java 内执行；
+6. 所有 DML 强制主键 + 项目/租户 + 数据范围谓词，影响行数必须为 1；
+7. 变更操作要求幂等键（`Idempotency-Key`），重复请求返回历史结果或 409。
 
 ---
 ## 4. 模块职责与修改入口
@@ -343,8 +366,9 @@ graph TD
     X --> C
 ```
 
-`ruoyi-sensor/mock` 有独立 POM，不在根 reactor 中。
+`ruoyi-sensor/mock` 有独立 POM（`vibration-simulator`），不在根 reactor 中。
 `ruoyi-sensor/inference` 是 Python 目录，不属于 Maven。
+根 reactor 模块：common、system、framework、quartz、generator、sensor、admin。
 
 ### 4.2 后端高价值入口
 
@@ -362,9 +386,11 @@ graph TD
 | TCP 认证 | `CollectorTcpAuthenticator` | 密钥轮换、nonce、协议文档 |
 | 时序存储 | `TimeSeriesStore` | IoTDB/Noop、健康、降级 |
 | 诊断同步 | `DiagnosisIotdbSyncService` | outbox、租约、读合并 |
-| WebSocket | ticket controller、handler | Origin、订阅权限、前端消费者 |
-| 附件 | `PhmAttachmentStorageService` | 病毒扫描、路径、安全下载 |
-`TimeSeriesStore` 是接口，目前只有两个实现：
+| WebSocket | ticket controller、`WebSocketConfig` | Origin、订阅权限、前端消费者 |
+| 附件 | `/attachments`（`AttachmentController`）、`PhmAttachmentStorageService` | 病毒扫描、路径、所有权鉴权 |
+| 会话/CSRF | `TokenService`、`CsrfCookieFilter`、SecurityConfig | Cookie 属性、CSRF 豁免、改密门禁 |
+| 低代码 | `LowCodeProjectService`、`LowCodeRuntimeService`、`LowCodeTablePolicy` | 独立数据源、白名单、出站代理 |
+`TimeSeriesStore` 是接口，目前有两个实现：
 
 - `IoTdbTimeSeriesStore`；
 - `NoopTimeSeriesStore`。
@@ -372,9 +398,9 @@ graph TD
 ### 4.3 前端高价值入口
 
 - 框架入口：`src/main.js`、`src/permission.js`、`src/router/index.js`、`src/store`。
-- 通信与接口：`src/utils/request.js`、`src/utils/sensor-websocket.js`、`src/api`。
+- 通信与接口：`src/utils/request.js`（含 CSRF、403/428 处理）、`src/utils/sensor-websocket.js`、`src/api`。
 - 共享视觉：`src/components/IndustrialMonitoring`、`src/assets/styles/industrial-theme.scss`。
-- 业务页面：`src/views/phm`、`src/views/monitor/diagnosis`、`src/views/monitoring-center`、`src/views/system/vibration`。
+- 业务页面：`src/views/monitoring-center`（工作台/油液/历史数据）、`src/views/monitor/diagnosis`（测点总览+振动诊断）、`src/views/phm`、`src/views/monitoring-data`（智能诊断平台）、`src/views/system/vibration`、`src/views/tool/lowcode`。
 
 新增页面时优先建立 `src/api` 封装，复用请求、下载、权限和主题能力。
 不要在页面硬编码 `localhost`，不要直接调用 Python。
@@ -390,6 +416,7 @@ graph TD
 | Redis key/Stream | 生产者、消费者、重试、DLQ、指标和运维告警 |
 | 菜单权限 | Flyway、父菜单、组件路径、权限码、角色、Controller、按钮 |
 | 模型输出 | Python、Java 归一化、数据库 JSON、页面、导出、测试 |
+| 低代码元数据 | 独立数据源迁移、白名单、校验器、运行时、设计器前端 |
 ---
 ## 5. API、认证、权限与数据范围
 
@@ -397,25 +424,28 @@ graph TD
 
 | API | 状态 | 认证 | 实现证据 |
 |---|---|---|---|
-| `/login`、`/getInfo`、`/getRouters` | `STABLE` | Cookie 会话 + CSRF | RuoYi 登录链路 |
-| `/system/*` | `STABLE` | Cookie 会话 + CSRF + 权限 | system 控制器 |
-| `/monitor/*` | `STABLE` | Cookie 会话 + CSRF + 权限 | 监控和 Quartz 控制器 |
-| `/tool/*` | `STABLE` | Cookie 会话 + CSRF + 权限 | generator/OpenAPI |
-| `/sensor/vibration-data` | `STABLE` | Cookie 会话或采集器专用令牌 | DeviceVibrationDataController |
-| `/system/vibration` | `LEGACY` | 同正式接口 | 兼容映射 |
-| `/sensor/temperature-data` | `STABLE` | JWT 或采集器 | DeviceTemperatureDataController |
+| `/csrf` | `STABLE` | 匿名 | SysLoginController、SecurityConfig |
+| `/login`、`/getInfo`、`/getRouters` | `STABLE` | 会话 Cookie + CSRF | RuoYi 登录链路 |
+| `/system/*` | `STABLE` | 会话 Cookie + CSRF + 权限 | system 控制器 |
+| `/monitor/*` | `STABLE` | 会话 Cookie + CSRF + 权限 | 监控和 Quartz 控制器 |
+| `/tool/*` | `STABLE` | 会话 Cookie + CSRF + 权限 | generator/低代码 |
+| `/attachments` | `IMPLEMENTED` | 会话 + 所有权/管理员 | AttachmentController、附件测试 |
+| `/sensor/vibration-data` | `STABLE` | 会话或采集器专用令牌 | DeviceVibrationDataController |
+| `/system/vibration` | `LEGACY` | 同正式接口 | 兼容映射（带 Deprecation/Sunset 头） |
+| `/sensor/temperature-data` | `STABLE` | 会话或采集器 | DeviceTemperatureDataController |
 | `/system/temperature` | `LEGACY` | 同正式接口 | 兼容映射 |
-| `/sensor/monitoring` | `IMPLEMENTED` | JWT + 设备范围 | IndustrialMonitoringController |
-| `/monitoring`、`/system/monitoring` | `LEGACY` | 同正式接口 | 兼容映射 |
-| `/sensor/diagnosis` | `IMPLEMENTED` | JWT + 权限/范围 | VibrationDiagnosisController |
-| `/sensor/diagnosis/batch` | `IMPLEMENTED` | JWT + 权限/范围 | VibrationBatchController |
-| `/sensor/diagnosis/analysis` | `IMPLEMENTED` | JWT + 权限 | VibrationAnalysisController |
-| `/sensor/diagnosis/models` | `IMPLEMENTED` | JWT + 管理权限 | ModelReleaseController |
-| `/sensor/collectors` | `IMPLEMENTED` | JWT + 管理权限 | CollectorCredentialController |
-| `/sensor/ws-ticket` | `IMPLEMENTED` | JWT | WebSocketTicketController |
-| `/phm/*` | `IMPLEMENTED` | JWT + 权限/范围 | PhmController |
-| `/sensor/oil-monitoring/*` | `RESERVED` | 拟定 JWT | 只有前端 API，无 Java Controller |
+| `/sensor/monitoring`、`/monitoring`、`/system/monitoring` | `IMPLEMENTED` | 会话 + 设备范围 | IndustrialMonitoringController、MonitoringController（后两者为兼容前缀） |
+| `/sensor/diagnosis`、`/sensor/vibration` | `IMPLEMENTED` | 会话 + 权限/范围 | VibrationDiagnosisController |
+| `/sensor/diagnosis/batch` | `IMPLEMENTED` | 会话 + 权限/范围 | VibrationBatchController |
+| `/sensor/diagnosis/analysis` | `IMPLEMENTED` | 会话 + 权限 | VibrationAnalysisController |
+| `/sensor/diagnosis/models` | `IMPLEMENTED` | 会话 + 管理权限 | ModelReleaseController |
+| `/sensor/collectors` | `IMPLEMENTED` | 会话 + 管理权限 | CollectorCredentialController |
+| `/sensor/ws-ticket` | `IMPLEMENTED` | 会话 | WebSocketTicketController |
+| `/phm/*` | `IMPLEMENTED` | 会话 + 权限/范围 | PhmController |
+| `/tool/lowcode/projects`、`/lowcode/runtime/*` | `IMPLEMENTED` | 会话 + 权限 + 白名单 | LowCode 控制器 |
+| `/sensor/oil-monitoring/*` | `RESERVED` | 拟定会话 | 只有前端 API，无 Java Controller |
 | `/internal/*`（Python） | `IMPLEMENTED` `LOCAL_ONLY` | 内部令牌 | inference_service.py |
+| `/internal/actuator/*`（prod） | `IMPLEMENTED` | 本机管理端口 | application-prod.yml |
 新增业务调用优先使用正式 `/sensor/*` 或 `/phm/*` 前缀。
 移除兼容前缀前必须搜索前端、测试、脚本和外部采集客户端。
 
@@ -426,16 +456,18 @@ graph TD
 - 文件下载可以返回 Resource 或直接写响应流；
 - Blob 响应不能强行包装为 JSON；
 - 新增字段应保持向后兼容；
-- 时间、空值、枚举和分页上限必须前后端一致。
+- 时间、空值、枚举和分页上限必须前后端一致；
+- 首次改密场景返回 428 语义（`passwordChangeRequired`）。
 
 ### 5.3 四类凭据
 
 | 凭据 | 调用方向 | 用途 | 禁止事项 |
 |---|---|---|---|
-| 浏览器 JWT | Vue→Java | 用户身份和权限 | 不给采集器或 Python |
+| 浏览器会话 Cookie（`RUOYI_SESSION`） | Vue→Java | 用户身份和权限 | 不给采集器或 Python，不放 JS 可读区 |
+| CSRF 双提交令牌（`XSRF-TOKEN`） | Vue→Java | 防跨站请求伪造 | 不豁免非匿名安全接口 |
 | 采集器凭据/HMAC | Edge→Java | HTTP/TCP 上报 | 不放前端包，不当管理员令牌 |
 | 内部推理令牌 | Java→Python | `/internal/*` | 不暴露浏览器和公网 |
-| WS 一次性票据 | Browser→Java WS | 短时握手 | 不替代 JWT，不重复使用 |
+| WS 一次性票据 | Browser→Java WS | 短时握手 | 不替代会话 Cookie，不重复使用 |
 
 ### 5.4 数据范围
 
@@ -459,8 +491,9 @@ graph TD
 
 | 存储 | 保存内容 | 一致性角色 |
 |---|---|---|
-| MySQL | 权限、PHM 主数据、规则、告警、事件、附件元数据、诊断记录、同步账本 | 事务业务真相 |
-| Redis | 会话、缓存、验证码、票据、去重、Stream、DLQ | 短期状态和异步管道 |
+| MySQL（主库） | 权限、PHM 主数据、规则、告警、事件、附件元数据、诊断记录、同步账本 | 事务业务真相 |
+| MySQL（低代码独立库） | `lc_project`、`lc_version`、`lc_connector`、`lc_resource_allowlist`、运行日志 | 与主库隔离的最小权限账号 |
+| Redis | 会话、缓存、验证码、票据、去重、Stream、DLQ、限流计数 | 短期状态和异步管道 |
 | IoTDB | telemetry_metric、vibration_frame、diagnosis_result | 高容量时序投影 |
 | 附件目录 | 报告、图像、诊断输入 | 文件内容，权限元数据仍在 MySQL |
 | 模型目录 | 齿轮/轴承 `.pth` | 只读模型制品 |
@@ -507,18 +540,47 @@ ruoyi-admin/src/main/java/db/migration/V<版本>__<描述>.java
 6. 新迁移需有针对性测试；
 7. 执行生产迁移前必须备份并验证恢复。
 
+当前迁移版本（2026-08-14 实盘）：
+
+```text
+V2026062301__ProductionHardening
+V2026062302__InferenceRecordReferences
+V2026062303__ModelShadowRun
+V2026062501__FixAlarmRulePrecision
+V2026062502__UnifyInferenceRecordJsonTypes
+V2026062503__AddAlarmDevicePointIndex
+V2026062504__IndustrialChannelDiagnosisBinding
+V2026070101__PhmUnifiedHealthPlatform
+V2026070102__PhmCleanupInteropAndSimulationArtifacts
+V2026070201__InferenceRuntimeChannelAndExportCenter
+V2026070202__PhmDisplayConfigAndRecordCorrection
+V2026071601__AddPhmBrainDynamicMenu
+V2026072101__DiagnosisIotdbSync
+V2026072201__PhmDeviceVisibility
+V2026072301__HistoryDataDownload
+V2026072302__InferenceTaskAndChannelReferences
+V2026072303__MachineBrainHomepage
+V2026072401__OilMonitoringMenu
+V2026073001__DiagnosisIotdbSync
+V2026081301__LowCodeV2Platform
+V2026081302__BrowserSessionAndPasswordGate
+V2026081303__LowCodeResourceBoundary
+V2026081401__NormalizeMenuIcons
+V2026081402__LowCodePermissionBoundary   （未跟踪，工作区新增）
+```
+
 列出实际迁移，不在文档中硬编码数量：
 
 ```powershell
-rg --files ruoyi-admin/src/main/java/db/migration | Sort-Object
+Get-ChildItem ruoyi-admin/src/main/java/db/migration -File | Sort-Object Name | Select-Object Name
 git status --short -- ruoyi-admin/src/main/java/db/migration
 ```
 
-`sql/` 下的历史脚本用于空库安装、溯源或旧环境升级，不替代当前 Flyway 主线。
+`sql/` 下的历史脚本用于空库安装、溯源或旧环境升级，不替代当前 Flyway 主线（详见 `sql/README-MIGRATIONS.md`）。
 
 ### 6.5 附件和模型
 
-附件内容位于受控根目录，元数据和数据范围在 MySQL；上传限制大小、类型和路径，下载重新鉴权，生产可要求外部病毒扫描。
+附件内容位于受控根目录（`SENSOR_ATTACHMENT_ROOT`），元数据和数据范围在 MySQL；上传限制大小、类型和路径，下载重新鉴权；附件对象使用随机存储键并校验所有者，生产可要求外部病毒扫描（`MpCmdRun.exe`）。
 
 模型 manifest 在源码目录，`.pth` 在本地模型目录；artifact、版本、环境变量和 SHA-256 必须一致，不允许静默替换同版本模型或将模型加入普通提交。
 
@@ -530,13 +592,13 @@ git status --short -- ruoyi-admin/src/main/java/db/migration
 | 文件 | 职责 |
 |---|---|
 | `application.yml` | 公共默认值，缺省 profile 为 prod |
-| `application-dev.yml` | 本地推理、IoTDB、采集和开发 Origin |
-| `application-prod.yml` | 环境注入、Flyway、管理端口和生产限制 |
+| `application-dev.yml` | 本地推理、IoTDB、采集和开发 Origin；低代码写默认开 |
+| `application-prod.yml` | 环境注入、Flyway、管理端口、生产限制、低代码连接器代理 |
 | `application-druid.yml` | MySQL/Druid |
-| `ruoyi-ui/.env.development` | 开发 API 前缀 |
-| `ruoyi-ui/.env.production` | 生产 API 前缀 |
-| `ruoyi-ui/.env.staging` | 预发布构建 |
-| `.env.example` | 根环境变量模板 |
+| `ruoyi-ui/.env.development` | 开发 API 前缀（`/dev-api`） |
+| `ruoyi-ui/.env.production` | 生产 API 前缀（`/prod-api`） |
+| `ruoyi-ui/.env.staging` | 预发布构建（`/stage-api`） |
+| `.env.example` | 根环境变量模板（含低代码、采集器、推理等） |
 | `.env` | 本机真实配置，不提交 |
 手工启动 Java 时必须明确 `dev`，否则公共配置默认进入 `prod`。
 
@@ -547,37 +609,38 @@ git status --short -- ruoyi-admin/src/main/java/db/migration
 |---|---|
 | Java 编译目标 | JDK 17 |
 | Spring Boot | 3.4.5 |
-| Spring Security/JWT | Spring Security + JJWT 0.13.0 |
+| Spring Security/CSRF | Spring Security + CookieCsrfTokenRepository + JJWT 0.13.0（会话化改造后 JJWT 仅保留依赖） |
 | ORM | MyBatis starter 3.0.4、MyBatis-Plus 3.5.9 |
 | Druid | 1.2.28 |
 | IoTDB Session | 2.0.8 |
 | Netty | 4.1.118.Final |
-| Vue | 2.6.12 |
-| Vue Router/Vuex | 3.4.9 / 3.6.0 |
+| JTransforms | 3.1 |
+| Vue | 2.7.16 |
+| Vue Router/Vuex | 3.6.5 / 3.6.0 |
 | Element UI | 2.15.14 |
-| ECharts | 5.4.0 |
-| Vue CLI | 4.4.6 |
+| ECharts | 6.1.0 |
+| Vue CLI | 5.0.9 |
+| Axios/Core-js/DOMPurify | 1.18.1 / 3.45.1 / 3.4.13 |
 | FastAPI/Uvicorn | 0.115.12 / 0.34.2 |
 | NumPy/SciPy/PyTorch | 2.2.5 / 1.15.2 / 2.6.0 |
 | pytest | 8.3.5 |
-根 POM 当前删除，因此 Java 声明版本取自 `HEAD:pom.xml`，不是当前磁盘可执行配置。
 
 ### 7.3 Python 依赖分层
 
-`requirements.txt` 声明推理服务所需的 FastAPI/Uvicorn、NumPy/SciPy/PyTorch、multipart、Prometheus 和 WebSocket 支持，以及正式测试使用的 pytest。
+`requirements.txt` 声明推理服务所需的 FastAPI/Uvicorn、NumPy/SciPy/PyTorch、multipart、Prometheus、websockets 和 pytest。
 
 实验/辅助脚本还使用未进入服务清单的 `pandas`、`tqdm`、`requests` 和 `h5py`（部分格式分支）。
 
 不要因为推理服务可启动，就假定所有 `04*_diagnose_*.py` 和 pipeline 脚本都可运行。
 
-### 7.4 本地实际环境
-
-2026-08-13 检查到：
+### 7.4 本地实际环境（2026-08-14 检查）
 
 - 系统 Python：3.11.9；
 - 项目 `.venv` Python：3.14.2；
-- `.venv` 中 NumPy、SciPy、PyTorch 版本与 requirements 声明不一致；
-- `.venv` 还报告过无效 distribution 警告。
+- `.venv` 中 numpy 2.4.6 / scipy 1.17.1 / torch 2.12.0，与 requirements 声明（2.2.5/1.15.2/2.6.0）不一致；
+- `.venv` **未安装 pytest**（`pip list` 无 pytest），Python 测试需先安装；
+- `.venv` 还报告 `Ignoring invalid distribution ~ip` 警告；
+- 本机 JDK 17.0.18（Temurin）、Maven 3.9.15、Node v24.15.0、npm 11.12.1。
 
 执行 Python 任务前重新检查：
 
@@ -585,7 +648,7 @@ git status --short -- ruoyi-admin/src/main/java/db/migration
 python --version
 .\.venv\Scripts\python.exe --version
 .\.venv\Scripts\python.exe -m pip check
-.\.venv\Scripts\python.exe -m pip freeze
+.\.venv\Scripts\python.exe -m pip list
 ```
 
 推荐基线是 Python 3.11 创建的项目虚拟环境。
@@ -597,9 +660,9 @@ python --version
 |---:|---|---|
 | 80 | Vue 开发服务器或生产 Nginx | 用户入口 |
 | 8080 | Spring Boot API | 生产经 Nginx |
-| 8081 | 生产 Actuator | 本机/管理网络 |
+| 8081 | 生产 Actuator（`/internal/actuator`，仅 health/prometheus） | 仅 127.0.0.1 |
 | 3306 | MySQL | 不公开 |
-| 6379 | Redis | 不公开 |
+| 6379 | Redis（Streams 不满足时自动切 6380 便携版） | 不公开 |
 | 5000 | FastAPI | 仅环回和内部令牌 |
 | 6667 | IoTDB DataNode RPC | 内部网络 |
 | 10710 | IoTDB ConfigNode | 内部网络 |
@@ -620,18 +683,18 @@ python --version
 
 | 变量 | 当前真实值 | 使用方 | 用途 | 证据位置 |
 |---|---|---|---|---|
-| `MYSQL_URL` | <code>jdbc:mysql://localhost:3306/ry-yue?useUnicode=true&amp;characterEncoding=utf8&amp;zeroDateTimeBehavior=convertToNull&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=GMT%2B8</code> | Spring prod | JDBC 地址 | `application-prod.yml` |
-| `MYSQL_USERNAME` | <code>root</code> | Spring prod | 数据库用户 | `application-prod.yml` |
-| `MYSQL_PASSWORD` | <code>必须由部署环境注入</code> | Druid/Spring | 数据库密码 | `application-druid.yml` |
-| `REDIS_HOST` | <code>localhost</code> | Spring prod | Redis 主机 | `application-prod.yml` |
-| `REDIS_PORT` | <code>6379</code> | Spring/setup | Redis 端口 | `application-prod.yml`、`setup-env.ps1` |
-| `REDIS_DATABASE` | <code>0</code> | Spring prod | Redis DB | `application-prod.yml` |
-| `REDIS_PASSWORD` | <code></code> | Spring prod | Redis 密码 | `application-prod.yml` |
-| `IOTDB_HOME` | <code>C:\iotdb\apache-iotdb-2.0.8-all-bin</code> | start-all | IoTDB 安装根目录 | `start-all.ps1` |
-| `IOTDB_NODE_URLS` | <code>localhost:6667</code> | Spring prod | IoTDB 节点列表 | `application-prod.yml` |
-| `IOTDB_USERNAME` | <code>root</code> | Spring prod | IoTDB 用户 | `application-prod.yml` |
-| `IOTDB_PASSWORD` | <code>root</code> | Spring | IoTDB 密码 | `application*.yml` |
-| `IOTDB_DIAGNOSIS_TTL_DAYS` | <code>3650</code> | Spring | 诊断投影 TTL | `application.yml` |
+| `MYSQL_URL` | <code>jdbc:mysql://localhost:3306/ry-yue?useUnicode=true&amp;characterEncoding=utf8&amp;zeroDateTimeBehavior=convertToNull&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=GMT%2B8</code> | Spring prod | JDBC 地址 | `.env`、`application-prod.yml` |
+| `MYSQL_USERNAME` | <code>root</code> | Spring prod | 数据库用户 | `.env` |
+| `MYSQL_PASSWORD` | <code>admin123</code> | Druid/Spring | 数据库密码（本地开发弱口令） | `.env` |
+| `REDIS_HOST` | <code>localhost</code> | Spring prod | Redis 主机 | `.env` |
+| `REDIS_PORT` | <code>6379</code> | Spring | Redis 端口 | `.env` |
+| `REDIS_DATABASE` | <code>0</code> | Spring | Redis DB | `.env` |
+| `REDIS_PASSWORD` | <code>（空）</code> | Spring | Redis 密码 | `.env` |
+| `IOTDB_HOME` | <code>C:\iotdb\apache-iotdb-2.0.8-all-bin</code> | start-all | IoTDB 安装根目录 | `.env`、`start-all.ps1` |
+| `IOTDB_NODE_URLS` | <code>localhost:6667</code> | Spring | IoTDB 节点列表 | `.env` |
+| `IOTDB_USERNAME` | <code>root</code> | Spring | IoTDB 用户 | `.env` |
+| `IOTDB_PASSWORD` | <code>root</code> | Spring | IoTDB 密码 | `.env` |
+| `IOTDB_DIAGNOSIS_TTL_DAYS` | <code>3650</code> | Spring | 诊断投影 TTL | `.env`、`application.yml` |
 
 Redis 不仅用于会话和验证码，还承载遥测与通道帧 Streams；运行环境必须支持 `XREADGROUP`（Redis 5+，Windows 推荐 Memurai 4+）。`start-all.ps1` 会在启动后端前执行能力检查，避免服务表面启动但实时采集线程持续报错。
 
@@ -640,35 +703,36 @@ Redis 不仅用于会话和验证码，还承载遥测与通道帧 Streams；运
 | 变量 | 当前真实值 | 使用方 | 用途 | 证据位置 |
 |---|---|---|---|---|
 | `RUOYI_SESSION` | <code>随机不透明值（只存在 Redis/HttpOnly Cookie）</code> | Spring Security | 浏览器会话标识 | `TokenService` |
-| `DRUID_CONSOLE_PASSWORD` | <code>必须由部署环境注入</code> | Druid | 管理控制台密码 | `application-druid.yml` |
-| `CORS_ALLOWED_ORIGINS` | <code>http://localhost:80,http://localhost:9528,http://localhost,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:9528</code> | Spring | HTTP CORS 白名单 | `application.yml`、`application-prod.yml` |
-| `SENSOR_WS_ALLOWED_ORIGINS` | <code>http://localhost:80,http://localhost:9528,http://localhost,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:9528</code> | WebSocket | WS Origin 白名单 | `application*.yml` |
-| `REFERER_ALLOWED_DOMAINS` | <code>phm.example.internal</code> | Spring prod | 防盗链/Referer 白名单 | `application-prod.yml` |
-| `XSS_ENABLED` | <code>false</code> | Spring | XSS 过滤开关 | `application.yml` |
-| `SENSOR_COLLECTOR_MASTER_KEY` | <code>dev-collector-master-key-for-local-dev-use</code> | 采集认证 | 采集器密钥加密主密钥 | `application-dev.yml`、`application-prod.yml` |
+| `DRUID_CONSOLE_PASSWORD` | <code>admin123</code> | Druid | 管理控制台密码（本地弱口令；prod 关闭 stat-view） | `.env` |
+| `CORS_ALLOWED_ORIGINS` | <code>http://localhost:80,http://localhost:9528,http://localhost,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:9528</code> | Spring | HTTP CORS 白名单 | `.env`、`application.yml` |
+| `SENSOR_WS_ALLOWED_ORIGINS` | <code>http://localhost:80,http://localhost:9528,http://localhost,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:9528</code> | WebSocket | WS Origin 白名单 | `.env`、`application*.yml` |
+| `REFERER_ALLOWED_DOMAINS` | <code>phm.example.internal</code> | Spring prod | 防盗链/Referer 白名单 | `.env`、`application-prod.yml` |
+| `XSS_ENABLED` | <code>false</code>（prod 配置覆盖为 true） | Spring | XSS 过滤开关 | `.env`、`application.yml` |
+| `SENSOR_COLLECTOR_MASTER_KEY` | <code>dev-collector-master-key-for-local-dev-use</code> | 采集认证 | 采集器密钥加密主密钥 | `.env`、`application-dev.yml` |
 
 #### 推理和模型
 
 | 变量 | 当前真实值 | 使用方 | 用途 | 证据位置 |
 |---|---|---|---|---|
-| `SENSOR_GEAR_INFER_URL` | <code>http://127.0.0.1:5000/internal/infer</code> | Java | 齿轮推理地址 | `start-all.ps1`、`application.yml` |
-| `SENSOR_BEARING_INFER_URL` | <code>http://127.0.0.1:5000/internal/infer</code> | Java | 轴承推理地址 | `start-all.ps1`、`application.yml` |
-| `SENSOR_INFER_URL` | <code>http://127.0.0.1:5000/internal/infer</code> | Java prod | 统一推理地址 | `application-prod.yml` |
-| `SENSOR_INFERENCE_INTERNAL_TOKEN` | <code>dev-inference-token-not-for-production</code> | Java/Python | 内部接口令牌 | `start-all.ps1`、`application*.yml` |
-| `GEAR_MODEL_VERSION` | <code>1.0.0</code> | Python/start-all | 齿轮模型版本 | `inference_service.py` |
-| `BEARING_MODEL_VERSION` | <code>1.0.0</code> | Python/start-all | 轴承模型版本 | `inference_service.py` |
-| `SENSOR_DIAGNOSIS_AUTO_ALARM_ENABLED` | <code>false</code> | Java | 诊断自动告警开关 | `application.yml` |
+| `SENSOR_GEAR_INFER_URL` | <code>http://127.0.0.1:5000/internal/infer</code> | Java | 齿轮推理地址 | `.env`、`application.yml` |
+| `SENSOR_BEARING_INFER_URL` | <code>http://127.0.0.1:5000/internal/infer</code> | Java | 轴承推理地址 | `.env`、`application.yml` |
+| `SENSOR_INFER_URL` | <code>http://127.0.0.1:5000/internal/infer</code> | Java prod | 统一推理地址 | `.env`、`application-prod.yml` |
+| `SENSOR_INFERENCE_INTERNAL_TOKEN` | <code>dev-inference-token-not-for-production</code> | Java/Python | 内部接口令牌 | `.env`、`start-all.ps1` |
+| `GEAR_MODEL_VERSION` | <code>1.0.0</code> | Python/start-all | 齿轮模型版本（manifest 内为 unregistered） | `.env`、`models-manifest.json` |
+| `BEARING_MODEL_VERSION` | <code>1.0.0</code> | Python/start-all | 轴承模型版本（manifest 内为 unregistered） | `.env`、`models-manifest.json` |
+| `SENSOR_DIAGNOSIS_AUTO_ALARM_ENABLED` | <code>false</code> | Java | 诊断自动告警开关 | `.env`、`application.yml` |
 
 #### 文件、日志与扫描
 
 | 变量 | 当前真实值 | 使用方 | 用途 | 证据位置 |
 |---|---|---|---|---|
-| `SENSOR_ATTACHMENT_ROOT` | <code>C:/ruoyi-secure/attachments</code> | Java/Python | 附件与允许输入根目录 | `start-all.ps1`、`application*.yml` |
-| `SENSOR_ATTACHMENT_SCAN_COMMAND` | <code>C:/Program Files/Windows Defender/MpCmdRun.exe</code> | Java | 病毒扫描命令 | `application*.yml` |
-| `SENSOR_ATTACHMENT_SCAN_ARGUMENTS` | <code>-Scan,-ScanType,3,-File,{file},-DisableRemediation</code> | Java | 病毒扫描参数 | `application*.yml` |
-| `RUOYI_PROFILE` | <code>C:/ruoyi/data</code> | Java/start-all | 上传与运行数据根目录 | `start-all.ps1`、`application*.yml` |
-| `LOG_PATH` | <code>C:/ruoyi/logs</code> | Java | 日志目录 | `application-prod.yml`、`logback.xml` |
-根 `.env` 中的 `SENSOR_DIAGNOSIS_IOTDB_WRITE_ENABLED` 未找到当前代码、配置或脚本引用，因此没有复制到本节。
+| `SENSOR_ATTACHMENT_ROOT` | <code>C:/ruoyi-secure/attachments</code> | Java/Python | 附件与允许输入根目录 | `.env`、`application*.yml` |
+| `SENSOR_ATTACHMENT_SCAN_COMMAND` | <code>C:/Program Files/Windows Defender/MpCmdRun.exe</code> | Java | 病毒扫描命令 | `.env`、`application*.yml` |
+| `SENSOR_ATTACHMENT_SCAN_ARGUMENTS` | <code>-Scan,-ScanType,3,-File,{file},-DisableRemediation</code> | Java | 病毒扫描参数 | `.env`、`application*.yml` |
+| `RUOYI_PROFILE` | <code>C:/ruoyi/data</code> | Java | 上传与运行数据根目录 | `.env`、`application*.yml` |
+| `LOG_PATH` | <code>C:/ruoyi/logs</code> | Java | 日志目录 | `.env`、`application-prod.yml` |
+
+`.env` 中的 `JWT_SECRET` 和 `SENSOR_DIAGNOSIS_IOTDB_WRITE_ENABLED` 未找到当前代码、配置或脚本引用，因此没有复制到本节。
 不得仅因为变量存在于 `.env` 就推断功能会生效。
 
 ---
@@ -676,28 +740,34 @@ Redis 不仅用于会话和验证码，还承载遥测与通道帧 Streams；运
 
 ### 8.1 当前开发入口
 
-当前仅保留根 `start-all.ps1`。
-
-它设计为：
+根 `start-all.ps1` 是唯一启动入口，设计为：
 
 1. 导入 `.env`；
-2. 检查 Maven、Java、npm、`.venv`、IoTDB 和模型；
-3. 检查 MySQL、Redis；
-4. 校验模型 manifest 与 SHA-256；
-5. 清理确认属于项目的旧端口；
-6. 默认执行根 Maven 多模块构建；
-7. 启动 IoTDB、Python、Java 和 Vue；
-8. 执行就绪检查；
-9. 写本地日志和 PID。
+2. 拒绝从 OneDrive 路径启动；
+3. 检查 Maven、Java、npm、`.venv`、IoTDB 和模型；
+4. 检查 MySQL、Redis 服务并验证 Redis Streams（不支持时自动切 6380 便携版）；
+5. 校验模型 manifest 与 SHA-256；
+6. 清理确认属于项目的旧端口（5001/9528 及当前服务端口）；
+7. 默认执行根 Maven 多模块构建（`-SkipBuild` 可跳过）；
+8. 启动 IoTDB ConfigNode/DataNode、Python 推理服务、Spring Boot（dev）和 Vue；
+9. 执行各服务就绪检查；
+10. 写本地日志和 PID 状态文件。
 
-当前入口已恢复为可执行状态：根 `pom.xml` 可完成多模块构建。
-`-SkipBuild` 仅适用于已有可用 `ruoyi-admin.jar` 的快速重启；脚本仍会校验 Redis Streams、模型完整性和各服务就绪状态。
+常用参数：
 
-历史 `run-all.ps1` 和 `run-admin.ps1` 已删除，不应继续推荐。
+```powershell
+.\start-all.ps1                 # 完整构建并启动
+.\start-all.ps1 -SkipBuild      # 复用已有 ruoyi-admin.jar
+.\start-all.ps1 -ForcePortCleanup   # 允许终止非项目进程占用的端口
+.\start-all.ps1 -FrontendPort 8088  # 修改前端端口
+```
+
+启动完成后访问 `http://localhost:80`，测点总览为 `/analysis-toolkit/bearing-diagnosis`。
+`bin/run.bat` 可单独以 dev profile 启动后端 JAR（需要先构建）。
 
 ### 8.2 分组件命令
 
-以下 Java 命令只有在根 POM 恢复或提供等价 reactor 后才成立：
+Java 构建与启动：
 
 ```powershell
 mvn -DskipTests install
@@ -718,66 +788,46 @@ Python 服务必须注入内部令牌、模型路径/SHA 和输入白名单后�
 .\.venv\Scripts\python.exe ruoyi-sensor\inference\inference_service.py
 ```
 
-不要直接使用全局 Python 包环境。
+不要直接使用全局 Python 包环境；当前 `.venv` 缺少 pytest，运行 Python 测试前先安装。
 
 ### 8.3 CI
 
-`.github/workflows/production-ci.yml` 当前声明：
+`.github/workflows/production-ci.yml` 声明三个 job：
 
-1. Windows runner；
-2. Temurin Java 25 运行 Maven，代码目标仍是 Java 17；
-3. Node 20；
-4. Python 3.11；
-5. 主 Maven `clean test package`；
-6. 独立构建 `ruoyi-sensor/mock`；
-7. 前端 audit、build、bundle budget 和 Playwright；
-8. Python 安装、compileall 和 pytest；
-9. gitleaks；
-10. 上传构建产物。
+1. **build**（windows-latest，Java 17 Temurin、Node 20、Python 3.11）：
+   - 主 Maven `clean test package`；
+   - 独立构建 `ruoyi-sensor/mock`；
+   - 前端 `npm ci`、`npm audit`（含 `--omit=dev`）、`build:prod`、`check:bundle`、Playwright 全矩阵（chromium/firefox/webkit/edge）；
+   - Python 安装 + `pip-audit` + compileall + pytest；
+   - gitleaks 秘密扫描；
+   - 上传构建产物。
+2. **java-security-gates**（ubuntu）：`-Psecurity-gates` 执行 JaCoCo、SpotBugs、OWASP Dependency-Check（需要 `NVD_API_KEY`）。
+3. **testcontainers**（ubuntu）：要求 Docker；执行 `LowCodeV2MigrationTest`、`ProductionHardeningMigrationTest`、`RedisFrameStreamIntegrationTest`，**发现 skipped 直接失败**。
 
-当前根 POM 删除会阻断 CI 的主 Maven 步骤。
-
-Playwright 默认可靠覆盖：
-
-- 登录页渲染；
-- 匿名访问受保护路由时重定向；
-- 固定工业主题；
-- 移动端登录布局。
-
-需要 `PHM_E2E_USER` 和 `PHM_E2E_PASSWORD` 的 PHM、油液路径会条件跳过。
-因此 CI 显示 Playwright 通过，不代表认证业务闭环实际运行。
+Playwright 用例覆盖登录页渲染、验证码失败不弹 webpack 遮罩、业务错误提示、匿名访问重定向、首次改密跳转、固定工业主题等。
+需要 `PHM_E2E_USER`/`PHM_E2E_PASSWORD` 的账号相关用例在本机无凭据时跳过；CI 未注入变量时同样跳过。
 
 ### 8.4 Windows 离线部署
 
 `deployment/` 提供：
 
-- 离线包构建；
-- CMS 签名；
-- WinSW 服务 XML；
-- Nginx 配置；
-- Prometheus/告警配置；
-- 发布目录切换；
-- 备份恢复说明。
+- 离线包构建 `build-offline-package.ps1`、验证 `verify-offline-package.ps1`；
+- 运行时准备 `prepare-offline-runtime.ps1`、服务安装 `install-services.ps1`、发布切换 `switch-release.ps1`；
+- WinSW 服务 XML、Nginx 配置、Prometheus/告警配置；
+- 备份恢复说明 `BACKUP-RESTORE.md`、TCP 协议 `TCP-COLLECTOR-PROTOCOL.md`、低代码运维 `LOWCODE-OPERATIONS.md`（未跟踪）。
 
-当前只能视为部署设计与部分实现，不能宣称端到端交付已经验证。
-
-已确认问题：
-
-1. `build-offline-package.ps1` 复制不存在的 `ruoyi-admin/src/main/resources/db/migration`；真实迁移在 Java 源码路径。
-2. `verify-offline-package.ps1` 只检查 CMS 签名，没有解压验证 `SHA256SUMS.json`。
-3. 验证脚本没有检查离线包必需目录、文件和模型清单。
-4. 打包输出布局与 WinSW 中 `%BASE%` 相对路径需要在干净机器验证。
-5. `switch-release.ps1` 从脚本目录推导根目录，与 README 中的安装根布局需要统一。
-6. 仓库没有记录成功安装、升级、回滚和恢复演练的机器可验证结果。
+安全审计后已修复：打包脚本改用编译产物中的 Flyway 迁移目录；验证脚本增加 zip-slip/重复路径/数量/体积/CMS/逐文件 SHA-256/必需文件检查。
+仍待完成：干净 Windows VM 上的安装、升级、回滚、恢复演练结果未在仓库留档。
 
 生产要求仍然成立：
 
 - Nginx 是唯一面向用户的 HTTPS 入口；
 - Java 和 Python 只绑定内部地址；
 - MySQL、Redis、IoTDB 和 TCP 端口受防火墙限制；
-- Java 不在生产拉起 Python 子进程；
-- Actuator 使用独立管理端口；
-- 真实秘密由受控环境注入，而不是来自本文件。
+- Java 不在生产拉起 Python 子进程（`sensor.startup.*.enabled` 生产为 false）；
+- Actuator 使用独立管理端口（127.0.0.1:8081，仅 health/prometheus）；
+- 真实秘密由受控环境注入，而不是来自本文件；
+- 低代码生产使用独立 `LOWCODE_DB_*` 账号与出站代理。
 
 ---
 ## 9. 测试与验收矩阵
@@ -786,22 +836,20 @@ Playwright 默认可靠覆盖：
 
 | 子系统 | 命令/入口 | 前置条件 | 写数据 | 可能跳过 | 成功标准 | 当前证据 |
 |---|---|---|---|---|---|---|
-| Java 全量 | `mvn clean test package` | 根 POM、JDK、Maven | 构建产物 | Surefire 条件测试 | 全部测试和打包成功 | 当前被根 POM 删除阻断 |
-| sensor 定向 | `mvn -pl ruoyi-sensor -am test` | 根 reactor | target | 集成测试可能条件化 | 模块测试通过 | 测试源码存在 |
+| Java 全量 | `mvn clean test package` | 根 POM、JDK 17、Maven | 构建产物 | 集成测试可能条件化 | 全部测试和打包成功 | 安全追踪记录 73 通过/5 条件跳过 |
+| sensor 定向 | `mvn -pl ruoyi-sensor -am test` | 根 reactor | target | 集成测试可能条件化 | 模块测试通过 | 27 个测试类存在 |
 | mock | 在 `ruoyi-sensor/mock` 执行 Maven | 独立 POM | target | 取决于测试 | jar 和测试成功 | CI 声明执行 |
+| 迁移/Redis 容器 | Testcontainers（CI job） | Docker | 容器 | CI 禁止跳过 | 迁移与 Stream 集成测试通过 | CI 声明执行 |
 | 前端构建 | `npm run build:prod` | Node/npm/node_modules | dist | 否 | exit 0 | CI 声明执行 |
-| Bundle | `npm run check:bundle` | 已生成 dist | 否 | 否 | 入口/异步包均不超预算 | 脚本存在 |
-| Playwright 基础 | `npm run test:e2e` | Chromium、前端 | trace/test-results | 业务用例可跳过 | 基础用例通过 | 测试存在 |
-| PHM E2E | 同上 + 账号变量 | Java、数据库、账号 | 可能 | 无变量必跳过 | 登录并进入诊断页 | 条件测试存在 |
-| Python 正式测试 | `.venv ... pytest inference/tests` | 匹配依赖 | pytest cache | 测试内可能 mock | tests 全绿 | 测试源码存在 |
+| Bundle | `npm run check:bundle` | 已生成 dist | 否 | 否 | 入口/异步包均不超预算 | 预算通过（entry ~1.0 MiB） |
+| Playwright 基础 | `npm run test:e2e` | Chromium/Edge，前端 | trace/test-results | 账号用例可跳过 | 基础用例通过 | 本机 10 通过/4 跳过 |
+| Python 正式测试 | `.venv ... pytest inference/tests` | 匹配依赖 + pytest 已安装 | pytest cache | 测试内可能 mock | tests 全绿 | 安全相关 5/5；pytest 未装在当前 .venv |
 | Python ready | `/internal/health/ready` | 模型、SHA、令牌 | 日志 | 否 | 2xx 且模型 ready | 需本机运行验证 |
-| PHM 冒烟 | `setup/phm-smoke-test.ps1` | Java、Token、业务数据 | 可写 | 参数控制 | 核心接口符合断言 | 脚本存在 |
-| 八通道冒烟 | `setup/eight-channel-smoke-test.ps1` | Java、Token、采集链路 | 可写 | 否 | 帧到展示链路成功 | 脚本存在 |
 | 离线部署 | 干净 Windows VM | 全部 runtime、证书、WinSW | 系统服务/目录 | 否 | 安装、升级、回滚、恢复均通过 | 尚无完整证据 |
 
 ### 9.2 定向验证规则
 
-Java 改动优先选择与采集认证、Stream、诊断、IoTDB、PHM 数据范围、附件、WebSocket、Controller 安全或 Flyway 直接相关的最小测试；运行 `IntegrationTest` 前确认 Redis、IoTDB 或容器条件。
+Java 改动优先选择与采集认证、Stream、诊断、IoTDB、PHM 数据范围、附件、WebSocket、会话/CSRF、低代码策略或 Flyway 直接相关的最小测试；运行集成测试前确认 Redis、IoTDB 或容器条件。
 
 前端改动执行：
 
@@ -818,11 +866,11 @@ npm run test:e2e
 Python 改动执行：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -m pip install -r ruoyi-sensor\inference\requirements.txt
 .\.venv\Scripts\python.exe -m pytest ruoyi-sensor\inference\tests
 ```
 
-模型或接口变更还需覆盖错误令牌、live/ready 差异、错误模型哈希、越界输入、两类模型输出兼容、Java 超时/错误映射和失败任务状态。
+模型或接口变更还需覆盖错误令牌、live/ready 差异、错误模型哈希、越界输入、恶意 object-array NPY（`allow_pickle=False`）、两类模型输出兼容、Java 超时/错误映射和失败任务状态。
 
 冒烟脚本可能写业务数据，运行前阅读参数和清理逻辑；迁移不在生产库试验。离线包必须在无网络干净 VM 上验证安装、升级、回滚和恢复，并记录 RPO、RTO、缺失 eventId 与人工步骤。
 
@@ -833,63 +881,69 @@ Python 改动执行：
 
 | 阶段 | 必做事项 |
 |---|---|
-| 修改前 | 读目标实现；检查 Git；用 `rg` 找同字段、接口、权限、表及消费者；确认成熟度、认证、数据真相、设备范围和迁移版本 |
+| 修改前 | 读目标实现；检查 Git（§0.1）；用搜索工具找同字段、接口、权限、表及消费者；确认成熟度、认证、数据真相、设备范围和迁移版本 |
 | 分层 | Controller 处理请求与权限，Service 处理业务不变量；复杂 SQL/算法不复制到 Controller；实体不直接充当长期外部契约 |
 | 数据 | MySQL 变化新增迁移；Redis 不作耐久真相；异步链路保留幂等、有限重试、DLQ 和指标 |
 | 前端 | API 放在 `src/api`；不硬编码地址或秘密；前端权限不能替代服务端权限；浏览器不直连 Python |
-| 模型 | artifact、版本和 SHA 必须一致，不静默替换；输入始终受白名单限制 |
+| 认证 | 会话 Cookie + CSRF 是默认；不要绕过 CSRF 豁免非匿名接口；不要把 Cookie 改为 JS 可读 |
+| 模型 | artifact、版本和 SHA 必须一致，不静默替换；输入始终受白名单限制；NPY 必须 `allow_pickle=False` |
+| 低代码 | 只操作白名单表；DML 必须带数据范围谓词；连接器必须经代理和地址校验 |
 | 资产 | 不覆盖用户改动，不擅自恢复删除文件，不提交日志、模型、样本、依赖、构建产物或秘密 |
 | 验证 | 运行最小相关测试，检查 skipped 和外部条件；执行 `git diff --check` 与 `git status --short`；同步必要文档 |
 
 ### 10.2 已确认陷阱
 
 1. **9000 是幽灵端口**：有配置，无监听实现。
-2. **CI Java 25 不等于代码目标 Java 25**：编译目标仍是 17。
+2. **CI Java 17 与代码目标一致**：均 17，不要误读为 25。
 3. **两个 DiagnosisIotdbSync 迁移不是同一设计**：以版本号和源码判断。
-4. **模型默认路径不可依赖**：真实模型由本地目录和环境变量注入。
+4. **模型默认路径不可依赖**：真实模型由本地目录和环境变量注入；manifest 内版本是 `unregistered`。
 5. **manifest 不在模型目录**：manifest 属于源码，artifact 属于本地资产。
 6. **`SENSOR_TCP_ENABLED` 命名容易误导**：生产配置需确认它绑定的是 8891 channel-tcp 还是历史 8890。
-7. **历史迁移说明路径错误**：生产 Java 迁移不在 resources。
+7. **历史迁移说明路径错误**：生产 Java 迁移不在 `resources`，在 `ruoyi-admin/src/main/java/db/migration`。
 8. **前端 `api/system/vibration.js` 是兼容 shim**：新诊断调用优先正式 API。
-9. **根 README 的旧 Python 端口和公开接口描述不可信**：以 `/internal/*` 实现为准。
+9. **README 需与现状同步**：认证已从 JWT 变为会话 Cookie，Python 端口 5000/`/internal/*`。
 10. **pyc 不是源码**：不要从孤儿字节码“恢复”已删除脚本。
 11. **mock 不在主 reactor**：协议改动后要独立构建。
 12. **默认 profile 是 prod**：手工开发启动必须显式 dev。
 13. **油液监测只是预留**：页面和 API 文件不代表 Java 服务存在。
 14. **E2E 可能通过但业务用例全部跳过**：必须检查 skip 统计和账号变量。
-15. **本文含真实秘密**：不得提交或复制；后续 AI 回复不得回显 §7.6。
+15. **`.env` 有未引用变量**：`JWT_SECRET`、`SENSOR_DIAGNOSIS_IOTDB_WRITE_ENABLED` 无代码引用，不要推断功能生效。
+16. **`.venv` 未装 pytest 且版本漂移**：运行测试前先安装；不要把本机版本写成声明版本。
+17. **本文含真实秘密**：不得提交或复制；后续 AI 回复不得回显 §7.6。
 
 ### 10.3 当前已知问题
 
 | 问题 | 影响 | 证据 | 建议处理方向 |
 |---|---|---|---|
-| 根 POM 删除 | Java 构建、CI、start-all、离线包阻断 | Git 状态、脚本 Maven 调用 | 单独确认删除意图后恢复或重构 reactor |
-| 辅助启动脚本删除 | 旧操作说明失效 | Git 状态 | 统一保留 start-all 或提供新入口 |
+| 本文被 Git 跟踪且含秘密 | 误暂存会泄露全部本地凭据 | `git ls-files` | `git rm --cached` 后仅保留本地副本 |
 | 油液后端缺失 | 预留页无法加载真实数据 | 前端提示、无 Controller/表 | 明确产品需求后设计数据模型和 API |
-| `.venv` 版本漂移 | 推理结果和兼容性不可复现 | Python/pip 实际检查 | 用 Python 3.11 按锁定依赖重建 |
-| 离线迁移路径错误 | 打包在 Copy-Item 阶段失败 | build-offline-package.ps1 | 改为真实 Java 迁移路径或取消冗余复制 |
-| 包验证不完整 | 被篡改的包内文件可能未被逐项发现 | verify 脚本 | 校验签名后解压并核验 manifest/结构 |
-| 部署相对路径未统一 | WinSW、release switch 可能找错目录 | XML、脚本、README | 选定安装根并做干净 VM 演练 |
-| README 推理说明过时 | 人工启动错误端口/接口 | README 与源码冲突 | 后续同步 README |
-| `.env` 有未引用开关 | 容易误判 IoTDB 写入开关已生效 | 引用搜索为零 | 删除遗留变量或实现并记录 |
-| 本文已跟踪且含秘密 | 误暂存会泄露全部本地凭据 | `git ls-files` | 保持仅本地修改，提交前强制检查 |
+| `.venv` 版本漂移且缺 pytest | Python 测试无法直接运行，推理结果不可复现 | `pip list` | 用 Python 3.11 按锁定依赖重建 |
+| 历史数据下载页未跟踪 | 新页面可能在提交中遗漏 | `git status` | 纳入功能提交并补齐 E2E |
+| 低代码权限迁移未提交 | 设计器/运行时权限边界依赖未入库的迁移 | `git status` | 完成验证后提交并同步授权文档 |
+| 离线部署无干净 VM 演练记录 | 安装/升级/回滚/恢复未端到端证明 | 仓库无演练结果 | 在干净 Windows VM 演练并留档 |
+| 生产秘密轮换未执行 | 默认/开发秘密仍可能进入生产 | 安全审计报告 | 按 `SECURITY_REMEDIATION_TRACKER.md` 发布前清单轮换 |
+| `JWT_SECRET`、`IOTDB_WRITE_ENABLED` 遗留 | 容易误判功能已生效 | 引用搜索为零 | 删除遗留变量或实现并记录 |
 
 ### 10.4 排障索引
 
 | 现象 | 首查 |
 |---|---|
-| 登录/验证码失败 | Redis、MySQL、JWT、验证码配置、Java 日志 |
+| 登录/验证码失败 | Redis、MySQL、CSRF 令牌、验证码配置、Java 日志 |
+| 登录后 401/会话丢失 | `RUOYI_SESSION` Cookie 属性（Secure/HttpOnly/SameSite）、Redis、`SESSION_COOKIE_SECURE` |
+| POST 被 403 | CSRF 双提交令牌（`/csrf` → `X-XSRF-TOKEN`）、豁免列表 |
+| 首次登录被要求改密 | `must_change_password`、`INITIAL_ADMIN_PASSWORD`、428 门禁 |
 | 前端 502 | Java 端口、代理前缀、base URL |
 | 菜单不出现 | Flyway、sys_menu、角色、组件路径、权限码 |
-| 接口 403 | JWT、PreAuthorize、按钮权限、设备范围 |
+| 接口 403 | 会话、PreAuthorize、按钮权限、设备范围、低代码角色授权 |
 | 实时数据不更新 | 采集认证、Stream、DLQ、消费者、WS 票据/Origin |
 | IoTDB 查询 503 | store-type、连接、Table 模型、健康状态 |
 | 诊断失败 | Python ready、令牌、模型哈希、输入白名单、超时 |
 | 诊断历史缺失 | MySQL、同步账本、IoTDB、read-mode |
-| 附件上传失败 | 根目录权限、大小、扫描器、设备范围 |
+| 附件上传失败 | 根目录权限、大小、扫描器、所有权 |
+| 低代码无法发布/运行 | 独立 schema、`LOWCODE_DB_*`、`lc_resource_allowlist`、`tool:lowcode:*` 权限、幂等键 |
 | 迁移报错 | 版本撞号、两个同名迁移、历史数据约束 |
 | 8891 未监听 | channel-tcp 开关、绑定地址、端口占用 |
-| Maven 找不到项目 | 根 pom.xml 当前删除 |
+| Python 测试找不到 pytest | `.venv` 未安装 pytest |
 | 油液接口 404 | 后端尚未实现，页面为 RESERVED |
 
 ### 10.5 最终原则

@@ -30,52 +30,52 @@ public class LowCodeProjectController extends BaseController
     public LowCodeProjectController(LowCodeProjectService projects, LowCodeToolingService tooling, LowCodeTablePolicy tablePolicy)
     { this.projects = projects; this.tooling = tooling; this.tablePolicy = tablePolicy; }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @GetMapping public AjaxResult list() { return success(projects.list()); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @GetMapping("/{id}") public AjaxResult get(@PathVariable Long id) { return success(projects.get(id)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @Log(title = "低代码项目", businessType = BusinessType.INSERT)
     @PostMapping public AjaxResult create(@RequestBody Map<String, Object> request) { return success(projects.create(request)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @Log(title = "低代码草稿", businessType = BusinessType.UPDATE)
     @PutMapping("/{id}/draft")
     public AjaxResult save(@PathVariable Long id, @RequestBody Object metadata) { return success(projects.saveDraft(id, metadata)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:validate')")
     @PostMapping("/{id}/validate") public AjaxResult validate(@PathVariable Long id) { return success(projects.validate(id)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @GetMapping("/{id}/diff") public AjaxResult diff(@PathVariable Long id) { return success(projects.diff(id)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:publish')")
     @Log(title = "低代码发布", businessType = BusinessType.UPDATE)
     @PostMapping("/{id}/publish") public AjaxResult publish(@PathVariable Long id) { return success(projects.publish(id)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:rollback')")
     @Log(title = "低代码回滚", businessType = BusinessType.UPDATE)
     @PostMapping("/{id}/rollback/{versionId}")
     public AjaxResult rollback(@PathVariable Long id, @PathVariable Long versionId) { return success(projects.rollback(id, versionId)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @GetMapping("/{id}/database/inspect") public AjaxResult inspect(@PathVariable Long id)
     { projects.get(id); return success(tooling.inspect()); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @PostMapping("/{id}/database/ddl-preview") public AjaxResult ddl(@PathVariable Long id, @RequestBody Object metadata)
     { projects.get(id); return success(tooling.ddlPreview(metadata)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @PostMapping("/migrate/{tableId}") public AjaxResult migrate(@PathVariable Long tableId)
     { return success(tooling.migrateLegacy(tableId)); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:connector')")
     @GetMapping("/resource-allowlist") public AjaxResult resources() { return success(tablePolicy.list()); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:connector')")
     @PostMapping("/resource-allowlist") public AjaxResult allowResource(@RequestBody Map<String, Object> input)
     {
         tablePolicy.register(String.valueOf(input.get("tableName")),
@@ -83,11 +83,11 @@ public class LowCodeProjectController extends BaseController
         return success();
     }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:connector')")
     @PostMapping("/resource-allowlist/{id}/disable") public AjaxResult disableResource(@PathVariable Long id)
     { tablePolicy.disable(id); return success(); }
 
-    @PreAuthorize("@ss.hasRole('admin')")
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @GetMapping("/{id}/export")
     public void export(@PathVariable Long id, HttpServletResponse response) throws IOException
     {
