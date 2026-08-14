@@ -24,6 +24,11 @@ const requiresPasswordRedirect = (to) => {
   return store.getters.passwordChangeRequired && to.name !== 'Profile'
 }
 
+const isPasswordChangeError = (error) => {
+  return error && (error.message === 'PASSWORD_CHANGE_REQUIRED'
+    || (error.response && error.response.status === 428))
+}
+
 router.beforeEach((to, from, next) => {
   NProgress.start()
   if (store.getters.authenticated || store.getters.roles.length > 0) {
@@ -55,6 +60,15 @@ router.beforeEach((to, from, next) => {
             // 根据roles权限生成可访问的路由表
             router.addRoutes(accessRoutes) // 动态添加可访问路由表
             next(requiresPasswordRedirect(to) ? passwordChangeRoute() : { ...to, replace: true })
+          }).catch(err => {
+            if (isPasswordChangeError(err)) {
+              next(passwordChangeRoute())
+              return
+            }
+            store.dispatch('LogOut').then(() => {
+              Message.error(err)
+              next({ path: '/' })
+            })
           })
         }).catch(err => {
             store.dispatch('LogOut').then(() => {
@@ -79,6 +93,13 @@ router.beforeEach((to, from, next) => {
       store.dispatch('GenerateRoutes').then(accessRoutes => {
         router.addRoutes(accessRoutes)
         next(requiresPasswordRedirect(to) ? passwordChangeRoute() : { ...to, replace: true })
+      }).catch(err => {
+        if (isPasswordChangeError(err)) {
+          next(passwordChangeRoute())
+          return
+        }
+        isRelogin.show = false
+        next(`/login?redirect=${encodeURIComponent(to.fullPath)}`)
       })
     }).catch(() => {
       isRelogin.show = false

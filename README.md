@@ -189,18 +189,19 @@ python inference_service.py
 ## 本地启动方式
 
 ### 方式一：使用 PowerShell 启动脚本
-根目录下提供了 `run-admin.ps1`，其执行逻辑为：
-1. 先构建全部模块
-2. 再进入 `ruoyi-admin` 启动后端服务
+根目录下提供了 `start-all.ps1`，会按依赖顺序启动 MySQL、Redis、IoTDB、Python 推理服务、Spring Boot 和 Vue。
+Redis 必须是支持 Streams 的 Redis 5+；Windows 可使用 Memurai 4+。
+如果 6379 已被旧版 Redis 3.x 占用，且项目目录存在
+`.local-data/redis8/**/redis-server.exe`，`start-all.ps1` 会自动启动兼容运行时并切换到 6380。
 
 可直接运行：
 
 ```powershell
-.\run-admin.ps1
+.\start-all.ps1
 ```
 
 ### 方式二：Maven 手动启动
-先在项目根目录构建：
+如需手动构建 Java 模块：
 
 ```bash
 mvn clean install -DskipTests
@@ -212,6 +213,9 @@ mvn clean install -DskipTests
 cd ruoyi-admin
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
+
+启动后访问 `http://localhost:80`。如果只想使用已有 JAR，可执行
+`.\start-all.ps1 -SkipBuild`；脚本会先检查 Redis Streams 和模型完整性。
 
 ## 项目亮点
 

@@ -633,6 +633,8 @@ python --version
 | `IOTDB_PASSWORD` | <code>root</code> | Spring | IoTDB 密码 | `application*.yml` |
 | `IOTDB_DIAGNOSIS_TTL_DAYS` | <code>3650</code> | Spring | 诊断投影 TTL | `application.yml` |
 
+Redis 不仅用于会话和验证码，还承载遥测与通道帧 Streams；运行环境必须支持 `XREADGROUP`（Redis 5+，Windows 推荐 Memurai 4+）。`start-all.ps1` 会在启动后端前执行能力检查，避免服务表面启动但实时采集线程持续报错。
+
 #### 安全、Origin 与采集器
 
 | 变量 | 当前真实值 | 使用方 | 用途 | 证据位置 |
@@ -688,8 +690,8 @@ python --version
 8. 执行就绪检查；
 9. 写本地日志和 PID。
 
-当前状态为 `BROKEN`：根 `pom.xml` 已删除，默认 Maven 构建无法按设计完成。
-`-SkipBuild` 只能在已有可用 `ruoyi-admin.jar` 时绕过构建，不是长期修复。
+当前入口已恢复为可执行状态：根 `pom.xml` 可完成多模块构建。
+`-SkipBuild` 仅适用于已有可用 `ruoyi-admin.jar` 的快速重启；脚本仍会校验 Redis Streams、模型完整性和各服务就绪状态。
 
 历史 `run-all.ps1` 和 `run-admin.ps1` 已删除，不应继续推荐。
 

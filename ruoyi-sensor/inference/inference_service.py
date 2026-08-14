@@ -394,6 +394,43 @@ def _get_cached_or_compute(
 # =============================================================================
 # 模型加载
 # =============================================================================
+_TORCH_SAFE_GLOBALS_REGISTERED = False
+
+
+def _register_torch_safe_globals() -> None:
+    """Allow trusted NumPy metadata in ``weights_only`` checkpoints.
+
+    PyTorch 2.6+ defaults ``torch.load`` to ``weights_only=True``.  The
+    project's checkpoints contain NumPy dtype metadata, so the restricted
+    unpickler must be explicitly told about the small set of NumPy types we
+    trust.  Keep this registration in the tracked service module (rather than
+    relying on a generated/ignored diagnostic script) so every deployment has
+    the same behavior.
+    """
+    global _TORCH_SAFE_GLOBALS_REGISTERED
+    if _TORCH_SAFE_GLOBALS_REGISTERED:
+        return
+    add_safe_globals = getattr(torch.serialization, "add_safe_globals", None)
+    if add_safe_globals is None:
+        _TORCH_SAFE_GLOBALS_REGISTERED = True
+        return
+
+    np_core = getattr(np, "_core", None) or getattr(np, "core", None)
+    reconstruct = getattr(getattr(np_core, "multiarray", None), "_reconstruct", None)
+    safe_types = [np.ndarray, np.dtype]
+    if reconstruct is not None:
+        safe_types.append(reconstruct)
+    for dtype_name in ("Float32DType", "Float64DType", "Int32DType", "Int64DType"):
+        dtype_type = getattr(getattr(np, "dtypes", None), dtype_name, None)
+        if dtype_type is not None:
+            safe_types.append(dtype_type)
+    # NumPy 1.x represents scalar dtypes as ``type(np.dtype(...))``.
+    for dtype in (np.float32, np.float64, np.int32, np.int64):
+        safe_types.append(type(np.dtype(dtype)))
+    add_safe_globals(safe_types)
+    _TORCH_SAFE_GLOBALS_REGISTERED = True
+
+
 def _clean_state_dict(state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     """Remove 'module.' prefix from DataParallel-wrapped state dict keys."""
     cleaned: Dict[str, torch.Tensor] = {}
@@ -430,6 +467,7 @@ def load_gear_model(
 ) -> Tuple[WDCNNMechDG, Dict[str, Any], List[str], Dict[str, Any]]:
     _verify_model_artifact(model_path, expected_sha256, "gear")
 
+    _register_torch_safe_globals()
     ckpt = v6.safe_torch_load(model_path, map_location=DEVICE)
     params = ckpt["params"]
     class_names = [str(x) for x in ckpt["classes"]]
@@ -464,6 +502,7 @@ def load_bearing_model(
     """
     _verify_model_artifact(model_path, expected_sha256, "bearing")
 
+    _register_torch_safe_globals()
     ckpt = v6.safe_torch_load(model_path, map_location=DEVICE)
 
     # ---- extract state dict ----

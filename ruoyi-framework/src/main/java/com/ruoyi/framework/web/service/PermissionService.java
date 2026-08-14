@@ -35,6 +35,13 @@ public class PermissionService
         {
             return false;
         }
+        // 超级管理员由用户 ID 1 标识，不依赖 sys_role_menu 是否完整，
+        // 避免初始化数据缺少菜单映射时所有受保护接口被误判为 403。
+        if (SecurityUtils.isAdmin(loginUser.getUserId()))
+        {
+            PermissionContextHolder.setContext(permission);
+            return true;
+        }
         PermissionContextHolder.setContext(permission);
         return hasPermissions(loginUser.getPermissions(), permission);
     }
@@ -66,6 +73,11 @@ public class PermissionService
         if (StringUtils.isNull(loginUser) || CollectionUtils.isEmpty(loginUser.getPermissions()))
         {
             return false;
+        }
+        if (SecurityUtils.isAdmin(loginUser.getUserId()))
+        {
+            PermissionContextHolder.setContext(permissions);
+            return true;
         }
         PermissionContextHolder.setContext(permissions);
         Set<String> authorities = loginUser.getPermissions();

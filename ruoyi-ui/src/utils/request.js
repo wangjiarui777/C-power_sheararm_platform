@@ -10,6 +10,24 @@ import cache from '@/plugins/cache'
 import { saveAs } from 'file-saver'
 
 let downloadLoadingInstance
+let passwordChangeRedirecting = false
+
+function redirectToPasswordChange() {
+  if (passwordChangeRedirecting) return
+  passwordChangeRedirecting = true
+  MessageBox.alert('首次登录或密码已被管理员重置，请先修改密码。', '安全提示', {
+    confirmButtonText: '去修改',
+    closeOnClickModal: false,
+    closeOnPressEscape: false,
+    type: 'warning'
+  }).then(() => {
+    // 项目使用 history 路由，不能写入 hash；直接导航也能清理旧的
+    // 动态路由状态，进入个人中心的修改密码页。
+    window.location.assign('/user/profile?activeTab=resetPwd')
+  }).catch(() => {}).finally(() => {
+    passwordChangeRedirecting = false
+  })
+}
 // 是否显示重新登录
 export let isRelogin = { show: false }
 
@@ -82,7 +100,10 @@ service.interceptors.response.use(res => {
     if (res.request.responseType ===  'blob' || res.request.responseType ===  'arraybuffer') {
       return res.data
     }
-    if (code === 401) {
+    if (code === 428) {
+      redirectToPasswordChange()
+      return Promise.reject(new Error('PASSWORD_CHANGE_REQUIRED'))
+    } else if (code === 401) {
       if (!isRelogin.show) {
         isRelogin.show = true
         MessageBox.confirm('登录状态已过期，您可以继续留在该页面，或者重新登录', '系统提示', { confirmButtonText: '重新登录', cancelButtonText: '取消', type: 'warning' }).then(() => {
@@ -121,7 +142,12 @@ service.interceptors.response.use(res => {
     } else if (message.includes("timeout")) {
       message = "系统接口请求超时"
     } else if (message.includes("Request failed with status code")) {
-      const statusCode = message.slice(-3)
+      const statusMatch = message.match(/status code (\d{3})/)
+      const statusCode = statusMatch ? statusMatch[1] : message.slice(-3)
+      if (statusCode === '428') {
+        redirectToPasswordChange()
+        return Promise.reject(new Error('PASSWORD_CHANGE_REQUIRED'))
+      }
       if (statusCode !== '500') {
         message = "系统接口" + statusCode + "异常"
       } else {

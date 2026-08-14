@@ -26,11 +26,14 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Gauge;
 import org.slf4j.MDC;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class TelemetryStreamConsumer
 {
     private static final int MAX_RETRIES = 3;
+    private static final Logger log = LoggerFactory.getLogger(TelemetryStreamConsumer.class);
 
     private final StringRedisTemplate redisTemplate;
     private final IDeviceVibrationDataService vibrationService;
@@ -100,6 +103,8 @@ public class TelemetryStreamConsumer
         }
         catch (Exception ex)
         {
+            log.error("Telemetry stream message failed: eventId={}, deviceCode={}, retry={}",
+                extractEventId(payload), extractDeviceCode(payload), retry, ex);
             Map<String, String> next = Map.of(
                 "payload", payload,
                 "retry", String.valueOf(retry + 1),
@@ -123,6 +128,30 @@ public class TelemetryStreamConsumer
         {
             MDC.remove("eventId");
             MDC.remove("deviceCode");
+        }
+    }
+
+    private String extractEventId(String payload)
+    {
+        try
+        {
+            return JSON.parseObject(payload, TelemetryEnvelope.class).getEventId();
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private String extractDeviceCode(String payload)
+    {
+        try
+        {
+            return JSON.parseObject(payload, TelemetryEnvelope.class).getDeviceCode();
+        }
+        catch (Exception ignored)
+        {
+            return null;
         }
     }
 

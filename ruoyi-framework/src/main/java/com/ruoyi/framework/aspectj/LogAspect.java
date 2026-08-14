@@ -15,6 +15,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.NamedThreadLocal;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.BindingResult;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.multipart.MultipartFile;
 import com.alibaba.fastjson2.JSON;
 import com.ruoyi.common.annotation.Log;
@@ -25,7 +27,6 @@ import com.ruoyi.common.enums.BusinessStatus;
 import com.ruoyi.common.enums.HttpMethod;
 import com.ruoyi.common.filter.PropertyPreExcludeFilter;
 import com.ruoyi.common.utils.ExceptionUtil;
-import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.ServletUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.common.utils.ip.IpUtils;
@@ -89,8 +90,15 @@ public class LogAspect
     {
         try
         {
-            // 获取当前的用户
-            LoginUser loginUser = SecurityUtils.getLoginUser();
+            // 获取当前的用户。采集器上传使用的是独立的
+            // UsernamePasswordAuthenticationToken，其 principal 是 collectorId，
+            // 不能调用只支持 LoginUser 的 SecurityUtils.getLoginUser()。
+            LoginUser loginUser = null;
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated()
+                    && authentication.getPrincipal() instanceof LoginUser) {
+                loginUser = (LoginUser) authentication.getPrincipal();
+            }
 
             // *========数据库日志=========*//
             SysOperLog operLog = new SysOperLog();
@@ -107,6 +115,13 @@ public class LogAspect
                 {
                     operLog.setDeptName(currentUser.getDept().getDeptName());
                 }
+            }
+            else if (authentication != null && authentication.isAuthenticated()
+                    && authentication.getPrincipal() != null
+                    && !"anonymousUser".equals(authentication.getPrincipal()))
+            {
+                // 采集器、内部服务等非网页登录主体仍保留可审计的操作名。
+                operLog.setOperName(String.valueOf(authentication.getPrincipal()));
             }
 
             if (e != null)

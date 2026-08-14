@@ -256,6 +256,19 @@ public class PhmServiceImpl implements PhmService
         {
             return new ArrayList<>();
         }
+        return queryFeatureTrend(point, featureCode);
+    }
+
+    /**
+     * Reads trend data for an already-authorized point. Background collector
+     * processing uses this helper because no logged-in user is present.
+     */
+    private List<PhmTrendPointVo> queryFeatureTrend(PhmMeasurePointEntity point, String featureCode)
+    {
+        if (point == null)
+        {
+            return new ArrayList<>();
+        }
         if ("temperature".equals(featureCode))
         {
             DeviceTemperatureData query = new DeviceTemperatureData();
@@ -971,7 +984,9 @@ public class PhmServiceImpl implements PhmService
         {
             return null;
         }
-        List<PhmTrendPointVo> trend = getFeatureTrend(point.getId(), featureCode);
+        // Background stream consumers have no HTTP SecurityContext. Query the
+        // already-resolved point directly instead of the user-scoped API.
+        List<PhmTrendPointVo> trend = queryFeatureTrend(point, featureCode);
         if (trend.size() <= growthPeriod)
         {
             return null;
@@ -987,7 +1002,7 @@ public class PhmServiceImpl implements PhmService
         {
             return true;
         }
-        List<PhmTrendPointVo> trend = getFeatureTrend(point.getId(), featureCode);
+        List<PhmTrendPointVo> trend = queryFeatureTrend(point, featureCode);
         if (trend.size() < required)
         {
             return false;

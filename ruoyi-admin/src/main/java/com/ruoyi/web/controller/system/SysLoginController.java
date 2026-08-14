@@ -69,7 +69,11 @@ public class SysLoginController
     @GetMapping("/csrf")
     public AjaxResult csrf(CsrfToken csrfToken)
     {
-        return AjaxResult.success().put("headerName", csrfToken.getHeaderName());
+        // 返回令牌本身，兼容前端开发代理无法转发 XSRF-TOKEN Cookie 的场景。
+        // 该令牌仅用于证明请求来源，不包含用户会话信息；会话仍只保存在 HttpOnly Cookie 中。
+        return AjaxResult.success()
+                .put("headerName", csrfToken.getHeaderName())
+                .put("token", csrfToken.getToken());
     }
 
     /**

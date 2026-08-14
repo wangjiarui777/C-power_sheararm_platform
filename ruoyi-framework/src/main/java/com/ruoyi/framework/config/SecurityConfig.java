@@ -21,6 +21,7 @@ import com.ruoyi.framework.config.properties.PermitAllUrlProperties;
 import com.ruoyi.framework.security.filter.JwtAuthenticationTokenFilter;
 import com.ruoyi.framework.security.filter.SensorCollectorAuthenticationFilter;
 import com.ruoyi.framework.security.filter.PasswordChangeRequiredFilter;
+import com.ruoyi.framework.security.filter.CsrfCookieFilter;
 import com.ruoyi.framework.security.handle.AuthenticationEntryPointImpl;
 import com.ruoyi.framework.security.handle.LogoutSuccessHandlerImpl;
 
@@ -56,6 +57,9 @@ public class SecurityConfig
 
     @Autowired
     private PasswordChangeRequiredFilter passwordChangeRequiredFilter;
+
+    @Autowired
+    private CsrfCookieFilter csrfCookieFilter;
     
     /**
      * 跨域过滤器
@@ -139,6 +143,7 @@ public class SecurityConfig
             .addFilterBefore(authenticationTokenFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(passwordChangeRequiredFilter, JwtAuthenticationTokenFilter.class)
             .addFilterBefore(sensorCollectorAuthenticationFilter, JwtAuthenticationTokenFilter.class)
+            .addFilterAfter(csrfCookieFilter, org.springframework.security.web.csrf.CsrfFilter.class)
             // 添加CORS filter
             .addFilterBefore(corsFilter, JwtAuthenticationTokenFilter.class)
             .addFilterBefore(corsFilter, LogoutFilter.class)

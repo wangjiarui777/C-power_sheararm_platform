@@ -19,11 +19,14 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.slf4j.MDC;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class ChannelFrameStreamConsumer
 {
     private static final int MAX_RETRIES = 3;
+    private static final Logger log = LoggerFactory.getLogger(ChannelFrameStreamConsumer.class);
     private final StringRedisTemplate redisTemplate;
     private final ChannelFrameIngestService ingestService;
     private final String consumerName;
@@ -78,6 +81,8 @@ public class ChannelFrameStreamConsumer
         }
         catch (Exception ex)
         {
+            log.error("Channel frame stream message failed: frameId={}, deviceCode={}, retry={}",
+                extractFrameId(payload), extractDeviceCode(payload), retry, ex);
             int nextRetry = retry + 1;
             String target = nextRetry >= MAX_RETRIES
                 ? ChannelFramePipelineService.DLQ_STREAM_KEY : ChannelFramePipelineService.STREAM_KEY;
@@ -99,6 +104,30 @@ public class ChannelFrameStreamConsumer
         {
             MDC.remove("eventId");
             MDC.remove("deviceCode");
+        }
+    }
+
+    private String extractFrameId(String payload)
+    {
+        try
+        {
+            return JSON.parseObject(payload, ChannelFrameDTO.class).getFrameId();
+        }
+        catch (Exception ignored)
+        {
+            return null;
+        }
+    }
+
+    private String extractDeviceCode(String payload)
+    {
+        try
+        {
+            return JSON.parseObject(payload, ChannelFrameDTO.class).getDeviceCode();
+        }
+        catch (Exception ignored)
+        {
+            return null;
         }
     }
 

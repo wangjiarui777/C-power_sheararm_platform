@@ -189,6 +189,34 @@ function Start-LoggedProcess {
     }
 }
 
+function Start-PortableRedis {
+    param([Parameter(Mandatory = $true)][int]$Port)
+
+    $portableRoot = Join-Path $dataRoot 'redis8'
+    $server = Get-ChildItem -LiteralPath $portableRoot -Filter 'redis-server.exe' -File -Recurse -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $server) { return $false }
+    if (Test-TcpEndpoint -HostName '127.0.0.1' -Port $Port) { return $true }
+
+    $runtimeRoot = $server.Directory.FullName
+    $redisLog = Join-Path $logRoot 'redis-portable.out.log'
+    $arguments = @('--port', [string]$Port, '--bind', '127.0.0.1', '--protected-mode', 'yes',
+        '--save', '', '--appendonly', 'no', '--logfile', $redisLog)
+    $process = Start-Process -FilePath $server.FullName -ArgumentList $arguments `
+        -WorkingDirectory $runtimeRoot -WindowStyle Hidden -PassThru
+    Write-Host "[START] Redis portable pid=$($process.Id) port=$Port" -ForegroundColor DarkCyan
+
+    $deadline = (Get-Date).AddSeconds(15)
+    while (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port $Port) -and (Get-Date) -lt $deadline) {
+        if ($process.HasExited) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port $Port)) {
+        throw "项目内置 Redis portable 未能监听 127.0.0.1:$Port，请查看 $redisLog"
+    }
+    return $true
+}
+
 Import-LocalEnvironment -Path (Join-Path $projectRoot '.env')
 
 $iotdbHomeCandidate = if ([string]::IsNullOrWhiteSpace($env:IOTDB_HOME)) {
@@ -239,6 +267,37 @@ function Start-DependencyService {
         throw "$DisplayName 服务 $($service.Name) 已启动，但 127.0.0.1:$Port 在 ${TimeoutSeconds}s 内未就绪"
     }
     Write-Host "[READY] $DisplayName -> 127.0.0.1:$Port" -ForegroundColor Green
+}
+
+function Assert-RedisStreamsSupport {
+    $redisCli = Get-Command redis-cli -ErrorAction SilentlyContinue
+    if ($null -eq $redisCli) {
+        throw '缺少 redis-cli，无法验证 Redis Streams。请安装 Redis 5+ 或 Memurai 4+。'
+    }
+    $redisHost = if ([string]::IsNullOrWhiteSpace($env:REDIS_HOST)) { '127.0.0.1' } else { $env:REDIS_HOST }
+    $redisPort = if ([string]::IsNullOrWhiteSpace($env:REDIS_PORT)) { 6379 } else { [int]$env:REDIS_PORT }
+    $previousAuth = [Environment]::GetEnvironmentVariable('REDISCLI_AUTH', 'Process')
+    try {
+        if (-not [string]::IsNullOrWhiteSpace($env:REDIS_PASSWORD)) {
+            [Environment]::SetEnvironmentVariable('REDISCLI_AUTH', $env:REDIS_PASSWORD, 'Process')
+        }
+        $capability = (& $redisCli.Source -h $redisHost -p $redisPort COMMAND INFO XREADGROUP 2>$null | Out-String).Trim()
+        if ([string]::IsNullOrWhiteSpace($capability) -or $capability -match 'unknown command|\(nil\)') {
+            # 旧版 Windows Redis（例如 3.0.x）常占用默认 6379，无法满足 Streams。
+            # 如果项目目录已有便携式 Redis 运行时，则自动切换到 6380，避免用户
+            # 还要手工停止系统服务；没有运行时仍明确提示安装 Redis 5+/Memurai。
+            $portablePort = if ($redisPort -eq 6379) { 6380 } else { $null }
+            if ($portablePort -and (Start-PortableRedis -Port $portablePort)) {
+                $env:REDIS_PORT = [string]$portablePort
+                Write-Host "[INFO] $redisHost`:$redisPort 不支持 Streams，已切换到项目内 Redis 127.0.0.1:$portablePort" -ForegroundColor Yellow
+                return Assert-RedisStreamsSupport
+            }
+            throw "Redis $redisHost`:$redisPort 不支持 Redis Streams（缺少 XREADGROUP）。当前项目的实时采集/诊断流要求 Redis 5+，Windows 可安装 Memurai 4+。"
+        }
+        Write-Host "[READY] Redis Streams -> $redisHost`:$redisPort" -ForegroundColor Green
+    } finally {
+        [Environment]::SetEnvironmentVariable('REDISCLI_AUTH', $previousAuth, 'Process')
+    }
 }
 $script:iotdbHome = [IO.Path]::GetFullPath($iotdbHomeCandidate)
 $iotdbWindowsSbin = Join-Path $script:iotdbHome 'sbin\windows'
@@ -323,7 +382,9 @@ if (-not [string]::IsNullOrWhiteSpace($env:REDIS_SERVICE_NAME)) {
     $redisServiceCandidates = @([string]$env:REDIS_SERVICE_NAME) + $redisServiceCandidates
 }
 Start-DependencyService -DisplayName 'MySQL' -CandidateNames $mysqlServiceCandidates -Port 3306
-Start-DependencyService -DisplayName 'Redis' -CandidateNames $redisServiceCandidates -Port 6379
+$redisPort = if ([string]::IsNullOrWhiteSpace($env:REDIS_PORT)) { 6379 } else { [int]$env:REDIS_PORT }
+Start-DependencyService -DisplayName 'Redis' -CandidateNames $redisServiceCandidates -Port $redisPort
+Assert-RedisStreamsSupport
 Write-Step '停止当前项目的旧监听进程'
 # 5001/9528 是历史架构遗留端口；仅在确认属于本项目时才清理。
 foreach ($legacyPort in @(5001, 9528)) {

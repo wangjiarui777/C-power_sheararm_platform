@@ -19,11 +19,12 @@ import Loading from 'element-ui/lib/loading'
 import Message from 'element-ui/lib/message'
 import MessageBox from 'element-ui/lib/message-box'
 import Notification from 'element-ui/lib/notification'
+import Popover from 'element-ui/lib/popover'
 
 const components = [
   Breadcrumb, BreadcrumbItem, Button, Checkbox, Dropdown, DropdownItem,
   DropdownMenu, Form, FormItem, Input, Menu, MenuItem, Scrollbar, Submenu,
-  Tooltip
+  Tooltip, Popover
 ]
 
 components.forEach(component => Vue.use(component))

@@ -55,6 +55,11 @@ const user = {
       return new Promise((resolve, reject) => {
         bootstrapCsrf().then(() => login(username, password, code, uuid)).then(() => {
           commit('SET_AUTHENTICATED', true)
+          // 登录成功后强制重新拉取用户信息和动态路由，避免上一个账号
+          // 留下的角色/权限状态绕过首次改密门禁并触发 428。
+          commit('SET_PASSWORD_CHANGE_REQUIRED', false)
+          commit('SET_ROLES', [])
+          commit('SET_PERMISSIONS', [])
           store.dispatch('lock/unlockScreen')
           resolve()
         }).catch(error => {
@@ -126,6 +131,12 @@ const user = {
       return new Promise(resolve => {
         commit('SET_AUTHENTICATED', false)
         commit('SET_PASSWORD_CHANGE_REQUIRED', false)
+        commit('SET_ID', '')
+        commit('SET_NAME', '')
+        commit('SET_NICK_NAME', '')
+        commit('SET_AVATAR', '')
+        commit('SET_ROLES', [])
+        commit('SET_PERMISSIONS', [])
         resolve()
       })
     }

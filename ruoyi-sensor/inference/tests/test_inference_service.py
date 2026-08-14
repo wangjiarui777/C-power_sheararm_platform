@@ -10,6 +10,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import HTTPException
+import numpy as np
+import torch
 
 
 INFERENCE_DIR = Path(__file__).resolve().parents[1]
@@ -81,6 +83,15 @@ class InferenceServiceContractTest(unittest.TestCase):
                     service._verify_model_artifact(artifact, "0" * 64, "gear")
                 with self.assertRaisesRegex(RuntimeError, "must be configured"):
                     service._verify_model_artifact(artifact, "", "gear")
+
+    def test_numpy_metadata_checkpoint_loads_with_weights_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "checkpoint.pth"
+            torch.save({"state": {"weight": torch.ones(2)}, "dtype": np.dtype("float32")}, artifact)
+            service._register_torch_safe_globals()
+            checkpoint = service.v6.safe_torch_load(artifact, map_location="cpu")
+            self.assertEqual(tuple(checkpoint["state"]["weight"].shape), (2,))
+            self.assertEqual(str(checkpoint["dtype"]), "float32")
 
     def test_health_reports_partial_model_availability(self):
         with patch.object(service, "gear_model", object()), \
