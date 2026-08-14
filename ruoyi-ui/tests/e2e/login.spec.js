@@ -6,6 +6,48 @@ test('login page renders the production platform identity', async ({ page }) => 
   await expect(page.getByPlaceholder('账号')).toBeVisible()
   await expect(page.getByPlaceholder('密码')).toBeVisible()
   await expect(page.getByRole('button', { name: /登\s*录/ })).toBeVisible()
+  await expect(page.locator('svg symbol#icon-button')).toHaveCount(1)
+  await expect(page.locator('svg use')).toHaveCount(3)
+  await expect(page.locator('svg symbol#icon-user')).toHaveAttribute('viewBox', '0 0 130 130')
+})
+
+test('login captcha network failure does not open webpack overlay', async ({ page }) => {
+  const runtimeErrors = []
+  page.on('pageerror', error => runtimeErrors.push(error.message))
+  await page.route('**/captchaImage', route => route.abort())
+
+  await page.goto('/login')
+  await expect(page.getByPlaceholder('账号')).toBeVisible()
+  await expect(page.locator('.el-message')).toContainText('后端接口连接异常')
+  await expect(page.locator('#webpack-dev-server-client-overlay')).toHaveCount(0)
+  expect(runtimeErrors.filter(message => /Network Error|AxiosError/.test(message))).toEqual([])
+})
+
+test('login business error is shown instead of silently refreshing captcha', async ({ page }) => {
+  await page.route('**/csrf', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ code: 200, token: 'e2e-csrf-token', headerName: 'X-XSRF-TOKEN' })
+  }))
+  await page.route('**/captchaImage', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ code: 200, captchaEnabled: false })
+  }))
+  await page.route('**/login', route => {
+    if (route.request().method() !== 'POST') return route.continue()
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 500, msg: '账号或密码错误' })
+    })
+  })
+
+  await page.goto('/login')
+  await page.getByPlaceholder('账号').fill('admin')
+  await page.getByPlaceholder('密码').fill('wrong-password')
+  await page.getByRole('button', { name: /登\s*录/ }).click()
+  await expect(page.locator('.el-message')).toContainText('账号或密码错误')
 })
 
 test('protected route redirects an anonymous browser to login', async ({ page }) => {
@@ -14,6 +56,8 @@ test('protected route redirects an anonymous browser to login', async ({ page })
 })
 
 test('first-login password gate opens reset-password tab instead of showing 428 overlay', async ({ page }) => {
+  const runtimeErrors = []
+  page.on('pageerror', error => runtimeErrors.push(error.message))
   await page.route('**/csrf', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -63,6 +107,71 @@ test('first-login password gate opens reset-password tab instead of showing 428 
   await expect(page).toHaveURL(/\/user\/profile/)
   await expect(page.locator('.el-tabs__item.is-active')).toContainText('修改密码')
   await expect(page.locator('body')).not.toContainText('系统接口428异常')
+  await expect(page.locator('#webpack-dev-server-client-overlay')).toHaveCount(0)
+  expect(runtimeErrors.filter(message => /PASSWORD_CHANGE_REQUIRED|status code 403/.test(message))).toEqual([])
+})
+
+test('password change refreshes CSRF token before submitting', async ({ page }) => {
+  let updateHeaders
+  await page.route('**/csrf', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ code: 200, headerName: 'X-XSRF-TOKEN', token: 'e2e-csrf-token' })
+  }))
+  await page.route('**/captchaImage', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ code: 200, captchaEnabled: false })
+  }))
+  await page.route('**/login', route => {
+    if (route.request().method() !== 'POST') return route.continue()
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 200, msg: '操作成功' })
+    })
+  })
+  await page.route('**/getInfo', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      code: 200,
+      passwordChangeRequired: true,
+      user: { userId: 1, userName: 'admin', nickName: '管理员', avatar: '' },
+      roles: ['admin'],
+      permissions: ['*:*:*']
+    })
+  }))
+  await page.route('**/system/user/profile', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ code: 200, data: { userName: 'admin', nickName: '管理员' } })
+  }))
+  await page.route('**/system/user/profile/updatePwd', route => {
+    updateHeaders = route.request().headers()
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ code: 200, msg: '操作成功' })
+    })
+  })
+  await page.route('**/logout', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ code: 200 })
+  }))
+
+  await page.goto('/login')
+  await page.getByPlaceholder('账号').fill('admin')
+  await page.getByPlaceholder('密码').fill('admin123')
+  await page.getByRole('button', { name: /登\s*录/ }).click()
+  await expect(page).toHaveURL(/\/user\/profile/)
+  await page.getByRole('button', { name: '去修改' }).click()
+  await page.getByPlaceholder('旧密码').fill('admin123')
+  await page.getByPlaceholder('请输入新密码').fill('Newpass123!')
+  await page.getByPlaceholder('请确认新密码').fill('Newpass123!')
+  await page.getByRole('button', { name: '保存' }).click()
+  await expect.poll(() => updateHeaders && updateHeaders['x-xsrf-token']).toBe('e2e-csrf-token')
 })
 
 test('authenticated PHM smoke path', async ({ page }) => {

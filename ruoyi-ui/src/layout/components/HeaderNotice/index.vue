@@ -44,6 +44,7 @@ export default {
     }
   },
   mounted() {
+    if (this.$store.getters.passwordChangeRequired) return
     this.loadNoticeTop()
   },
   methods: {

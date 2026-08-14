@@ -102,7 +102,9 @@ service.interceptors.response.use(res => {
     }
     if (code === 428) {
       redirectToPasswordChange()
-      return Promise.reject(new Error('PASSWORD_CHANGE_REQUIRED'))
+      const passwordError = new Error('PASSWORD_CHANGE_REQUIRED')
+      passwordError.passwordChangeRequired = true
+      return Promise.reject(passwordError)
     } else if (code === 401) {
       if (!isRelogin.show) {
         isRelogin.show = true
@@ -146,7 +148,9 @@ service.interceptors.response.use(res => {
       const statusCode = statusMatch ? statusMatch[1] : message.slice(-3)
       if (statusCode === '428') {
         redirectToPasswordChange()
-        return Promise.reject(new Error('PASSWORD_CHANGE_REQUIRED'))
+        const passwordError = new Error('PASSWORD_CHANGE_REQUIRED')
+        passwordError.passwordChangeRequired = true
+        return Promise.reject(passwordError)
       }
       if (statusCode !== '500') {
         message = "系统接口" + statusCode + "异常"

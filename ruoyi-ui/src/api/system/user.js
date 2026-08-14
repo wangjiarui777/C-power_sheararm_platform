@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { bootstrapCsrf } from '@/api/login'
 import { parseStrEmpty } from "@/utils/chuangli"
 
 // 查询用户列表
@@ -93,11 +94,16 @@ export function updateUserPwd(oldPassword, newPassword) {
     oldPassword,
     newPassword
   }
-  return request({
+  // A password change is a state-changing request and is still subject to
+  // Spring Security's CSRF check even while the first-login gate is active.
+  // Refresh the token immediately before submitting so a stale/rotated
+  // XSRF-TOKEN cookie cannot turn this otherwise valid request into a 403.
+  return bootstrapCsrf().then(() => request({
     url: '/system/user/profile/updatePwd',
     method: 'put',
+    headers: { repeatSubmit: false },
     data: data
-  })
+  }))
 }
 
 // 用户头像上传

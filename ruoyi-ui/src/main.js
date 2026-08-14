@@ -62,6 +62,15 @@ DictData.install()
 
 Vue.config.productionTip = false
 
+// 428 是服务端的首次改密门禁，组件在切换到个人中心的瞬间可能仍有
+// 一个并发请求返回该状态；它不是应用崩溃，不应被 webpack overlay 显示。
+window.addEventListener('unhandledrejection', event => {
+  const reason = event && event.reason
+  if (reason && (reason.passwordChangeRequired || reason.message === 'PASSWORD_CHANGE_REQUIRED')) {
+    event.preventDefault()
+  }
+})
+
 new Vue({
   el: '#app',
   router,

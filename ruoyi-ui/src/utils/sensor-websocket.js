@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import store from '@/store'
 
 let socket = null
 let reconnectTimer = null
@@ -34,7 +35,7 @@ function clearReconnectTimer() {
 }
 
 function scheduleReconnect() {
-  if (manualClose) {
+  if (manualClose || store.getters.passwordChangeRequired) {
     return
   }
   clearReconnectTimer()
@@ -44,11 +45,24 @@ function scheduleReconnect() {
 }
 
 async function issueTicket() {
-  const response = await request({ url: '/sensor/ws-ticket', method: 'post' })
+  // Multiple layout/page subscribers can request the shared socket in the
+  // same tick. Ticket issuance is safe to coalesce at the socket layer and
+  // must not be rejected by the generic duplicate-submit guard.
+  const response = await request({
+    url: '/sensor/ws-ticket',
+    method: 'post',
+    headers: { repeatSubmit: false }
+  })
   return response.data && response.data.ticket
 }
 
 function connect(path = '/ws/sensor') {
+  // 首次改密期间仅允许进入个人中心，避免布局组件反复申请 ticket，
+  // 产生预期的 428/403 并污染前端错误覆盖层。
+  if (store.getters.passwordChangeRequired) {
+    close()
+    return Promise.resolve(null)
+  }
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return Promise.resolve(socket)
   }
@@ -96,6 +110,12 @@ function connect(path = '/ws/sensor') {
   }).catch(error => {
     connectionPromise = null
     notify('error', error)
+    if (store.getters.passwordChangeRequired || error?.message === 'PASSWORD_CHANGE_REQUIRED'
+      || error?.response?.status === 428 || error?.response?.status === 403) {
+      manualClose = true
+      clearReconnectTimer()
+      return null
+    }
     scheduleReconnect()
     throw error
   })

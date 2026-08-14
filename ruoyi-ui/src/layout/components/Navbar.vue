@@ -95,7 +95,8 @@ export default {
       'sidebar',
       'avatar',
       'device',
-      'nickName'
+      'nickName',
+      'passwordChangeRequired'
     ]),
     setting: {
       get() {
@@ -114,6 +115,7 @@ export default {
     }
   },
   created() {
+    if (this.passwordChangeRequired) return
     this.loadPhmAlarmSettings()
     this.connectPhmAlarmSocket()
   },

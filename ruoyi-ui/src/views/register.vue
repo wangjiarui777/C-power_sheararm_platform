@@ -123,6 +123,9 @@ export default {
           this.codeUrl = "data:image/gif;base64," + res.img
           this.registerForm.uuid = res.uuid
         }
+      }).catch(() => {
+        // request interceptor already shows the connection error; keep the
+        // page from surfacing an unhandled rejection in dev overlay.
       })
     },
     handleRegister() {

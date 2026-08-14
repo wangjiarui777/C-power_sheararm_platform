@@ -41,6 +41,12 @@ public class PasswordChangeRequiredFilter extends OncePerRequestFilter
         {
             return true;
         }
+        // 头像由布局和个人中心以普通图片请求加载；阻断它会产生无意义的
+        // 428 资源错误，并在开发环境触发 webpack overlay。
+        if ("GET".equalsIgnoreCase(request.getMethod()) && path.startsWith("/profile/avatar/"))
+        {
+            return true;
+        }
         return "/system/user/profile".equals(path) && "GET".equalsIgnoreCase(request.getMethod());
     }
 
