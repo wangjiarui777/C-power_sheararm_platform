@@ -1,0 +1,22 @@
+<service>
+  <id>phm-infer-bearing</id>
+  <name>PHM Bearing Inference</name>
+  <description>Local-only bearing model inference worker.</description>
+  <executable>%BASE%\..\runtime\python\python.exe</executable>
+  <arguments>-m uvicorn inference_service:app --host 127.0.0.1 --port 5002</arguments>
+  <workingdirectory>%BASE%\..\current\inference</workingdirectory>
+  <env name="INFERENCE_BIND_HOST" value="127.0.0.1"/>
+  <env name="PORT" value="5002"/>
+  <env name="INFERENCE_INTERNAL_TOKEN" value="%INFERENCE_INTERNAL_TOKEN%"/>
+  <env name="INFERENCE_ENABLED_MODELS" value="bearing"/>
+  <env name="BEARING_MODEL_PATH" value="%BASE%\..\models\best_model.pth"/>
+  <env name="BEARING_MODEL_SHA256" value="%BEARING_MODEL_SHA256%"/>
+  <env name="BEARING_MODEL_VERSION" value="%BEARING_MODEL_VERSION%"/>
+  <env name="INFERENCE_ALLOWED_INPUT_ROOTS" value="%SENSOR_ATTACHMENT_ROOT%\objects"/>
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <logpath>%BASE%\..\logs\inference-bearing</logpath>
+  <log mode="roll-by-size-time"><sizeThreshold>104857600</sizeThreshold><pattern>yyyyMMdd</pattern></log>
+</service>

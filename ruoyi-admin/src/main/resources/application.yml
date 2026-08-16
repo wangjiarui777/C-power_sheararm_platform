@@ -53,6 +53,19 @@ sensor:
     # 必须完成模型验收与至少14天影子运行后，才可在生产显式打开。
     auto-alarm-enabled: ${SENSOR_DIAGNOSIS_AUTO_ALARM_ENABLED:false}
     multi-point-enabled: ${SENSOR_DIAGNOSIS_MULTI_POINT_ENABLED:false}
+    realtime:
+      enabled: ${SENSOR_DIAGNOSIS_REALTIME_ENABLED:false}
+      window-default-samples: ${SENSOR_DIAGNOSIS_REALTIME_WINDOW_SAMPLES:5120}
+      stride-default-samples: ${SENSOR_DIAGNOSIS_REALTIME_STRIDE_SAMPLES:5120}
+      job-deadline-seconds: ${SENSOR_DIAGNOSIS_REALTIME_JOB_DEADLINE_SECONDS:10}
+      max-attempts: ${SENSOR_DIAGNOSIS_REALTIME_MAX_ATTEMPTS:2}
+      coalesce-window-ms: ${SENSOR_DIAGNOSIS_REALTIME_COALESCE_WINDOW_MS:150}
+      coalesce-batch-size: ${SENSOR_DIAGNOSIS_REALTIME_COALESCE_BATCH_SIZE:8}
+      max-buffer-samples: ${SENSOR_DIAGNOSIS_REALTIME_MAX_BUFFER_SAMPLES:2000000}
+      queue-max-length: ${SENSOR_DIAGNOSIS_REALTIME_QUEUE_MAX_LENGTH:10000}
+      dispatch-poll-ms: ${SENSOR_DIAGNOSIS_REALTIME_DISPATCH_POLL_MS:250}
+      pending-claim-idle-ms: ${SENSOR_DIAGNOSIS_REALTIME_PENDING_CLAIM_IDLE_MS:30000}
+      pending-recovery-ms: ${SENSOR_DIAGNOSIS_REALTIME_PENDING_RECOVERY_MS:1000}
     read-mode: ${SENSOR_DIAGNOSIS_READ_MODE:iotdb-primary}
     iotdb-sync:
       poll-delay-ms: ${SENSOR_DIAGNOSIS_IOTDB_SYNC_POLL_DELAY_MS:5000}
@@ -79,6 +92,8 @@ sensor:
   inference:
     gear-url: ${SENSOR_GEAR_INFER_URL:}
     bearing-url: ${SENSOR_BEARING_INFER_URL:}
+    gear-model-version: ${GEAR_MODEL_VERSION:gear-unregistered}
+    bearing-model-version: ${BEARING_MODEL_VERSION:bearing-unregistered}
     default-device-code: ${SENSOR_DEFAULT_DEVICE_CODE:}
     default-model-type: ${SENSOR_DEFAULT_MODEL_TYPE:gear}
     connect-timeout-ms: ${SENSOR_INFER_CONNECT_TIMEOUT_MS:5000}

@@ -77,8 +77,8 @@
               <span>{{ conditionText(alarm.conditionStatus) }}</span>
             </div>
             <div class="alarm-actions">
-              <el-button v-if="!alarm.workflowStatus || alarm.workflowStatus === 'NEW'" size="mini" type="primary" @click="acknowledge(alarm)">确认</el-button>
-              <el-button size="mini" @click="openAssign(alarm)">指派</el-button>
+              <el-button v-if="!alarm.workflowStatus || alarm.workflowStatus === 'NEW'" v-hasPermi="['phm:alarm:handle']" size="mini" type="primary" @click="acknowledge(alarm)">确认</el-button>
+              <el-button v-hasPermi="['phm:alarm:handle']" size="mini" @click="openAssign(alarm)">指派</el-button>
               <el-button size="mini" type="text" @click="openAlarm(alarm)">详情</el-button>
             </div>
           </article>
@@ -96,7 +96,7 @@
       </el-form>
       <span slot="footer">
         <el-button @click="assignVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!assignForm.assignee" @click="submitAssign">确认指派</el-button>
+        <el-button v-hasPermi="['phm:alarm:handle']" type="primary" :disabled="!assignForm.assignee" @click="submitAssign">确认指派</el-button>
       </span>
     </el-dialog>
   </div>

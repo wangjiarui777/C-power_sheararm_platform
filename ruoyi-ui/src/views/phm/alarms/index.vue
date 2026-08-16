@@ -44,8 +44,8 @@
       </el-table-column>
       <el-table-column label="操作" fixed="right" width="150">
         <template slot-scope="scope">
-          <el-button type="text" size="mini" @click.stop="openAction(scope.row, 'handle')">处理</el-button>
-          <el-button type="text" size="mini" @click.stop="openAction(scope.row, 'ignore')">忽略</el-button>
+          <el-button v-hasPermi="['phm:alarm:handle']" type="text" size="mini" @click.stop="openAction(scope.row, 'handle')">处理</el-button>
+          <el-button v-hasPermi="['phm:alarm:handle']" type="text" size="mini" @click.stop="openAction(scope.row, 'ignore')">忽略</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -69,7 +69,7 @@
             <span>{{ ruleForm.ruleName || '未匹配规则' }}</span>
             <el-input-number v-model="ruleForm.highLimit" :precision="4" size="mini" placeholder="高报" />
             <el-input-number v-model="ruleForm.highHighLimit" :precision="4" size="mini" placeholder="高高报" />
-            <el-button size="mini" type="primary" plain :disabled="!ruleForm.id" @click="saveRuleThreshold">保存阈值</el-button>
+            <el-button v-hasPermi="['phm:config:edit']" size="mini" type="primary" plain :disabled="!ruleForm.id" @click="saveRuleThreshold">保存阈值</el-button>
           </div>
         </el-form-item>
         <div class="trend-preview">
@@ -79,7 +79,7 @@
       </el-form>
       <div slot="footer">
         <el-button @click="actionVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitAction">确认</el-button>
+        <el-button v-hasPermi="['phm:alarm:handle']" type="primary" @click="submitAction">确认</el-button>
       </div>
     </el-dialog>
 
@@ -148,7 +148,7 @@
       </div>
       <div slot="footer">
         <el-button @click="detailVisible = false">关闭</el-button>
-        <el-button v-if="detailAlarm.status === 'unhandled'" type="primary" @click="openAction(detailAlarm, 'handle'); detailVisible = false">去处理</el-button>
+        <el-button v-if="detailAlarm.status === 'unhandled'" v-hasPermi="['phm:alarm:handle']" type="primary" @click="openAction(detailAlarm, 'handle'); detailVisible = false">去处理</el-button>
       </div>
     </el-dialog>
   </div>

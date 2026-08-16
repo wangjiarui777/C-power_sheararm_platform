@@ -5,7 +5,6 @@
   <executable>%BASE%\..\runtime\jre17\bin\java.exe</executable>
   <arguments>-Xms1g -Xmx4g -Dspring.profiles.active=prod -jar "%BASE%\..\current\backend\ruoyi-admin.jar"</arguments>
   <workingdirectory>%BASE%\..\current\backend</workingdirectory>
-  <depend>phm-inference</depend>
   <startmode>Automatic</startmode>
   <onfailure action="restart" delay="15 sec"/>
   <onfailure action="restart" delay="60 sec"/>

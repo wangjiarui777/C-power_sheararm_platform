@@ -25,9 +25,14 @@ function ensureCsrfHeader(config) {
   if (!stateChanging || config.url === '/csrf') return Promise.resolve(config)
 
   const headerName = 'X-XSRF-TOKEN'
-  const existing = (config.headers && (config.headers[headerName] || config.headers[headerName.toLowerCase()]))
+  // The cookie is the source of truth.  Axios defaults survive SPA
+  // navigation and can contain a token from a previous backend instance;
+  // preferring that stale value causes Spring Security to return 403 because
+  // the request header no longer matches the current XSRF-TOKEN cookie.
+  const cookieToken = Cookies.get('XSRF-TOKEN')
+  const existing = cookieToken
+    || (config.headers && (config.headers[headerName] || config.headers[headerName.toLowerCase()]))
     || service.defaults.headers.common[headerName]
-    || Cookies.get('XSRF-TOKEN')
   if (existing) {
     config.headers = config.headers || {}
     config.headers[headerName] = existing

@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { bootstrapCsrf } from '@/api/login'
 
 // 查询角色列表
 export function listRole(query) {
@@ -19,29 +20,29 @@ export function getRole(roleId) {
 
 // 新增角色
 export function addRole(data) {
-  return request({
+  return bootstrapCsrf().then(() => request({
     url: '/system/role',
     method: 'post',
     data: data
-  })
+  }))
 }
 
 // 修改角色
 export function updateRole(data) {
-  return request({
+  return bootstrapCsrf().then(() => request({
     url: '/system/role',
     method: 'put',
     data: data
-  })
+  }))
 }
 
 // 角色数据权限
 export function dataScope(data) {
-  return request({
+  return bootstrapCsrf().then(() => request({
     url: '/system/role/dataScope',
     method: 'put',
     data: data
-  })
+  }))
 }
 
 // 角色状态修改
@@ -50,19 +51,19 @@ export function changeRoleStatus(roleId, status) {
     roleId,
     status
   }
-  return request({
+  return bootstrapCsrf().then(() => request({
     url: '/system/role/changeStatus',
     method: 'put',
     data: data
-  })
+  }))
 }
 
 // 删除角色
 export function delRole(roleId) {
-  return request({
+  return bootstrapCsrf().then(() => request({
     url: '/system/role/' + roleId,
     method: 'delete'
-  })
+  }))
 }
 
 // 查询角色已授权用户列表
@@ -85,29 +86,29 @@ export function unallocatedUserList(query) {
 
 // 取消用户授权角色
 export function authUserCancel(data) {
-  return request({
+  return bootstrapCsrf().then(() => request({
     url: '/system/role/authUser/cancel',
     method: 'put',
     data: data
-  })
+  }))
 }
 
 // 批量取消用户授权角色
 export function authUserCancelAll(data) {
-  return request({
+  return bootstrapCsrf().then(() => request({
     url: '/system/role/authUser/cancelAll',
     method: 'put',
     params: data
-  })
+  }))
 }
 
 // 授权用户选择
 export function authUserSelectAll(data) {
-  return request({
+  return bootstrapCsrf().then(() => request({
     url: '/system/role/authUser/selectAll',
     method: 'put',
     params: data
-  })
+  }))
 }
 
 // 根据角色ID查询部门树结构

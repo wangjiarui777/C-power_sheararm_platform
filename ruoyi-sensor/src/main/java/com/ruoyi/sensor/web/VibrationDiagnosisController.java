@@ -1091,7 +1091,8 @@ public class VibrationDiagnosisController
     @GetMapping("/inference/history")
     public AjaxResult inferenceHistory(@RequestParam(required = false, name = "start_time") String startTime,
         @RequestParam(required = false, name = "end_time") String endTime,
-        @RequestParam(required = false, name = "device_code") String deviceCode)
+        @RequestParam(required = false, name = "device_code") String deviceCode,
+        @RequestParam(required = false, name = "sourceType") String sourceType)
     {
         PhmService.DateRange range = new PhmService.DateRange(
             startTime == null ? null : DateUtils.parseDate(startTime),
@@ -1102,6 +1103,8 @@ public class VibrationDiagnosisController
             .collect(java.util.stream.Collectors.toSet());
         return AjaxResult.success(rows.stream()
             .filter(item -> accessibleCodes.contains(item.getDeviceCode()))
+            .filter(item -> sourceType == null || sourceType.isBlank()
+                || sourceType.equalsIgnoreCase(item.getSourceType()))
             .collect(java.util.stream.Collectors.toList()));
     }
 

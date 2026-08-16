@@ -24,7 +24,7 @@ The signed offline bundle must contain:
 
 - JRE 17 and the pinned Python runtime/wheels;
 - `ruoyi-admin.jar`, frontend `dist`, Nginx and WinSW;
-- the unified inference service and model artifacts;
+- the gear and bearing inference services plus model artifacts;
 - Flyway migrations, model SHA-256 manifest and SBOM;
 - the reliable edge gateway reference JAR and its deployment guide;
 
@@ -33,3 +33,10 @@ fixed wheelhouse, WinSW and a code-signing certificate with a private key. It em
 `phm-<version>.zip`, detached `p7s` signature and the public signing certificate.
 Run `verify-offline-package.ps1` before extracting or installing the package.
 - these service definitions, backup scripts and smoke tests.
+
+Production inference uses `phm-infer-gear` on loopback port 5001 and
+`phm-infer-bearing` on loopback port 5002. The legacy `phm-inference` service
+and port 5000 remain available only for local development. The Java platform
+does not have a hard WinSW dependency on either model service; a missing model
+worker is reported as a degraded diagnosis capability while frame persistence
+continues.

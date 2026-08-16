@@ -52,6 +52,7 @@ class InferenceServiceContractTest(unittest.TestCase):
         }
         self.assertEqual(routes, {
             ("POST", "/internal/infer"),
+            ("POST", "/internal/infer/batch"),
             ("GET", "/internal/health/live"),
             ("GET", "/internal/health/ready"),
             ("GET", "/internal/metrics"),
@@ -107,6 +108,26 @@ class InferenceServiceContractTest(unittest.TestCase):
         with self.assertRaises(HTTPException) as error:
             service.infer({"modelType": "gear", "filePath": "missing.npy"})
         self.assertEqual(error.exception.status_code, 400)
+
+    def test_batch_isolates_item_failures(self):
+        with patch.object(service, "infer", side_effect=[
+            {"success": True, "data": {"diagnosisName": "正常"}},
+            HTTPException(status_code=422, detail="model unavailable"),
+        ]):
+            response = service.infer_batch({"items": [
+                {"requestId": "r1", "taskId": 1, "modelType": "gear"},
+                {"requestId": "r2", "taskId": 2, "modelType": "bearing"},
+            ]})
+        self.assertTrue(response["success"])
+        self.assertTrue(response["results"][0]["success"])
+        self.assertFalse(response["results"][1]["success"])
+        self.assertEqual(response["results"][1]["errorCode"], "HTTP_422")
+
+    def test_batch_rejects_oversized_item_count(self):
+        with patch.object(service, "INFERENCE_BATCH_MAX_ITEMS", 1):
+            with self.assertRaises(HTTPException) as error:
+                service.infer_batch({"items": [{}, {}]})
+        self.assertEqual(error.exception.status_code, 413)
 
     def test_infer_rejects_absolute_path_outside_allowlist(self):
         with tempfile.TemporaryDirectory() as directory:

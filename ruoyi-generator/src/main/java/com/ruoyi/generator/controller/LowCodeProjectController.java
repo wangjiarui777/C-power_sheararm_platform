@@ -18,6 +18,7 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.generator.lowcode.LowCodeProjectService;
 import com.ruoyi.generator.lowcode.LowCodeToolingService;
 import com.ruoyi.generator.lowcode.LowCodeTablePolicy;
+import com.ruoyi.generator.lowcode.LowCodePipelineService;
 
 @RestController
 @RequestMapping("/tool/lowcode/projects")
@@ -26,11 +27,30 @@ public class LowCodeProjectController extends BaseController
     private final LowCodeProjectService projects;
     private final LowCodeToolingService tooling;
     private final LowCodeTablePolicy tablePolicy;
+    private final LowCodePipelineService pipelines;
 
-    public LowCodeProjectController(LowCodeProjectService projects, LowCodeToolingService tooling, LowCodeTablePolicy tablePolicy)
-    { this.projects = projects; this.tooling = tooling; this.tablePolicy = tablePolicy; }
+    public LowCodeProjectController(LowCodeProjectService projects, LowCodeToolingService tooling, LowCodeTablePolicy tablePolicy, LowCodePipelineService pipelines)
+    { this.projects = projects; this.tooling = tooling; this.tablePolicy = tablePolicy; this.pipelines = pipelines; }
 
     @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
+    @GetMapping("/{id}/pipeline/status") public AjaxResult pipelineStatus(@PathVariable Long id) { return success(pipelines.status(id)); }
+
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
+    @GetMapping("/{id}/pipeline/runs") public AjaxResult pipelineRuns(@PathVariable Long id) { return success(pipelines.runs(id, 50)); }
+
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:test')")
+    @Log(title = "工业诊断管道试运行", businessType = BusinessType.UPDATE)
+    @PostMapping("/{id}/pipeline/test") public AjaxResult pipelineTest(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> request) { return success(pipelines.test(id, request == null ? Map.of() : request)); }
+
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:activate')")
+    @Log(title = "工业诊断管道启用", businessType = BusinessType.UPDATE)
+    @PostMapping("/{id}/pipeline/activate") public AjaxResult pipelineActivate(@PathVariable Long id) { return success(pipelines.activate(id)); }
+
+    @PreAuthorize("@ss.hasPermi('tool:lowcode:activate')")
+    @Log(title = "工业诊断管道停用", businessType = BusinessType.UPDATE)
+    @PostMapping("/{id}/pipeline/deactivate") public AjaxResult pipelineDeactivate(@PathVariable Long id) { return success(pipelines.deactivate(id)); }
+
+@PreAuthorize("@ss.hasPermi('tool:lowcode:design')")
     @GetMapping public AjaxResult list() { return success(projects.list()); }
 
     @PreAuthorize("@ss.hasPermi('tool:lowcode:design')")

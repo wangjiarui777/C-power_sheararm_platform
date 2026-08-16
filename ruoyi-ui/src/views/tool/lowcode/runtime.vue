@@ -13,13 +13,13 @@
     </el-form>
 
     <section v-if="hasRegion('list')" class="data-panel">
-      <div class="panel-title"><div><b>数据记录</b><span>{{ total }} 条</span></div><el-button v-if="schema.writeEnabled" type="primary" icon="el-icon-plus" @click="openCreate">新增记录</el-button></div>
+      <div class="panel-title"><div><b>数据记录</b><span>{{ total }} 条</span></div><el-button v-if="schema.writeEnabled" v-hasPermi="['lowcode:runtime:add']" type="primary" icon="el-icon-plus" @click="openCreate">新增记录</el-button></div>
       <el-table :data="rows" stripe>
         <el-table-column v-for="field in listFields" :key="field.name" :prop="field.name" :label="field.label || field.name" :min-width="field.width || 130" show-overflow-tooltip>
           <template slot-scope="scope"><el-switch v-if="field.type === 'switch'" :value="Boolean(scope.row[field.name])" disabled /><span v-else>{{ displayValue(scope.row[field.name]) }}</span></template>
         </el-table-column>
         <el-table-column v-if="schema.writeEnabled || manualActions.length" label="操作" width="230" fixed="right">
-          <template slot-scope="scope"><el-button v-if="schema.writeEnabled" type="text" @click="openEdit(scope.row)">编辑</el-button><el-button v-for="action in manualActions" :key="action.code" type="text" @click="runAction(action, scope.row)">{{ action.label || action.code }}</el-button><el-button v-if="schema.writeEnabled" type="text" class="danger" @click="remove(scope.row)">删除</el-button></template>
+          <template slot-scope="scope"><el-button v-if="schema.writeEnabled" v-hasPermi="['lowcode:runtime:edit']" type="text" @click="openEdit(scope.row)">编辑</el-button><el-button v-for="action in manualActions" v-hasPermi="['lowcode:runtime:action']" :key="action.code" type="text" @click="runAction(action, scope.row)">{{ action.label || action.code }}</el-button><el-button v-if="schema.writeEnabled" v-hasPermi="['lowcode:runtime:remove']" type="text" class="danger" @click="remove(scope.row)">删除</el-button></template>
         </el-table-column>
       </el-table>
       <pagination v-show="total > 0" :total="total" :page.sync="query.pageNum" :limit.sync="query.pageSize" @pagination="loadRecords" />
@@ -36,7 +36,7 @@
           <el-input v-else v-model="form[field.name]" :disabled="readOnly(field)" />
         </el-form-item>
       </el-form>
-      <span slot="footer"><el-button @click="formVisible = false">取消</el-button><el-button type="primary" @click="submit">保存</el-button></span>
+      <span slot="footer"><el-button @click="formVisible = false">取消</el-button><el-button v-hasPermi="['lowcode:runtime:add', 'lowcode:runtime:edit']" type="primary" @click="submit">保存</el-button></span>
     </el-dialog>
   </div>
 </template>

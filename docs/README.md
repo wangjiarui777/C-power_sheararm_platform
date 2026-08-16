@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-本项目基于 **若依（RuoYi-Vue）前后端分离框架 3.9.2** 深度改造，面向 **工业设备健康管理（PHM）** 场景，提供设备/测点管理、振动与温度实时监测、齿轮/轴承智能诊断、告警事件报表、历史数据下载、IoTDB 时序存储、低代码工作台与 Windows 离线部署能力。
+本项目基于 **若依（RuoYi-Vue）前后端分离框架 3.9.2** 深度改造，面向 **工业设备健康管理（PHM）** 场景，提供设备/测点管理、振动与温度实时监测、齿轮/轴承智能诊断、告警事件报表、历史数据下载、IoTDB 时序存储、低代码工作台与 Windows 离线部署能力。实时诊断支持同一测点配置多个模型，生产按齿轮/轴承拆分为独立推理 worker。
 
 技术体系：**Spring Boot 3 + MyBatis/MyBatis-Plus + Spring WebSocket + Redis Stream + IoTDB + Vue 2 + FastAPI/PyTorch**。
 
@@ -27,6 +27,8 @@
 - 告警规则、告警处理、设备事件、实时/历史报表与 CSV 导出
 - 齿轮、轴承模型推理（FastAPI + PyTorch，模型清单 + SHA-256 校验）
 - 单点诊断、批量诊断、诊断任务历史、历史数据下载
+- 多测点多模型实时诊断：窗口缓冲、Redis 任务流、动态批量推理、截止时间、有限重试、Pending 接管和告警/WebSocket 联动
+- 实时策略管理：`/sensor/diagnosis/realtime/policies`、`/sensor/diagnosis/realtime/status`
 - MySQL→IoTDB 诊断结果同步（outbox + 重试 + 租约），IoTDB 主读、MySQL 回退
 
 ### 4. 时序存储（IoTDB 2 Table 模型）
@@ -98,7 +100,9 @@ Spring Boot 应用（ruoyi-admin）
    ├── Redis（会话、Stream、DLQ、去重）
    ├── IoTDB（时序投影，6667/10710）
    ├── 附件目录 / 模型目录（.local-models，SHA-256 校验）
-   └── FastAPI 推理服务（127.0.0.1:5000，/internal/*）
+   ├── FastAPI 统一开发推理服务（127.0.0.1:5000，/internal/*）
+   ├── 生产齿轮推理 worker（127.0.0.1:5001，/internal/infer/batch）
+   └── 生产轴承推理 worker（127.0.0.1:5002，/internal/infer/batch）
 ```
 
 ### 关键设计
@@ -106,6 +110,9 @@ Spring Boot 应用（ruoyi-admin）
 - **异步管道**：遥测/帧消息先入 Redis Stream，消费者落库、写 IoTDB、推送 WS，失败进 DLQ
 - **双写一致**：诊断记录 MySQL 为准，IoTDB 为投影，outbox + 租约同步，读时可回退
 - **安全默认**：会话 Cookie、CSRF、数据范围、附件所有权、低代码白名单、模型哈希
+- **实时可靠性**：采集持久化链路与诊断链路隔离；Redis AOF、ACK、`XPENDING/XCLAIM`、截止时间和有限重试保证实时新鲜度
+
+完整部署实施方案见 [`REALTIME_DIAGNOSIS_UPGRADE_PLAN.md`](../REALTIME_DIAGNOSIS_UPGRADE_PLAN.md)。
 
 ## 主要模块说明
 
@@ -134,7 +141,7 @@ Spring Boot 应用（ruoyi-admin）
 独立 Maven 模块（`vibration-simulator`），可靠边缘网关参考实现：磁盘优先持久化、断网补传、HMAC 认证。
 
 ### `ruoyi-sensor/inference`
-独立 FastAPI/PyTorch 推理服务：齿轮/轴承模型加载、`/internal/*` 内部接口、模型清单与 SHA-256 校验。
+独立 FastAPI/PyTorch 推理服务：齿轮/轴承模型加载、`/internal/*` 内部接口、模型清单与 SHA-256 校验。开发环境统一运行在 5000；生产由 WinSW 分别运行 `phm-infer-gear:5001` 和 `phm-infer-bearing:5002`，并启用 `POST /internal/infer/batch`。
 
 ## 快速启动（Windows 开发环境）
 
@@ -165,7 +172,7 @@ npm ci
 .\start-all.ps1
 ```
 
-脚本按依赖顺序完成：环境/模型/SHA 校验 → MySQL/Redis 检查（含 Streams 能力）→ 旧进程清理 → Maven 构建 → 启动 IoTDB、FastAPI（5000）、Spring Boot（8080，dev profile）、Vue（80）→ 就绪检查 → 写日志与 PID。
+脚本按依赖顺序完成：环境/模型/SHA 校验 → MySQL/Redis 检查（含 Streams 能力）→ 旧进程清理 → Maven 构建 → 启动 IoTDB、统一 FastAPI（5000）、Spring Boot（8080，dev profile）、Vue（80）→ 就绪检查 → 写日志与 PID。生产双 worker 由 WinSW 服务定义管理。
 
 常用参数：
 
@@ -188,6 +195,7 @@ RuoYi-Vue-master
 │   └── sensor/inference     FastAPI 推理服务
 ├── ruoyi-ui                 前端（Vue 2）
 ├── deployment               离线部署、Nginx、WinSW、监控、协议文档
+├── docs                     项目总览、实时诊断部署方案与运维说明
 ├── sql                      历史 SQL（空库安装/溯源，非生产迁移）
 ├── .local-models            模型制品（不提交）
 ├── .local-data              附件、上传、日志、PID（不提交）
@@ -215,11 +223,15 @@ npm run test:e2e
 ## 生产部署要点
 
 - 生产经 Nginx（HTTPS）对外，Java/Python 仅绑定内部地址；
+- 生产推理拆分为 `phm-infer-gear:5001` 与 `phm-infer-bearing:5002`；Java 不因单个推理 worker 不可用而停止采集和存储；
+- Redis 实时任务流启用 AOF（`everysec`），任务以 10 秒截止时间和最多两次尝试保障新鲜度，过期任务不补发陈旧告警；
+- 仅 Nginx 443 对用户开放；8891 仅允许采集网段，5001/5002、Java 管理端口、Redis、MySQL、IoTDB 不对用户开放；
 - MySQL、Redis、IoTDB 与采集端口受防火墙限制；
 - 使用 `.env` 注入真实秘密（`MYSQL_PASSWORD`、`SENSOR_INFERENCE_INTERNAL_TOKEN`、`SENSOR_COLLECTOR_MASTER_KEY` 等），严禁沿用开发默认值；
 - 首次启动通过 `INITIAL_ADMIN_PASSWORD` 初始化管理员并强制改密；
 - 低代码生产必须配置独立 `LOWCODE_DB_*` 账号与出站代理，写默认关闭；
 - 离线部署步骤见 `deployment/README.md` 与 `deployment/BACKUP-RESTORE.md`；
+- 实时诊断部署、迁移、接口和验收矩阵见 `REALTIME_DIAGNOSIS_UPGRADE_PLAN.md`；
 - 发布前按 `SECURITY_REMEDIATION_TRACKER.md` 的“发布前外部关闭项”逐项完成。
 
 ## 适用场景

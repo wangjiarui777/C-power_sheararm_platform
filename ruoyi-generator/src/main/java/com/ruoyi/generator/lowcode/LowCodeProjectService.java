@@ -64,7 +64,7 @@ public class LowCodeProjectService
         String appCode = requiredCode(request.get("appCode"), "appCode");
         String name = requiredText(request.get("projectName"), "projectName", 128);
         String preset = String.valueOf(request.getOrDefault("preset", "generic-crud"));
-        if (!preset.equals("generic-crud") && !preset.equals("sensor-diagnosis"))
+        if (!preset.equals("generic-crud") && !preset.equals("sensor-diagnosis") && !preset.equals("sensor-diagnosis-pipeline"))
         {
             throw new IllegalArgumentException("不支持的低代码预置: " + preset);
         }

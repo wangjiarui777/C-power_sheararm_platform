@@ -13,13 +13,16 @@ sensor:
   websocket:
     allowed-origins: ${SENSOR_WS_ALLOWED_ORIGINS}
   inference:
-    gear-url: ${SENSOR_INFER_URL}
-    bearing-url: ${SENSOR_INFER_URL}
+    gear-url: ${SENSOR_GEAR_INFER_URL:http://127.0.0.1:5001/internal/infer}
+    bearing-url: ${SENSOR_BEARING_INFER_URL:http://127.0.0.1:5002/internal/infer}
+    gear-model-version: ${GEAR_MODEL_VERSION:gear-unregistered}
+    bearing-model-version: ${BEARING_MODEL_VERSION:bearing-unregistered}
     internal-token: ${SENSOR_INFERENCE_INTERNAL_TOKEN}
     default-device-code: ""
     default-model-type: gear
   health:
-    inference-required: true
+    # 推理进程故障时 Java 仍保持采集/存储可用，由实时诊断状态接口报告降级。
+    inference-required: ${SENSOR_INFERENCE_REQUIRED:false}
   startup:
     inference:
       enabled: false

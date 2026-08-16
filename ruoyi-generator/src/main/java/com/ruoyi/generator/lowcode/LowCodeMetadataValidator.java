@@ -50,13 +50,96 @@ public class LowCodeMetadataValidator
             return result(errors, warnings);
         }
         if (root.getIntValue("schemaVersion") != 2) errors.add(issue("SCHEMA_VERSION", "schemaVersion 必须为 2", "schemaVersion"));
+        String appType = root.getString("appType");
+        if (appType == null || appType.isBlank()) appType = "DATA_APP";
         JSONObject model = root.getJSONObject("model");
-        if (model == null) errors.add(issue("MODEL_REQUIRED", "缺少数据模型", "model"));
-        else validateModel(model, errors, warnings);
+        if ("SENSOR_DIAGNOSIS_PIPELINE".equals(appType))
+        {
+            validatePipeline(root.getJSONObject("pipeline"), errors, warnings);
+        }
+        else
+        {
+            if (model == null) errors.add(issue("MODEL_REQUIRED", "缺少数据模型", "model"));
+            else validateModel(model, errors, warnings);
+        }
         validatePermissions(root.getJSONObject("permissions"), model, errors);
         validateRules(root.getJSONArray("rules"), model, errors);
         validateActions(root.getJSONArray("actions"), errors);
         return result(errors, warnings);
+    }
+
+    private void validatePipeline(JSONObject pipeline, List<Map<String, Object>> errors,
+        List<Map<String, Object>> warnings)
+    {
+        if (pipeline == null)
+        {
+            errors.add(issue("PIPELINE_REQUIRED", "缺少工业诊断管道配置", "pipeline"));
+            return;
+        }
+        com.alibaba.fastjson2.JSONArray bindings = pipeline.getJSONArray("bindings");
+        if (bindings == null || bindings.isEmpty())
+        {
+            errors.add(issue("PIPELINE_BINDINGS_REQUIRED", "至少配置一个测点绑定", "pipeline.bindings"));
+        }
+        else if (bindings.size() > 8)
+        {
+            errors.add(issue("PIPELINE_BINDINGS_LIMIT", "单条管道最多配置 8 个测点", "pipeline.bindings"));
+        }
+        if (bindings != null)
+        {
+            Set<String> points = new HashSet<>();
+            bindings.forEach(raw -> {
+                JSONObject binding = (JSONObject) raw;
+                String pointId = binding.getString("pointId");
+                if (pointId == null || !pointId.matches("\\d+"))
+                    errors.add(issue("PIPELINE_POINT_INVALID", "测点 ID 必须为数字", "pipeline.bindings"));
+                if (pointId != null && !points.add(pointId))
+                    errors.add(issue("PIPELINE_POINT_DUPLICATE", "同一测点不能重复绑定", "pipeline.bindings"));
+                String channelId = binding.getString("acquisitionChannelId");
+                if (channelId == null || !channelId.matches("\\d+"))
+                    errors.add(issue("PIPELINE_CHANNEL_INVALID", "采集通道 ID 必须为数字", "pipeline.bindings"));
+                JSONObject diagnosis = binding.getJSONObject("diagnosis");
+                if (diagnosis == null)
+                {
+                    errors.add(issue("PIPELINE_DIAGNOSIS_REQUIRED", "测点缺少诊断模型配置", "pipeline.bindings"));
+                }
+                else
+                {
+                    String type = diagnosis.getString("modelType");
+                    if (!Set.of("gear", "bearing").contains(type))
+                        errors.add(issue("PIPELINE_MODEL_TYPE_INVALID", "模型类型仅支持 gear 或 bearing", "pipeline.bindings.diagnosis"));
+                    if (diagnosis.get("modelReleaseId") == null || diagnosis.getString("modelVersion") == null
+                        || diagnosis.getString("modelVersion").isBlank())
+                        errors.add(issue("PIPELINE_MODEL_VERSION_REQUIRED", "必须固定具体模型版本", "pipeline.bindings.diagnosis"));
+                    int window = diagnosis.getIntValue("windowSize");
+                    if (window < 128 || window > 262144)
+                        errors.add(issue("PIPELINE_WINDOW_INVALID", "诊断窗口必须在 128 到 262144 之间", "pipeline.bindings.diagnosis.windowSize"));
+                }
+            });
+        }
+        JSONObject iotdb = pipeline.getJSONObject("iotdb");
+        if (iotdb == null || !databaseIdentifier(iotdb.getString("database"))
+            || !databaseIdentifier(iotdb.getString("table")))
+            errors.add(issue("PIPELINE_IOTDB_INVALID", "IoTDB 数据库和表名不合法", "pipeline.iotdb"));
+        else
+        {
+            JSONObject mapping = iotdb.getJSONObject("fieldMapping");
+            for (String field : List.of("waveform", "sampleRate", "sampleCount", "quality", "sequence"))
+                if (mapping == null || !databaseIdentifier(mapping.getString(field)))
+                    errors.add(issue("PIPELINE_IOTDB_FIELD_REQUIRED", "IoTDB 字段映射缺少 " + field, "pipeline.iotdb.fieldMapping"));
+            int maxAge = iotdb.getIntValue("maxFrameAgeSeconds");
+            if (maxAge < 1 || maxAge > 86400)
+                errors.add(issue("PIPELINE_FRAME_AGE_INVALID", "振动帧最大年龄必须在 1 秒到 24 小时之间", "pipeline.iotdb.maxFrameAgeSeconds"));
+        }
+        JSONObject schedule = pipeline.getJSONObject("trigger") == null ? null
+            : pipeline.getJSONObject("trigger").getJSONObject("schedule");
+        if (schedule != null)
+        {
+            String cron = schedule.getString("cron");
+            if (cron == null || cron.isBlank()) errors.add(issue("PIPELINE_CRON_REQUIRED", "定时诊断必须配置 Cron", "pipeline.trigger.schedule.cron"));
+            String zone = schedule.getString("timeZone");
+            if (zone == null || zone.isBlank()) warnings.add(issue("PIPELINE_TIMEZONE_DEFAULT", "未配置时区，将使用 Asia/Hong_Kong", "pipeline.trigger.schedule.timeZone"));
+        }
     }
 
     private void validateModel(JSONObject model, List<Map<String, Object>> errors, List<Map<String, Object>> warnings)

@@ -68,7 +68,7 @@
           plain
           icon="el-icon-edit"
           size="mini"
-          :disabled="single"
+          :disabled="single || protectedSelection"
           @click="handleUpdate"
           v-hasPermi="['system:role:edit']"
         >修改</el-button>
@@ -79,7 +79,7 @@
           plain
           icon="el-icon-delete"
           size="mini"
-          :disabled="multiple"
+          :disabled="multiple || protectedSelection"
           @click="handleDelete"
           v-hasPermi="['system:role:remove']"
         >删除</el-button>
@@ -109,6 +109,7 @@
             v-model="scope.row.status"
             active-value="0"
             inactive-value="1"
+            :disabled="isProtectedRole(scope.row)"
             @change="handleStatusChange(scope.row)"
           ></el-switch>
         </template>
@@ -268,6 +269,8 @@ export default {
       single: true,
       // 非多个禁用
       multiple: true,
+      // 超级管理员角色只能查看，不能编辑、删除或停用
+      protectedSelection: false,
       // 显示搜索条件
       showSearch: true,
       // 总条数
@@ -395,6 +398,10 @@ export default {
     },
     // 角色状态修改
     handleStatusChange(row) {
+      if (this.isProtectedRole(row)) {
+        this.$modal.msgWarning("不允许操作超级管理员角色")
+        return
+      }
       let text = row.status === "0" ? "启用" : "停用"
       this.$modal.confirm('确认要"' + text + '""' + row.roleName + '"角色吗？').then(function() {
         return changeRoleStatus(row.roleId, row.status)
@@ -453,6 +460,10 @@ export default {
       this.ids = selection.map(item => item.roleId)
       this.single = selection.length != 1
       this.multiple = !selection.length
+      this.protectedSelection = selection.some(item => this.isProtectedRole(item))
+    },
+    isProtectedRole(role) {
+      return !!role && (String(role.roleId) === "1" || role.roleKey === "admin")
     },
     // 更多操作触发
     handleCommand(command, row) {
@@ -506,8 +517,13 @@ export default {
     },
     /** 修改按钮操作 */
     handleUpdate(row) {
+      const roleId = row && row.roleId ? row.roleId : this.ids[0]
+      const target = row || this.roleList.find(item => String(item.roleId) === String(roleId))
+      if (this.isProtectedRole(target)) {
+        this.$modal.msgWarning("不允许操作超级管理员角色")
+        return
+      }
       this.reset()
-      const roleId = row.roleId || this.ids
       const roleMenu = this.getRoleMenuTreeselect(roleId)
       getRole(roleId).then(response => {
         this.form = response.data
@@ -533,6 +549,10 @@ export default {
     },
     /** 分配数据权限操作 */
     handleDataScope(row) {
+      if (this.isProtectedRole(row)) {
+        this.$modal.msgWarning("不允许操作超级管理员角色")
+        return
+      }
       this.reset()
       const deptTreeSelect = this.getDeptTree(row.roleId)
       getRole(row.roleId).then(response => {
@@ -553,6 +573,10 @@ export default {
     },
     /** 提交按钮 */
     submitForm() {
+      if (this.isProtectedRole(this.form)) {
+        this.$modal.msgWarning("不允许操作超级管理员角色")
+        return
+      }
       this.$refs["form"].validate(valid => {
         if (valid) {
           if (this.form.roleId != undefined) {
@@ -575,6 +599,10 @@ export default {
     },
     /** 提交按钮（数据权限） */
     submitDataScope() {
+      if (this.isProtectedRole(this.form)) {
+        this.$modal.msgWarning("不允许操作超级管理员角色")
+        return
+      }
       if (this.form.roleId != undefined) {
         this.form.deptIds = this.getDeptAllCheckedKeys()
         dataScope(this.form).then(() => {
@@ -586,7 +614,12 @@ export default {
     },
     /** 删除按钮操作 */
     handleDelete(row) {
-      const roleIds = row.roleId || this.ids
+      const roleIds = row && row.roleId ? row.roleId : this.ids
+      const targetIds = Array.isArray(roleIds) ? roleIds : [roleIds]
+      if (targetIds.some(id => String(id) === "1")) {
+        this.$modal.msgWarning("不允许操作超级管理员角色")
+        return
+      }
       this.$modal.confirm('是否确认删除角色编号为"' + roleIds + '"的数据项？').then(function() {
         return delRole(roleIds)
       }).then(() => {

@@ -125,7 +125,15 @@ CONFIDENCE_MIN = 1.0
 CONFIDENCE_MAX = 99.0
 CACHE_MAX_SIZE = 32
 VALID_MODEL_TYPES = {"gear", "bearing"}
+_enabled_model_values = {
+    value.strip().lower()
+    for value in os.environ.get("INFERENCE_ENABLED_MODELS", "gear,bearing").split(",")
+    if value.strip()
+}
+ENABLED_MODELS = _enabled_model_values.intersection(VALID_MODEL_TYPES) or set(VALID_MODEL_TYPES)
 INFERENCE_WORKERS = max(1, int(os.environ.get("INFERENCE_WORKERS", "1")))
+MAX_RAW_SIGNAL_SAMPLES = max(1024, int(os.environ.get("INFERENCE_MAX_RAW_SIGNAL_SAMPLES", "262144")))
+INFERENCE_BATCH_MAX_ITEMS = max(1, int(os.environ.get("INFERENCE_BATCH_MAX_ITEMS", "8")))
 BEARING_CLASS_CN_MAP = {
     "N": "正常",
     "normal": "正常",
@@ -147,8 +155,24 @@ BEARING_CLASS_CN_MAP = {
 _response_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _model_bundle_cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
 _inference_executor = ThreadPoolExecutor(max_workers=INFERENCE_WORKERS, thread_name_prefix="inference-worker")
-_model_inference_lock = threading.Lock()
+_gear_inference_lock = threading.Lock()
+_bearing_inference_lock = threading.Lock()
 _model_cache_lock = threading.Lock()
+_batch_requests = Counter(
+    "phm_inference_batch_requests_total",
+    "Realtime inference batch requests",
+    ("status",),
+)
+_batch_items = Counter(
+    "phm_inference_batch_items_total",
+    "Realtime inference batch items",
+    ("model_type", "status"),
+)
+_model_duration = Histogram(
+    "phm_inference_model_duration_seconds",
+    "Inference duration by model type",
+    ("model_type",),
+)
 
 # =============================================================================
 # FastAPI 应用
@@ -164,30 +188,41 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("INFERENCE_INTERNAL_TOKEN must contain at least 32 UTF-8 bytes.")
 
     # Models are isolated: one broken artifact must not make the other model unusable.
-    logger.info("Loading gear model from %s", GEAR_MODEL_PATH)
-    try:
-        gear_model, gear_model_params, gear_class_names, gear_classwise_cfg = load_gear_model()
-        model_load_errors.pop("gear", None)
-        logger.info("Gear model loaded on %s", DEVICE)
-    except Exception as exc:
+    if "gear" in ENABLED_MODELS:
+        logger.info("Loading gear model from %s", GEAR_MODEL_PATH)
+        try:
+            gear_model, gear_model_params, gear_class_names, gear_classwise_cfg = load_gear_model()
+            model_load_errors.pop("gear", None)
+            logger.info("Gear model loaded on %s", DEVICE)
+        except Exception as exc:
+            gear_model = None
+            gear_model_params = {}
+            gear_class_names = []
+            gear_classwise_cfg = {}
+            model_load_errors["gear"] = str(exc)
+            logger.exception("Gear model failed to load")
+    else:
         gear_model = None
         gear_model_params = {}
         gear_class_names = []
         gear_classwise_cfg = {}
-        model_load_errors["gear"] = str(exc)
-        logger.exception("Gear model failed to load")
 
-    logger.info("Loading bearing model from %s", BEARING_MODEL_PATH)
-    try:
-        bearing_model, bearing_model_params, bearing_class_names = load_bearing_model()
-        model_load_errors.pop("bearing", None)
-        logger.info("Bearing model loaded on %s", DEVICE)
-    except Exception as exc:
+    if "bearing" in ENABLED_MODELS:
+        logger.info("Loading bearing model from %s", BEARING_MODEL_PATH)
+        try:
+            bearing_model, bearing_model_params, bearing_class_names = load_bearing_model()
+            model_load_errors.pop("bearing", None)
+            logger.info("Bearing model loaded on %s", DEVICE)
+        except Exception as exc:
+            bearing_model = None
+            bearing_model_params = {}
+            bearing_class_names = []
+            model_load_errors["bearing"] = str(exc)
+            logger.exception("Bearing model failed to load")
+    else:
         bearing_model = None
         bearing_model_params = {}
         bearing_class_names = []
-        model_load_errors["bearing"] = str(exc)
-        logger.exception("Bearing model failed to load")
 
     CLASS_FILE_UNK_OVERRIDES = v6.parse_class_threshold_overrides(
         "healthy:0.70,single_pitting:0.85,multi_pitting:0.85,single_spalling:0.85"
@@ -1132,7 +1167,8 @@ def _run_analysis(
     params = selected["params"]
     extra_payload["modelVersion"] = selected["version"]
 
-    with _model_inference_lock:
+    inference_lock = _gear_inference_lock if model_type == "gear" else _bearing_inference_lock
+    with inference_lock:
         if model_type == "gear":
             fs = float(extra_payload.get("sample_rate") or extra_payload.get("sampleRate")
                        or params.get("fs", 5120.0))
@@ -1156,11 +1192,13 @@ def _run_analysis(
 
 
 def _build_health_payload() -> Dict[str, Any]:
-    loaded_count = int(gear_model is not None) + int(bearing_model is not None)
+    loaded_count = sum(int(model in ENABLED_MODELS and globals().get(f"{model}_model") is not None)
+                       for model in VALID_MODEL_TYPES)
+    expected_count = len(ENABLED_MODELS)
     return {
-        "status": "ok" if loaded_count == 2 else ("degraded" if loaded_count == 1 else "unavailable"),
+        "status": "ok" if loaded_count == expected_count else ("degraded" if loaded_count else "unavailable"),
         "device": str(DEVICE),
-        "model_loaded": gear_model is not None and bearing_model is not None,
+        "model_loaded": loaded_count == expected_count,
         "gear_model_loaded": gear_model is not None,
         "bearing_model_loaded": bearing_model is not None,
         "gear_model_version": GEAR_MODEL_VERSION,
@@ -1179,6 +1217,9 @@ def _build_health_payload() -> Dict[str, Any]:
         "gear_params": gear_model_params,
         "bearing_params": bearing_model_params,
         "model_errors": dict(model_load_errors),
+        "batch_endpoint": True,
+        "workers": INFERENCE_WORKERS,
+        "enabled_models": sorted(ENABLED_MODELS),
     }
 
 
@@ -1221,10 +1262,24 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     logger.info("Inference request accepted", extra=log_context)
 
     file_path = str(payload.get("filePath") or "")
-    if not file_path:
-        raise HTTPException(status_code=400, detail="filePath is required.")
-
-    source_path = _resolve_trusted_input_path(file_path)
+    raw_signal_payload = payload.get("rawSignal")
+    if file_path and raw_signal_payload is not None:
+        raise HTTPException(status_code=400, detail="filePath and rawSignal are mutually exclusive.")
+    if not file_path and raw_signal_payload is None:
+        raise HTTPException(status_code=400, detail="filePath or rawSignal is required.")
+    source_path = _resolve_trusted_input_path(file_path) if file_path else None
+    if raw_signal_payload is not None:
+        if not isinstance(raw_signal_payload, list) or not raw_signal_payload:
+            raise HTTPException(status_code=400, detail="rawSignal must be a non-empty array.")
+        if len(raw_signal_payload) > MAX_RAW_SIGNAL_SAMPLES:
+            raise HTTPException(status_code=413, detail="rawSignal exceeds the configured sample limit.")
+        try:
+            raw_signal = np.asarray(raw_signal_payload, dtype=np.float64).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="rawSignal must contain numeric values.") from exc
+        if not np.isfinite(raw_signal).all():
+            raise HTTPException(status_code=400, detail="rawSignal contains NaN or infinite values.")
+    started_at = time.perf_counter()
     try:
         model_bundle = _load_model_bundle(
             model_type,
@@ -1241,23 +1296,29 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
             params.get("signal_key", "DE_time") if model_type == "bearing"
             else params.get("signal_key", "sig_acc_5120")
         )
-        raw_signal, _, file_meta = _load_signal_from_path(source_path, preferred_key)
+        if source_path is not None:
+            raw_signal, _, file_meta = _load_signal_from_path(source_path, preferred_key)
+        else:
+            file_meta = {}
         extra = {
-            "filename": payload.get("filename") or source_path.name,
+            "filename": payload.get("filename") or (source_path.name if source_path else "iotdb-vibration-frame.npy"),
         }
+        if payload.get("sampleRate") or payload.get("sample_rate"):
+            extra["sample_rate"] = float(payload.get("sampleRate") or payload.get("sample_rate"))
+            extra["sampleRate"] = extra["sample_rate"]
         if file_meta.get("sample_rate"):
             extra["sample_rate"] = float(file_meta["sample_rate"])
             extra["sampleRate"] = float(file_meta["sample_rate"])
         return _run_analysis(
             model_type,
             raw_signal,
-            source_path.name,
+            source_path.name if source_path else "iotdb-vibration-frame",
             payload.get("analysisMode", f"{model_type}_infer"),
             extra=extra,
             model_bundle=model_bundle,
         )
 
-    result = dict(_get_cached_or_compute(
+    result = dict(_compute() if source_path is None else _get_cached_or_compute(
         source_path, model_type, model_bundle["version"], _compute))
     result.update({
         "taskId": payload.get("taskId"),
@@ -1265,14 +1326,68 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
         "deviceCode": payload.get("deviceCode"),
         "pointId": payload.get("pointId"),
         "channelId": payload.get("channelId"),
-        "filename": payload.get("filename") or source_path.name,
+        "filename": payload.get("filename") or (source_path.name if source_path else "iotdb-vibration-frame.npy"),
         "batchId": payload.get("batchId"),
         "sampleTime": payload.get("sampleTime"),
         "modelType": model_type,
         "modelVersion": model_bundle["version"],
     })
+    _model_duration.labels(model_type=model_type).observe(time.perf_counter() - started_at)
     logger.info("Inference request completed", extra=log_context)
     return {"success": True, "data": result}
+
+
+@app.post("/internal/infer/batch", dependencies=[Depends(require_internal_token)])
+def infer_batch(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Run independent realtime windows while preserving per-item failures."""
+    items = payload.get("items") if isinstance(payload, dict) else None
+    if not isinstance(items, list) or not items:
+        _batch_requests.labels(status="rejected").inc()
+        raise HTTPException(status_code=400, detail="items must be a non-empty array.")
+    if len(items) > INFERENCE_BATCH_MAX_ITEMS:
+        _batch_requests.labels(status="rejected").inc()
+        raise HTTPException(
+            status_code=413,
+            detail=f"items exceeds the configured limit of {INFERENCE_BATCH_MAX_ITEMS}.",
+        )
+
+    results: List[Dict[str, Any]] = []
+    for item in items:
+        request = item if isinstance(item, dict) else {}
+        request_id = request.get("requestId")
+        model_type = str(request.get("modelType") or request.get("model_type") or "gear").lower()
+        try:
+            model_type = _normalize_model_type(model_type)
+            response = infer(request)
+            results.append({
+                "requestId": request_id,
+                "taskId": request.get("taskId"),
+                "success": True,
+                "data": response.get("data"),
+            })
+            _batch_items.labels(model_type=model_type, status="success").inc()
+        except HTTPException as exc:
+            message = str(exc.detail)
+            results.append({
+                "requestId": request_id,
+                "taskId": request.get("taskId"),
+                "success": False,
+                "errorCode": f"HTTP_{exc.status_code}",
+                "errorMessage": message,
+            })
+            _batch_items.labels(model_type=model_type, status="failure").inc()
+        except Exception as exc:
+            results.append({
+                "requestId": request_id,
+                "taskId": request.get("taskId"),
+                "success": False,
+                "errorCode": "INFERENCE_ERROR",
+                "errorMessage": str(exc),
+            })
+            _batch_items.labels(model_type=model_type, status="failure").inc()
+
+    _batch_requests.labels(status="success").inc()
+    return {"success": True, "results": results}
 
 
 # =============================================================================

@@ -20,6 +20,11 @@ public class SensorWebSocketMessageVo
     private String diagnosisName;
     private String diagnosisDetail;
     private String modelType;
+    private String modelVersion;
+    private String sourceType;
+    private String windowId;
+    private Long queueDelayMs;
+    private Long endToEndLatencyMs;
     private Double confidence;
     private Double healthIndex;
     private String riskLevel;
@@ -63,6 +68,16 @@ public class SensorWebSocketMessageVo
     public void setDiagnosisDetail(String diagnosisDetail) { this.diagnosisDetail = diagnosisDetail; }
     public String getModelType() { return modelType; }
     public void setModelType(String modelType) { this.modelType = modelType; }
+    public String getModelVersion() { return modelVersion; }
+    public void setModelVersion(String modelVersion) { this.modelVersion = modelVersion; }
+    public String getSourceType() { return sourceType; }
+    public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+    public String getWindowId() { return windowId; }
+    public void setWindowId(String windowId) { this.windowId = windowId; }
+    public Long getQueueDelayMs() { return queueDelayMs; }
+    public void setQueueDelayMs(Long queueDelayMs) { this.queueDelayMs = queueDelayMs; }
+    public Long getEndToEndLatencyMs() { return endToEndLatencyMs; }
+    public void setEndToEndLatencyMs(Long endToEndLatencyMs) { this.endToEndLatencyMs = endToEndLatencyMs; }
     public Double getConfidence() { return confidence; }
     public void setConfidence(Double confidence) { this.confidence = confidence; }
     public Double getHealthIndex() { return healthIndex; }

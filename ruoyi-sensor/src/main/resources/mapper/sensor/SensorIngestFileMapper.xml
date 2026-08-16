@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.sensor.mapper.SensorIngestFileMapper">
+    <select id="selectScopedList"
+            parameterType="com.ruoyi.sensor.domain.query.SensorIngestFileQuery"
+            resultType="com.ruoyi.sensor.domain.entity.SensorIngestFileEntity">
+        SELECT f.*
+        FROM sensor_ingest_file f
+        LEFT JOIN phm_device d ON d.id = f.device_id
+        WHERE 1 = 1
+        <if test="id != null">AND f.id = #{id}</if>
+        <if test="status != null and status != ''">AND f.status = #{status}</if>
+        <if test="sourceType != null and sourceType != ''">AND f.source_type = #{sourceType}</if>
+        <if test="keyword != null and keyword != ''">
+            AND (f.file_name LIKE CONCAT('%', #{keyword}, '%')
+              OR f.device_code LIKE CONCAT('%', #{keyword}, '%')
+              OR f.point_code LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        AND (f.device_id IS NULL OR (1 = 1 ${params.dataScope}))
+        ORDER BY f.id DESC
+    </select>
+
+    <update id="associate">
+        UPDATE sensor_ingest_file
+        SET device_id=#{deviceId},device_code=#{deviceCode},point_id=#{pointId},
+            point_code=#{pointCode},channel_id=#{channelNo},status='VALIDATING',
+            error_code=NULL,error_message=NULL,update_time=NOW()
+        WHERE id=#{id} AND status IN ('UNMAPPED','REJECTED')
+    </update>
+
+    <update id="retry">
+        UPDATE sensor_ingest_file
+        SET status='RECEIVING',retry_count=retry_count+1,error_code=NULL,
+            error_message=NULL,update_time=NOW()
+        WHERE id=#{id} AND status='FAILED'
+    </update>
+</mapper>

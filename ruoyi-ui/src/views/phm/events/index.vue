@@ -5,7 +5,7 @@
         <h2>设备大事记</h2>
         <p>按设备和年份查看接入、维修、保养等生命周期事件，辅助设备健康决策。</p>
       </div>
-      <el-button type="primary" icon="el-icon-plus" size="small" :disabled="!selectedDevice" @click="openEvent()">新增大事记</el-button>
+      <el-button v-hasPermi="['phm:event:add']" type="primary" icon="el-icon-plus" size="small" :disabled="!selectedDevice" @click="openEvent()">新增大事记</el-button>
     </section>
 
     <section class="filter-bar">
@@ -55,8 +55,8 @@
               <div class="event-card-head">
                 <el-tag size="mini" :type="eventTag(item.eventType)">{{ eventTypeText(item.eventType) }}</el-tag>
                 <div>
-                  <el-button type="text" size="mini" @click="openEvent(item)">编辑</el-button>
-                  <el-button type="text" size="mini" @click="removeEvent(item)">删除</el-button>
+                  <el-button v-hasPermi="['phm:event:edit']" type="text" size="mini" @click="openEvent(item)">编辑</el-button>
+                  <el-button v-hasPermi="['phm:event:remove']" type="text" size="mini" @click="removeEvent(item)">删除</el-button>
                 </div>
               </div>
               <p>{{ item.eventContent }}</p>
@@ -108,7 +108,7 @@
       </el-form>
       <div slot="footer">
         <el-button @click="eventVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveEventForm">保存</el-button>
+        <el-button v-hasPermi="['phm:event:add', 'phm:event:edit']" type="primary" @click="saveEventForm">保存</el-button>
       </div>
     </el-dialog>
   </div>

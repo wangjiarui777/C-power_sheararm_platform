@@ -5,7 +5,7 @@
         <h2>报表中心</h2>
         <p>查看实时报表、历史运行报表，并登记诊断/运行服务报告。</p>
       </div>
-      <el-button type="primary" icon="el-icon-download" size="small" @click="exportCurrent">导出当前表</el-button>
+      <el-button v-hasPermi="['phm:report:export']" type="primary" icon="el-icon-download" size="small" @click="exportCurrent">导出当前表</el-button>
     </section>
 
     <el-tabs v-model="activeTab" @tab-click="loadData">
@@ -58,7 +58,7 @@
             <el-option label="诊断报告" value="diagnosis" />
             <el-option label="运行报告" value="run" />
           </el-select>
-          <el-button size="small" @click="reportVisible = true">登记报告</el-button>
+          <el-button v-hasPermi="['phm:report:edit']" size="small" @click="reportVisible = true">登记报告</el-button>
         </section>
         <el-table v-loading="loading" :data="reports" stripe>
           <el-table-column prop="fileName" label="报告名称" min-width="220" />
@@ -72,7 +72,7 @@
             <template slot-scope="scope">
               <el-link :href="fileHref(scope.row.fileUrl)" target="_blank" type="primary">查看</el-link>
               <el-link type="primary" class="table-link" @click="downloadReport(scope.row)">下载</el-link>
-              <el-link type="danger" class="table-link" @click="removeReport(scope.row)">删除</el-link>
+              <el-link v-hasPermi="['phm:report:edit']" type="danger" class="table-link" @click="removeReport(scope.row)">删除</el-link>
             </template>
           </el-table-column>
         </el-table>
@@ -92,6 +92,7 @@
         </el-form-item>
         <el-form-item label="上传 PDF">
           <el-upload
+            v-hasPermi="['phm:report:edit']"
             :action="uploadUrl"
             :headers="uploadHeaders"
             :data="uploadData"
@@ -108,7 +109,7 @@
       </el-form>
       <div slot="footer">
         <el-button @click="reportVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveReport">完成</el-button>
+        <el-button v-hasPermi="['phm:report:edit']" type="primary" @click="saveReport">完成</el-button>
       </div>
     </el-dialog>
   </div>

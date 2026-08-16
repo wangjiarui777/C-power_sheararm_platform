@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.sensor.mapper.PhmAcquisitionChannelMapper">
+    <select id="selectScopedList"
+            parameterType="com.ruoyi.sensor.domain.query.PhmAcquisitionChannelQuery"
+            resultType="com.ruoyi.sensor.domain.entity.PhmAcquisitionChannelEntity">
+        SELECT c.*
+        FROM phm_acquisition_channel c
+        INNER JOIN phm_device d ON d.id = c.device_id
+        WHERE 1 = 1
+        <if test="deviceId != null">AND c.device_id = #{deviceId}</if>
+        <if test="pointId != null">AND c.point_id = #{pointId}</if>
+        ${params.dataScope}
+        ORDER BY c.collector_id ASC, c.module_no ASC, c.channel_no ASC
+    </select>
+</mapper>

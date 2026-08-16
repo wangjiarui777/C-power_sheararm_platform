@@ -13,6 +13,11 @@ export function previewDdl(id, data) { return request({ url: `/tool/lowcode/proj
 export function exportUrl(id) { return `${process.env.VUE_APP_BASE_API}/tool/lowcode/projects/${id}/export` }
 export function listConnectors() { return request({ url: '/tool/lowcode/connectors', method: 'get' }) }
 export function saveConnector(data) { return request({ url: '/tool/lowcode/connectors', method: 'put', data }) }
+export function getPipelineStatus(id) { return request({ url: `/tool/lowcode/projects/${id}/pipeline/status`, method: 'get' }) }
+export function listPipelineRuns(id) { return request({ url: `/tool/lowcode/projects/${id}/pipeline/runs`, method: 'get' }) }
+export function testPipeline(id, data = {}) { return request({ url: `/tool/lowcode/projects/${id}/pipeline/test`, method: 'post', data }) }
+export function activatePipeline(id) { return request({ url: `/tool/lowcode/projects/${id}/pipeline/activate`, method: 'post' }) }
+export function deactivatePipeline(id) { return request({ url: `/tool/lowcode/projects/${id}/pipeline/deactivate`, method: 'post' }) }
 
 export function getRuntimeSchema(appCode) { return request({ url: `/lowcode/runtime/${appCode}/schema`, method: 'get' }) }
 export function listRuntimeRecords(appCode, params) { return request({ url: `/lowcode/runtime/${appCode}/records`, method: 'get', params }) }

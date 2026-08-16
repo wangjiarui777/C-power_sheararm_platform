@@ -7,7 +7,7 @@
           <h2>历史数据下载</h2>
           <p>查询指定时间范围内的诊断记录，并导出为 CSV 文件。</p>
         </div>
-        <el-button type="primary" icon="el-icon-download" :loading="exporting" :disabled="!rows.length" @click="exportCsv">
+        <el-button v-hasPermi="['sensor:history:export']" type="primary" icon="el-icon-download" :loading="exporting" :disabled="!rows.length" @click="exportCsv">
           导出 CSV
         </el-button>
       </div>

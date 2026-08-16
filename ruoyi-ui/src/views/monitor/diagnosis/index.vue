@@ -16,8 +16,8 @@
         <!-- 当前选中的文件名（溢出省略） -->
         <span class="top-file" :title="selectedFileLabel">{{ selectedFileLabel }}</span>
         <el-button size="mini" type="success" plain :disabled="!contextComplete" @click="handleRefresh">刷新状态</el-button>
-        <el-button size="mini" type="primary" plain :disabled="!contextComplete || polling" @click="uploadDialogVisible = true">配置文件并诊断</el-button>
-        <el-button size="mini" type="warning" plain icon="el-icon-download" @click="downloadDialogVisible = true">历史下载</el-button>
+        <el-button v-hasPermi="['sensor:diagnosis:run']" size="mini" type="primary" plain :disabled="!contextComplete || polling" @click="uploadDialogVisible = true">配置文件并诊断</el-button>
+        <el-button v-hasPermi="['sensor:history:export']" size="mini" type="warning" plain icon="el-icon-download" @click="downloadDialogVisible = true">历史下载</el-button>
       </div>
     </div>
 
@@ -62,7 +62,7 @@
       <div v-if="contextNotice || retiredVersionSelected" class="context-notice" :class="{ 'is-warning': retiredVersionSelected, 'is-error': contextError }" role="status">
         <i :class="retiredVersionSelected ? 'el-icon-warning-outline' : (contextError ? 'el-icon-circle-close' : 'el-icon-info')" />
         <span>{{ retiredVersionSelected ? '该 RETIRED 版本仅用于回溯诊断，不产生正式告警。' : contextNotice }}</span>
-        <el-button v-if="noAttachment" type="text" @click="uploadDialogVisible = true">选择诊断文件</el-button>
+        <el-button v-if="noAttachment" v-hasPermi="['sensor:diagnosis:run']" type="text" @click="uploadDialogVisible = true">选择诊断文件</el-button>
       </div>
     </section>
 
@@ -71,7 +71,7 @@
         <div><span class="context-kicker">POINT MATRIX</span><strong>测点诊断总览</strong></div>
         <div class="point-matrix-actions">
           <span class="batch-progress">{{ batchProgressText }}</span>
-          <el-button v-if="batchHasFailures" type="warning" plain size="mini" :loading="polling" @click="retryFailedPoints">重试失败项</el-button>
+          <el-button v-if="batchHasFailures" v-hasPermi="['sensor:diagnosis:run']" type="warning" plain size="mini" :loading="polling" @click="retryFailedPoints">重试失败项</el-button>
         </div>
       </div>
       <div class="point-matrix-grid">
@@ -302,7 +302,7 @@
       </div>
       <span slot="footer" class="dialog-footer">
         <el-button @click="downloadDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="downloading" :disabled="!downloadDateRange || downloadDateRange.length !== 2" @click="handleDownloadHistory">下载 CSV</el-button>
+        <el-button v-hasPermi="['sensor:history:export']" type="primary" :loading="downloading" :disabled="!downloadDateRange || downloadDateRange.length !== 2" @click="handleDownloadHistory">下载 CSV</el-button>
       </span>
     </el-dialog>
 
@@ -322,7 +322,7 @@
             <template slot-scope="scope">{{ scope.row.localFile || scope.row.sourceType === 'BROWSER_UPLOAD' ? '本机上传' : (scope.row.attachmentId ? '服务器文件' : '--') }}</template>
           </el-table-column>
           <el-table-column label="操作" width="90" align="right">
-            <template slot-scope="scope"><el-button type="text" @click.stop="selectMappingPoint(scope.row.id)">配置</el-button></template>
+            <template slot-scope="scope"><el-button v-hasPermi="['sensor:diagnosis:run']" type="text" @click.stop="selectMappingPoint(scope.row.id)">配置</el-button></template>
           </el-table-column>
         </el-table>
         <div v-if="activeMappingPointOption" class="mapping-editor-title">正在配置：{{ activeMappingPointOption.pointName || activeMappingPointOption.pointCode }} / CH {{ activeMappingPointOption.channelId }}</div>
@@ -370,7 +370,7 @@
       </div>
       <span slot="footer" class="dialog-footer">
         <el-button @click="uploadDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="uploading || polling" :disabled="!fileMappingComplete" @click="startBatchAnalysis">开始批量诊断</el-button>
+        <el-button v-hasPermi="['sensor:diagnosis:run']" type="primary" :loading="uploading || polling" :disabled="!fileMappingComplete" @click="startBatchAnalysis">开始批量诊断</el-button>
       </span>
     </el-dialog>
     </div>

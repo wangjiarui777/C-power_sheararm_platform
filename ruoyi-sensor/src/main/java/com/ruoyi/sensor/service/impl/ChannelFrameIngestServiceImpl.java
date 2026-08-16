@@ -13,6 +13,7 @@ import com.ruoyi.sensor.domain.dto.VibrationCsvRow;
 import com.ruoyi.sensor.domain.entity.SensorRawWaveEntity;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
 import com.ruoyi.sensor.service.ChannelFrameIngestService;
+import com.ruoyi.sensor.service.RealtimeDiagnosisHook;
 import com.ruoyi.sensor.service.SensorStorageService;
 import com.ruoyi.sensor.service.SensorWebSocketPushService;
 
@@ -23,12 +24,15 @@ public class ChannelFrameIngestServiceImpl implements ChannelFrameIngestService
 
     private final SensorStorageService storageService;
     private final SensorWebSocketPushService webSocketPushService;
+    private final RealtimeDiagnosisHook realtimeDiagnosisHook;
 
     public ChannelFrameIngestServiceImpl(SensorStorageService storageService,
-                                         SensorWebSocketPushService webSocketPushService)
+                                         SensorWebSocketPushService webSocketPushService,
+                                         RealtimeDiagnosisHook realtimeDiagnosisHook)
     {
         this.storageService = storageService;
         this.webSocketPushService = webSocketPushService;
+        this.realtimeDiagnosisHook = realtimeDiagnosisHook;
     }
 
     @Override
@@ -66,6 +70,14 @@ public class ChannelFrameIngestServiceImpl implements ChannelFrameIngestService
         }
 
         Db.saveBatch(rawEntities);
+        try
+        {
+            realtimeDiagnosisHook.onSamples(dto.getDeviceCode(), rows);
+        }
+        catch (Exception ignored)
+        {
+            // Real-time diagnosis is best-effort after durable frame persistence.
+        }
         VibrationCsvRow last = rows.get(rows.size() - 1);
         storageService.asyncSave(
             SensorSampleDtoAdapter.sample(dto.getDeviceCode(), rows, dto.getCollectTime()),

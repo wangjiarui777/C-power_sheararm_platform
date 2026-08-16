@@ -10,13 +10,20 @@ scrape_configs:
     metrics_path: /internal/actuator/prometheus
     static_configs:
       - targets: ["127.0.0.1:8081"]
-  - job_name: phm-inference
+  - job_name: phm-inference-gear
     metrics_path: /internal/metrics
     http_headers:
       X-Internal-Token:
         values: ["REPLACE_WITH_INTERNAL_TOKEN"]
     static_configs:
-      - targets: ["127.0.0.1:5000"]
+      - targets: ["127.0.0.1:5001"]
+  - job_name: phm-inference-bearing
+    metrics_path: /internal/metrics
+    http_headers:
+      X-Internal-Token:
+        values: ["REPLACE_WITH_INTERNAL_TOKEN"]
+    static_configs:
+      - targets: ["127.0.0.1:5002"]
   - job_name: windows
     static_configs:
       - targets: ["127.0.0.1:9182"]

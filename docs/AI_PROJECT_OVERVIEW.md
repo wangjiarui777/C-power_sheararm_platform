@@ -31,7 +31,7 @@ git status --short
 git log -1 --oneline --decorate
 ```
 
-本文核对时的工作区快照（2026-08-14）：
+本文核对时的工作区快照（2026-08-16）：
 
 - 分支：`main`；
 - `HEAD`：`f977c47`（`Prevent first-login password gate request and icon regressions`）；
@@ -41,6 +41,7 @@ git log -1 --oneline --decorate
 - `setup/` 目录已删除；`run-all.ps1`、`run-admin.ps1` 已删除；
 - 新增安全文档：`SECURITY_AUDIT_REPORT_2026-08-13.md`、`SECURITY_EXCEPTIONS.md`、`SECURITY_REMEDIATION_TRACKER.md`；
 - `deployment/` 存在完整离线部署脚本、Nginx/Prometheus/WinSW 配置和协议文档；
+- `REALTIME_DIAGNOSIS_UPGRADE_PLAN.md` 已重写为单台 Windows Server、CPU 优先的多测点多模型实时诊断实施方案；实时策略、窗口缓冲、Redis 任务流、双模型 worker 和部署配置已落地，现场 Redis/IoTDB/模型进程演练仍需执行；
 - `AI_PROJECT_OVERVIEW.md.bak-20260813` 已不存在，不是权威文档。
 
 快照只说明检查时的磁盘事实。
@@ -176,6 +177,7 @@ Python 只负责模型推理，不持有业务数据库权限。
 | WebSocket 票据与推送 | `IMPLEMENTED` | Redis 一次性票据、WS 测试 | Origin 和 Redis 必须可用 |
 | 齿轮/轴承推理 | `IMPLEMENTED` `LOCAL_ONLY` | FastAPI、模型清单、Python 测试 | 依赖本地模型、令牌和白名单 |
 | 诊断批次与多测点 | `IMPLEMENTED` | Java 服务、迁移、测试 | 需完整数据和推理服务 |
+| 多测点多模型实时诊断 | `IMPLEMENTED` `LOCAL_ONLY` | `RealtimeWindowBuffer`、Redis 任务流、双 worker、策略 API/UI、Flyway `V2026081503/V2026081504` | 默认关闭；现场负载、停机恢复和模型灰度尚未完成 |
 | 诊断文件摄取 | `IMPLEMENTED` | DiagnosisFileIngestionService 及测试 | 默认开关和目录需核对 |
 | MySQL→IoTDB 诊断同步 | `IMPLEMENTED` | outbox、重试、健康指示器、测试 | 两个历史同名迁移易混淆 |
 | IoTDB 主读/MySQL 回退 | `IMPLEMENTED` | DiagnosisResultReadService 及测试 | 需真实 IoTDB 集成验证 |
@@ -272,7 +274,7 @@ sequenceDiagram
 
 1. 用户或批次任务向 Java 发起诊断；
 2. Java 校验会话、权限、设备数据范围、输入路径和模型参数；
-3. Java 携带内部令牌调用统一 FastAPI `/internal/infer`；
+3. 开发环境调用统一 FastAPI `5000`；生产环境按模型调用 `phm-infer-gear:5001` 或 `phm-infer-bearing:5002`，携带内部令牌访问 `/internal/infer` 或 `/internal/infer/batch`；
 4. Python 校验令牌、输入白名单、文件和模型 ready 状态；
 5. Python 加载齿轮或轴承模型，返回诊断 JSON；
 6. Java 持久化结果、关联设备/测点/通道/模型，并按策略联动告警；
@@ -283,14 +285,45 @@ Python 内部接口（全部要求 `X-Internal-Token`）：
 - `GET /internal/health/live`；
 - `GET /internal/health/ready`；
 - `GET /internal/metrics`；
-- `POST /internal/infer`。
+- `POST /internal/infer`（兼容单项调用）；
+- `POST /internal/infer/batch`（默认最多 8 项，批内单项失败隔离）。
 
-这些接口需要内部令牌，默认只绑定 `127.0.0.1:5000`。
+这些接口需要内部令牌。开发统一进程默认绑定 `127.0.0.1:5000`，生产两个模型进程分别绑定 `127.0.0.1:5001/5002`。
 浏览器不得直接访问 Python。
 
 模型清单位于 `ruoyi-sensor/inference/models-manifest.json`。
 模型本体位于 `.local-models/`，不进入普通源码提交。
 启动时必须校验 artifact、版本和 SHA-256（`start-all.ps1` 会做）。
+
+#### 3.4.1 多测点多模型实时链路
+
+生产实时链路与采集持久化链路隔离：
+
+```mermaid
+flowchart LR
+    F["采集帧"] --> S["现有 Redis Frame Stream"]
+    S --> P["MySQL/IoTDB 持久化"]
+    P --> W["deviceCode + channelId 内存窗口"]
+    W --> G["monitoring:diagnosis:job:gear"]
+    W --> B["monitoring:diagnosis:job:bearing"]
+    G --> J["Java 调度器"]
+    B --> J
+    J --> G1["FastAPI gear :5001"]
+    J --> B1["FastAPI bearing :5002"]
+    G1 --> O["MySQL 结果/outbox"]
+    B1 --> O
+    O --> T["IoTDB 投影、告警、WebSocket"]
+```
+
+窗口按 `(deviceCode, channelId, policy)` 隔离；同一测点可挂齿轮和轴承两个模型。任务创建时解析并固定实际模型版本，使用幂等键、截止时间、Redis AOF、ACK、`XPENDING/XCLAIM` 接管和最多两次尝试。超过 10 秒新鲜度期限记为 `EXPIRED`，不补发陈旧告警。窗口、队列或推理异常只影响诊断链路，不抛回帧消费线程，也不进入采集 DLQ。
+
+实时策略接口：
+
+- `/sensor/diagnosis/realtime/policies`：策略分页、创建、更新、删除；唯一键为 `(point_id, model_type)`；
+- `/sensor/diagnosis/realtime/status`：策略、内存窗口、队列深度和 Pending 状态；
+- `/sensor/diagnosis/inference/history?sourceType=REALTIME`：实时结果历史筛选。
+
+生产默认 `sensor.diagnosis.realtime.enabled=false`，通过灰度和影子验证后再启用。模型目录只读、版本不可变并校验 SHA-256；Java 不因推理进程不可用而阻止启动。
 
 ### 3.5 诊断结果同步与读取
 
@@ -437,6 +470,8 @@ graph TD
 | `/sensor/monitoring`、`/monitoring`、`/system/monitoring` | `IMPLEMENTED` | 会话 + 设备范围 | IndustrialMonitoringController、MonitoringController（后两者为兼容前缀） |
 | `/sensor/diagnosis`、`/sensor/vibration` | `IMPLEMENTED` | 会话 + 权限/范围 | VibrationDiagnosisController |
 | `/sensor/diagnosis/batch` | `IMPLEMENTED` | 会话 + 权限/范围 | VibrationBatchController |
+| `/sensor/diagnosis/realtime/policies`、`/sensor/diagnosis/realtime/status` | `IMPLEMENTED` | 会话 + `sensor:diagnosis:realtime:*` + 设备范围 | RealtimeDiagnosisController |
+| `/sensor/diagnosis/inference/history?sourceType=REALTIME` | `IMPLEMENTED` | 会话 + 权限/范围 | VibrationDiagnosisController |
 | `/sensor/diagnosis/analysis` | `IMPLEMENTED` | 会话 + 权限 | VibrationAnalysisController |
 | `/sensor/diagnosis/models` | `IMPLEMENTED` | 会话 + 管理权限 | ModelReleaseController |
 | `/sensor/collectors` | `IMPLEMENTED` | 会话 + 管理权限 | CollectorCredentialController |
@@ -498,6 +533,8 @@ graph TD
 | 附件目录 | 报告、图像、诊断输入 | 文件内容，权限元数据仍在 MySQL |
 | 模型目录 | 齿轮/轴承 `.pth` | 只读模型制品 |
 
+实时诊断任务只在 Redis Stream 中承担带时限的流式调度；MySQL 的 `sensor_inference_task` 和 `enhanced_inference_record` 是诊断业务耐久记录，IoTDB 仍是时序投影，不把 Redis 当作长期历史。
+
 ### 6.2 IoTDB
 
 IoTDB 使用 Table 模型，默认数据库名为 `monitoring`。
@@ -540,7 +577,10 @@ ruoyi-admin/src/main/java/db/migration/V<版本>__<描述>.java
 6. 新迁移需有针对性测试；
 7. 执行生产迁移前必须备份并验证恢复。
 
-当前迁移版本（2026-08-14 实盘）：
+当前迁移版本（截至 2026-08-16）：
+
+- `V2026081503__RealtimeDiagnosisRuntime`：实时策略表，以及任务/结果的 `source_type`、`window_id`、`deadline_at`、`queued_at`、`attempt_count` 字段与索引；
+- `V2026081504__RealtimeDiagnosisMenu`：实时诊断策略菜单和权限码（父菜单不存在时安全跳过）。
 
 ```text
 V2026062301__ProductionHardening
@@ -663,14 +703,16 @@ python --version
 | 8081 | 生产 Actuator（`/internal/actuator`，仅 health/prometheus） | 仅 127.0.0.1 |
 | 3306 | MySQL | 不公开 |
 | 6379 | Redis（Streams 不满足时自动切 6380 便携版） | 不公开 |
-| 5000 | FastAPI | 仅环回和内部令牌 |
+| 5000 | FastAPI 统一开发进程 | 仅环回和内部令牌 |
+| 5001 | `phm-infer-gear` 齿轮推理 | 仅环回和 Java 服务账户 |
+| 5002 | `phm-infer-bearing` 轴承推理 | 仅环回和 Java 服务账户 |
 | 6667 | IoTDB DataNode RPC | 内部网络 |
 | 10710 | IoTDB ConfigNode | 内部网络 |
 | 8888 | MAT 接收器 | 开发/受控网络 |
 | 8890 | 历史 TCP | 生产默认关闭 |
 | 8891 | 签名通道 TCP | 专用工业网络 |
 | 9000 | 残留配置 | 当前无代码监听 |
-| 9528/5001 | 历史端口 | 仅旧进程清理逻辑涉及 |
+| 9528 | Vue 历史开发端口 | 仅旧进程清理逻辑涉及 |
 
 ### 7.6 本地运行信息（敏感明文）
 
@@ -747,7 +789,7 @@ Redis 不仅用于会话和验证码，还承载遥测与通道帧 Streams；运
 3. 检查 Maven、Java、npm、`.venv`、IoTDB 和模型；
 4. 检查 MySQL、Redis 服务并验证 Redis Streams（不支持时自动切 6380 便携版）；
 5. 校验模型 manifest 与 SHA-256；
-6. 清理确认属于项目的旧端口（5001/9528 及当前服务端口）；
+6. 清理确认属于项目的旧端口（5000/5001/5002/9528 及当前服务端口）；
 7. 默认执行根 Maven 多模块构建（`-SkipBuild` 可跳过）；
 8. 启动 IoTDB ConfigNode/DataNode、Python 推理服务、Spring Boot（dev）和 Vue；
 9. 执行各服务就绪检查；
@@ -813,7 +855,7 @@ Playwright 用例覆盖登录页渲染、验证码失败不弹 webpack 遮罩、
 
 - 离线包构建 `build-offline-package.ps1`、验证 `verify-offline-package.ps1`；
 - 运行时准备 `prepare-offline-runtime.ps1`、服务安装 `install-services.ps1`、发布切换 `switch-release.ps1`；
-- WinSW 服务 XML、Nginx 配置、Prometheus/告警配置；
+- WinSW 服务 XML（生产 `phm-infer-gear`/`phm-infer-bearing`，开发可保留统一 `phm-inference`）、Nginx 配置、Prometheus/告警配置；
 - 备份恢复说明 `BACKUP-RESTORE.md`、TCP 协议 `TCP-COLLECTOR-PROTOCOL.md`、低代码运维 `LOWCODE-OPERATIONS.md`（未跟踪）。
 
 安全审计后已修复：打包脚本改用编译产物中的 Flyway 迁移目录；验证脚本增加 zip-slip/重复路径/数量/体积/CMS/逐文件 SHA-256/必需文件检查。
@@ -825,6 +867,9 @@ Playwright 用例覆盖登录页渲染、验证码失败不弹 webpack 遮罩、
 - Java 和 Python 只绑定内部地址；
 - MySQL、Redis、IoTDB 和 TCP 端口受防火墙限制；
 - Java 不在生产拉起 Python 子进程（`sensor.startup.*.enabled` 生产为 false）；
+- Java 不硬依赖任一模型 worker；推理不可用时采集、MySQL/IoTDB 持久化和查询继续工作，实时诊断状态标记为降级；
+- 仅 Nginx 443 面向用户开放；8891 仅允许采集网段，Java 管理端口、Redis、数据库和 5001/5002 推理端口限制为环回或本机服务账户；
+- Redis 任务流使用 AOF（`everysec`）和有限保留，任务以截止时间保障新鲜度，不承诺永久回放；
 - Actuator 使用独立管理端口（127.0.0.1:8081，仅 health/prometheus）；
 - 真实秘密由受控环境注入，而不是来自本文件；
 - 低代码生产使用独立 `LOWCODE_DB_*` 账号与出站代理。
@@ -845,6 +890,9 @@ Playwright 用例覆盖登录页渲染、验证码失败不弹 webpack 遮罩、
 | Playwright 基础 | `npm run test:e2e` | Chromium/Edge，前端 | trace/test-results | 账号用例可跳过 | 基础用例通过 | 本机 10 通过/4 跳过 |
 | Python 正式测试 | `.venv ... pytest inference/tests` | 匹配依赖 + pytest 已安装 | pytest cache | 测试内可能 mock | tests 全绿 | 安全相关 5/5；pytest 未装在当前 .venv |
 | Python ready | `/internal/health/ready` | 模型、SHA、令牌 | 日志 | 否 | 2xx 且模型 ready | 需本机运行验证 |
+| 实时诊断单元/集成 | 窗口组装、同点多模型、幂等、过期、Pending 接管、批内失败隔离 | Redis/MySQL 可用 | 任务/结果 | Docker/外部服务缺失时条件跳过 | 状态和版本一致 | 代码与定向测试已覆盖，现场环境待验收 |
+| 实时负载 | 8/32 点、5120 样本、30 秒间隔 | Redis、MySQL、IoTDB、双 worker | 业务数据 | 否 | 端到端 p95 ≤ 5 秒、过期/丢弃率 < 0.1% | 尚无现场演练记录 |
+| 推理停机恢复 | 两个 worker 停止至少 10 分钟后恢复 | Windows 服务、Redis AOF | 队列/任务状态 | 否 | 采集查询正常、过期有界、无陈旧告警洪峰 | 尚无现场演练记录 |
 | 离线部署 | 干净 Windows VM | 全部 runtime、证书、WinSW | 系统服务/目录 | 否 | 安装、升级、回滚、恢复均通过 | 尚无完整证据 |
 
 ### 9.2 定向验证规则
@@ -901,7 +949,7 @@ Python 改动执行：
 6. **`SENSOR_TCP_ENABLED` 命名容易误导**：生产配置需确认它绑定的是 8891 channel-tcp 还是历史 8890。
 7. **历史迁移说明路径错误**：生产 Java 迁移不在 `resources`，在 `ruoyi-admin/src/main/java/db/migration`。
 8. **前端 `api/system/vibration.js` 是兼容 shim**：新诊断调用优先正式 API。
-9. **README 需与现状同步**：认证已从 JWT 变为会话 Cookie，Python 端口 5000/`/internal/*`。
+9. **README 需与现状同步**：认证已从 JWT 变为会话 Cookie；开发 Python 端口为 5000，生产拆分为 5001/5002，接口统一位于 `/internal/*`。
 10. **pyc 不是源码**：不要从孤儿字节码“恢复”已删除脚本。
 11. **mock 不在主 reactor**：协议改动后要独立构建。
 12. **默认 profile 是 prod**：手工开发启动必须显式 dev。
@@ -921,6 +969,7 @@ Python 改动执行：
 | 历史数据下载页未跟踪 | 新页面可能在提交中遗漏 | `git status` | 纳入功能提交并补齐 E2E |
 | 低代码权限迁移未提交 | 设计器/运行时权限边界依赖未入库的迁移 | `git status` | 完成验证后提交并同步授权文档 |
 | 离线部署无干净 VM 演练记录 | 安装/升级/回滚/恢复未端到端证明 | 仓库无演练结果 | 在干净 Windows VM 演练并留档 |
+| 实时诊断尚无现场负载与停机演练记录 | p95、过期率、AOF 恢复和告警洪峰未被真实环境证明 | 当前仅代码、编译和单元/模块测试 | 按 8/32 点和双 worker 验收矩阵执行 |
 | 生产秘密轮换未执行 | 默认/开发秘密仍可能进入生产 | 安全审计报告 | 按 `SECURITY_REMEDIATION_TRACKER.md` 发布前清单轮换 |
 | `JWT_SECRET`、`IOTDB_WRITE_ENABLED` 遗留 | 容易误判功能已生效 | 引用搜索为零 | 删除遗留变量或实现并记录 |
 

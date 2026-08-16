@@ -25,6 +25,11 @@ public class InferenceTaskEntity
     private String inputType;
     private String inputRef;
     private String inputSha256;
+    private String sourceType;
+    private String windowId;
+    private Date deadlineAt;
+    private Date queuedAt;
+    private Integer attemptCount;
     private String status;
     private String errorCode;
     private String errorMessage;

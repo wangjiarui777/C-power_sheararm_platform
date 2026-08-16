@@ -72,7 +72,7 @@
     <el-table v-if="viewMode === 'list'" v-loading="loading" :data="devices" stripe>
       <el-table-column width="58" align="center">
         <template slot-scope="scope">
-          <el-button type="text" :icon="scope.row.favorite ? 'el-icon-star-on' : 'el-icon-star-off'" @click="toggleFavorite(scope.row)" />
+          <el-button v-hasPermi="['phm:device:edit']" type="text" :icon="scope.row.favorite ? 'el-icon-star-on' : 'el-icon-star-off'" @click="toggleFavorite(scope.row)" />
         </template>
       </el-table-column>
       <el-table-column prop="deviceName" label="设备名称" min-width="170" />
@@ -101,7 +101,7 @@
     <section v-else v-loading="loading" class="device-card-grid">
       <article v-for="item in devices" :key="item.id" class="device-card" :class="item.status">
         <div class="device-card-head">
-          <el-button type="text" :icon="item.favorite ? 'el-icon-star-on' : 'el-icon-star-off'" @click="toggleFavorite(item)" />
+          <el-button v-hasPermi="['phm:device:edit']" type="text" :icon="item.favorite ? 'el-icon-star-on' : 'el-icon-star-off'" @click="toggleFavorite(item)" />
           <el-tag :type="statusTag(item.status)" size="mini">{{ item.statusText }}</el-tag>
         </div>
         <h3>{{ item.deviceName }}</h3>
