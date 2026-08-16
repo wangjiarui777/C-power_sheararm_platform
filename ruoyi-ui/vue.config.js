@@ -27,7 +27,6 @@ module.exports = {
   assetsDir: 'static',
   // 如果你不需要生产环境的 source map，可以将其设置为 false 以加速生产环境构建。
   productionSourceMap: false,
-  transpileDependencies: ['quill', 'three'],
   // webpack-dev-server 相关配置
   devServer: {
     host: '0.0.0.0',
@@ -89,10 +88,6 @@ module.exports = {
         .clear()
         .add(filepath => {
           if (/\.(m?jsx?|cjs)$/.test(filepath)) {
-            // 始终转译 node_modules/three 目录下的所有文件
-            if (/node_modules[\\/]three/.test(filepath)) return false
-            // 始终转译 transpileDependencies 中的包
-            if (/node_modules[\\/]quill/.test(filepath)) return false
             // 不转译其他 node_modules
             if (/node_modules/.test(filepath)) return true
           }

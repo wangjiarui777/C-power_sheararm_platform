@@ -128,18 +128,16 @@ public class SecurityConfig
             // 注解标记允许匿名访问的url
             .authorizeHttpRequests((requests) -> {
                 permitAllUrl.getUrls().forEach(url -> requests.requestMatchers(url).permitAll());
-                // 对于登录login 注册register 验证码captchaImage 允许匿名访问
-                requests.requestMatchers("/login", "/register", "/captchaImage", "/csrf", "/logout", "/error").permitAll()
+                // 登录、验证码、CSRF 和退出接口允许匿名访问
+                requests.requestMatchers("/login", "/captchaImage", "/csrf", "/logout", "/error").permitAll()
                     // 静态资源，可匿名访问
                     .requestMatchers(HttpMethod.GET, "/", "/index.html", "/**.css", "/**.js").permitAll()
-                    // Druid 控制台需要 JWT 认证（Druid 自身还有登录表单）
-                    .requestMatchers("/druid/**").authenticated()
                     // 除上面外的所有请求全部需要鉴权认证
                     .anyRequest().authenticated();
             })
             // 添加Logout filter
             .logout(logout -> logout.logoutUrl("/logout").logoutSuccessHandler(logoutSuccessHandler))
-            // 添加JWT filter
+            // 添加会话认证 filter
             .addFilterBefore(authenticationTokenFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(passwordChangeRequiredFilter, JwtAuthenticationTokenFilter.class)
             .addFilterBefore(sensorCollectorAuthenticationFilter, JwtAuthenticationTokenFilter.class)

@@ -25,9 +25,10 @@ lowcode:
     url: ${LOWCODE_DB_URL:jdbc:mysql://localhost:3306/ry-lowcode?useUnicode=true&characterEncoding=utf8&useSSL=true&serverTimezone=GMT%2B8}
     username: ${LOWCODE_DB_USERNAME:lowcode_runtime}
     password: ${LOWCODE_DB_PASSWORD:}
-    initial-size: 1
-    min-idle: 1
-    max-active: 10
+    hikari:
+      minimum-idle: ${LOWCODE_DB_MIN_IDLE:1}
+      maximum-pool-size: ${LOWCODE_DB_MAX_ACTIVE:10}
+      connection-timeout: ${LOWCODE_DB_CONNECTION_TIMEOUT_MS:30000}
 
 security:
   session:
@@ -153,12 +154,17 @@ sensor:
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:prod}
-  config:
-    import: optional:classpath:application-druid.yml
   datasource:
-    druid:
-      stat-view-servlet:
-        enabled: false
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/ry-yue?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=GMT%2B8}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: ${MYSQL_POOL_MIN_IDLE:5}
+      maximum-pool-size: ${MYSQL_POOL_MAX_SIZE:20}
+      connection-timeout: ${MYSQL_POOL_CONNECTION_TIMEOUT_MS:30000}
+      validation-timeout: ${MYSQL_POOL_VALIDATION_TIMEOUT_MS:5000}
+      idle-timeout: ${MYSQL_POOL_IDLE_TIMEOUT_MS:600000}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -179,7 +185,7 @@ filters:
 
 xss:
   enabled: ${XSS_ENABLED:false}
-  excludes: /system/notice/*,/monitor/operlog/*
+  excludes: /monitor/operlog/*
   urlPatterns: /*
 
 referer:

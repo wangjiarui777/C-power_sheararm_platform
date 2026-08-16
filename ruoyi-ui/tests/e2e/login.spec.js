@@ -96,7 +96,6 @@ test('first-login password gate opens reset-password tab instead of showing 428 
       code: 200,
       data: { userName: 'admin', nickName: '管理员' },
       roleGroup: '超级管理员',
-      postGroup: '研发部门'
     })
   }))
 

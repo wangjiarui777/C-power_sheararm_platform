@@ -55,9 +55,10 @@ lowcode:
     url: ${LOWCODE_DB_URL}
     username: ${LOWCODE_DB_USERNAME}
     password: ${LOWCODE_DB_PASSWORD}
-    initial-size: 1
-    min-idle: 1
-    max-active: ${LOWCODE_DB_MAX_ACTIVE:10}
+    hikari:
+      minimum-idle: ${LOWCODE_DB_MIN_IDLE:1}
+      maximum-pool-size: ${LOWCODE_DB_MAX_ACTIVE:10}
+      connection-timeout: ${LOWCODE_DB_CONNECTION_TIMEOUT_MS:30000}
 
 spring:
   servlet:
@@ -72,13 +73,16 @@ spring:
     clean-disabled: true
     out-of-order: false
   datasource:
-    druid:
-      master:
-        url: ${MYSQL_URL}
-        username: ${MYSQL_USERNAME}
-        password: ${MYSQL_PASSWORD}
-      stat-view-servlet:
-        enabled: false
+    url: ${MYSQL_URL}
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: ${MYSQL_POOL_MIN_IDLE:5}
+      maximum-pool-size: ${MYSQL_POOL_MAX_SIZE:20}
+      connection-timeout: ${MYSQL_POOL_CONNECTION_TIMEOUT_MS:30000}
+      validation-timeout: ${MYSQL_POOL_VALIDATION_TIMEOUT_MS:5000}
+      idle-timeout: ${MYSQL_POOL_IDLE_TIMEOUT_MS:600000}
   data:
     redis:
       host: ${REDIS_HOST}
@@ -92,12 +96,6 @@ spring:
     database: ${REDIS_DATABASE:0}
     password: ${REDIS_PASSWORD}
     timeout: 10s
-
-springdoc:
-  api-docs:
-    enabled: false
-  swagger-ui:
-    enabled: false
 
 management:
   server:

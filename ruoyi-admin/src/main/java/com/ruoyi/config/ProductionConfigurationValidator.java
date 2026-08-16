@@ -44,13 +44,13 @@ public class ProductionConfigurationValidator implements ApplicationRunner
         List<String> errors = new ArrayList<>();
         requireSecret(env, errors, "sensor.collector.master-key", 32);
         requireSecret(env, errors, "sensor.inference.internal-token", 32);
-        requireSecret(env, errors, "spring.datasource.druid.master.password", 8);
+        requireSecret(env, errors, "spring.datasource.password", 8);
         requireSecret(env, errors, "spring.data.redis.password", 8);
         requireSecret(env, errors, "sensor.iotdb.password", 8);
         requireSecret(env, errors, "lowcode.datasource.password", 16);
 
-        requireValue(env, errors, "spring.datasource.druid.master.url");
-        requireValue(env, errors, "spring.datasource.druid.master.username");
+        requireValue(env, errors, "spring.datasource.url");
+        requireValue(env, errors, "spring.datasource.username");
         requireValue(env, errors, "spring.data.redis.host");
         requireValue(env, errors, "sensor.iotdb.node-urls");
         requireValue(env, errors, "sensor.iotdb.username");
@@ -98,23 +98,6 @@ public class ProductionConfigurationValidator implements ApplicationRunner
                 || normalized.equals("root") || normalized.startsWith("dev-"))
         {
             errors.add(key + " must not use a development/default value");
-        }
-    }
-
-    private static void validatePreviousJwtSecrets(Environment env, List<String> errors)
-    {
-        String previous = env.getProperty("token.previous-secrets");
-        if (!StringUtils.hasText(previous))
-        {
-            return;
-        }
-        for (String value : previous.split(","))
-        {
-            if (value.trim().getBytes(StandardCharsets.UTF_8).length < 32)
-            {
-                errors.add("every token.previous-secrets entry must contain at least 32 UTF-8 bytes");
-                return;
-            }
         }
     }
 
@@ -192,9 +175,9 @@ public class ProductionConfigurationValidator implements ApplicationRunner
     private static void validateLowCodeDataSource(Environment env, List<String> errors)
     {
         String lowCodeUrl = env.getProperty("lowcode.datasource.url", "").trim();
-        String systemUrl = env.getProperty("spring.datasource.druid.master.url", "").trim();
+        String systemUrl = env.getProperty("spring.datasource.url", "").trim();
         String lowCodeUser = env.getProperty("lowcode.datasource.username", "").trim();
-        String systemUser = env.getProperty("spring.datasource.druid.master.username", "").trim();
+        String systemUser = env.getProperty("spring.datasource.username", "").trim();
         if (lowCodeUrl.equalsIgnoreCase(systemUrl))
         {
             errors.add("lowcode.datasource.url must target a dedicated schema");

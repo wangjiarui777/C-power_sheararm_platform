@@ -11,9 +11,9 @@
         <notes><![CDATA[
             RuoYi umbrella CPE false positive on reactor module POMs. Re-review
             this suppression when upgrading the RuoYi baseline or changing the
-            generator, notice, upload, or department security implementations.
+            low-code, upload, or department security implementations.
         ]]></notes>
-        <filePath regex="true">.*[/\\]ruoyi-(common|framework|generator|quartz|sensor|system)[/\\]pom\.xml$</filePath>
+        <filePath regex="true">.*[/\\]ruoyi-(common|framework|lowcode|sensor|system)[/\\]pom\.xml$</filePath>
         <cpe>cpe:2.3:a:ruoyi:ruoyi:*:*:*:*:*:*:*:*</cpe>
     </suppress>
 </suppressions>

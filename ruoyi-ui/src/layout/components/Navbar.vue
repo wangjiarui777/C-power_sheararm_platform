@@ -18,10 +18,6 @@
           <size-select id="size-select" class="right-menu-item hover-effect" />
         </el-tooltip>
 
-        <el-tooltip content="消息通知" effect="dark" placement="bottom">
-          <header-notice id="header-notice" class="right-menu-item hover-effect" />
-        </el-tooltip>
-
         <el-tooltip content="PHM告警" effect="dark" placement="bottom">
           <div class="right-menu-item hover-effect phm-alarm-bell" @click="goPhmAlarms">
             <el-badge :value="phmAlarmCount" :hidden="phmAlarmCount === 0" :max="99">
@@ -66,7 +62,6 @@ import Hamburger from '@/components/Hamburger'
 import Screenfull from '@/components/Screenfull'
 import SizeSelect from '@/components/SizeSelect'
 import Search from '@/components/HeaderSearch'
-import HeaderNotice from './HeaderNotice'
 import sensorWebSocket from '@/utils/sensor-websocket'
 import { listSystemConfig } from '@/api/phm'
 
@@ -79,8 +74,7 @@ export default {
     Hamburger,
     Screenfull,
     SizeSelect,
-    Search,
-    HeaderNotice
+    Search
   },
   data() {
     return {

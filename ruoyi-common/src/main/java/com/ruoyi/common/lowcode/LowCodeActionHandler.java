@@ -6,7 +6,7 @@ import java.util.Map;
  * A server-side, explicitly registered low-code action.
  *
  * <p>Implementations must use a stable code and must never evaluate user supplied
- * class names, scripts or URLs. The generator module discovers these handlers
+ * class names, scripts or URLs. The low-code module discovers these handlers
  * through Spring and only invokes codes present in a published metadata version.</p>
  */
 public interface LowCodeActionHandler

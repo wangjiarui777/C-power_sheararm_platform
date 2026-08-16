@@ -42,7 +42,6 @@ Vue.prototype.handleTree = handleTree
 Vue.component('DictTag', DictTag)
 Vue.component('Pagination', Pagination)
 Vue.component('RightToolbar', RightToolbar)
-Vue.component('Editor', () => import(/* webpackChunkName: "component-editor" */ '@/components/Editor'))
 Vue.component('FileUpload', () => import(/* webpackChunkName: "component-file-upload" */ '@/components/FileUpload'))
 Vue.component('ImageUpload', () => import(/* webpackChunkName: "component-image-upload" */ '@/components/ImageUpload'))
 Vue.component('ImagePreview', () => import(/* webpackChunkName: "component-image-preview" */ '@/components/ImagePreview'))

@@ -60,14 +60,6 @@ public interface ISysUserService
     public String selectUserRoleGroup(String userName);
 
     /**
-     * 根据用户ID查询用户所属岗位组
-     * 
-     * @param userName 用户名
-     * @return 结果
-     */
-    public String selectUserPostGroup(String userName);
-
-    /**
      * 校验用户名称是否唯一
      * 
      * @param user 用户信息
@@ -112,14 +104,6 @@ public interface ISysUserService
      * @return 结果
      */
     public int insertUser(SysUser user);
-
-    /**
-     * 注册用户信息
-     * 
-     * @param user 用户信息
-     * @return 结果
-     */
-    public boolean registerUser(SysUser user);
 
     /**
      * 修改用户信息

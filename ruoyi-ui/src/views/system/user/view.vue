@@ -50,12 +50,6 @@
       <el-row :gutter="20" class="mb8">
         <el-col :span="12">
           <div class="info-item">
-            <label class="info-label">岗位：</label>
-            <span class="info-value plaintext">{{ postNames || '无岗位' }}</span>
-          </div>
-        </el-col>
-        <el-col :span="12">
-          <div class="info-item">
             <label class="info-label">用户性别：</label>
             <span class="info-value plaintext">{{ sexLabel }}</span>
           </div>
@@ -136,18 +130,12 @@ export default {
       visible: false,
       loading: false,
       info: {},
-      postOptions: [],
       roleOptions: []
     }
   },
   computed: {
     sexLabel() {
       return this.selectDictLabel(this.dict.type.sys_user_sex, this.info.sex) || '-'
-    },
-    postNames() {
-      if (!this.postOptions.length) return ''
-      const ids = this.info.postIds || []
-      return this.postOptions.filter(p => ids.includes(p.postId)).map(p => p.postName).join('、') || ''
     },
     roleNames() {
       if (!this.roleOptions.length) return ''
@@ -161,9 +149,7 @@ export default {
       this.loading = true
       getUser(userId).then(res => {
         this.info = res.data || {}
-        this.postOptions = res.posts || []
         this.roleOptions = res.roles || []
-        this.info.postIds = res.postIds || []
         this.info.roleIds = res.roleIds || []
       }).finally(() => {
         this.loading = false

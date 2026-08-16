@@ -19,27 +19,20 @@
         <java.version>17</java.version>
         <spring-boot.version>3.5.16</spring-boot.version>
         <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
-        <druid.version>1.2.28</druid.version>
         <spring-boot-starter-web.version>3.5.16</spring-boot-starter-web.version>
         <yauaa.version>8.1.0</yauaa.version>
         <kaptcha.version>2.3.3</kaptcha.version>
         <pagehelper.boot.version>2.1.1</pagehelper.boot.version>
         <fastjson.version>2.0.61</fastjson.version>
-        <oshi.version>6.10.0</oshi.version>
         <commons.io.version>2.21.0</commons.io.version>
         <commons.lang3.version>3.17.0</commons.lang3.version>
         <poi.version>5.5.1</poi.version>
-        <velocity.version>2.3</velocity.version>
-        <jwt.version>0.13.0</jwt.version>
-        <jaxb-api.version>2.3.1</jaxb-api.version>
-        <springdoc.version>2.8.17</springdoc.version>
         <netty.version>4.1.137.Final</netty.version>
         <jtransforms.version>3.1</jtransforms.version>
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <lombok.version>1.18.36</lombok.version>
         <iotdb-session.version>2.0.10</iotdb-session.version>
         <jackson.version>2.21.4</jackson.version>
-        <jsoup.version>1.22.2</jsoup.version>
         <jacoco.version>0.8.15</jacoco.version>
         <spotbugs.plugin.version>4.10.2.0</spotbugs.plugin.version>
         <tomcat.version>10.1.57</tomcat.version>
@@ -128,21 +121,6 @@
                 <version>${netty.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.jsoup</groupId>
-                <artifactId>jsoup</artifactId>
-                <version>${jsoup.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.alibaba</groupId>
-                <artifactId>druid-spring-boot-3-starter</artifactId>
-                <version>${druid.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>nl.basjes.parse.useragent</groupId>
-                <artifactId>yauaa</artifactId>
-                <version>${yauaa.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>com.github.pagehelper</groupId>
                 <artifactId>pagehelper-spring-boot-starter</artifactId>
                 <version>${pagehelper.boot.version}</version>
@@ -163,21 +141,6 @@
                 <version>${mybatis-plus.version}</version>
             </dependency>
             <dependency>
-                <groupId>javax.xml.bind</groupId>
-                <artifactId>jaxb-api</artifactId>
-                <version>${jaxb-api.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.oshi</groupId>
-                <artifactId>oshi-core</artifactId>
-                <version>${oshi.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.springdoc</groupId>
-                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-                <version>${springdoc.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
                 <version>${commons.io.version}</version>
@@ -193,29 +156,9 @@
                 <version>${libthrift.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.apache.velocity</groupId>
-                <artifactId>velocity-engine-core</artifactId>
-                <version>${velocity.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>com.alibaba.fastjson2</groupId>
                 <artifactId>fastjson2</artifactId>
                 <version>${fastjson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-api</artifactId>
-                <version>${jwt.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-impl</artifactId>
-                <version>${jwt.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-jackson</artifactId>
-                <version>${jwt.version}</version>
             </dependency>
             <dependency>
                 <groupId>pro.fessional</groupId>
@@ -224,12 +167,7 @@
             </dependency>
             <dependency>
                 <groupId>com.ruoyi</groupId>
-                <artifactId>ruoyi-quartz</artifactId>
-                <version>${ruoyi.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.ruoyi</groupId>
-                <artifactId>ruoyi-generator</artifactId>
+                <artifactId>ruoyi-lowcode</artifactId>
                 <version>${ruoyi.version}</version>
             </dependency>
             <dependency>
@@ -259,8 +197,7 @@
         <module>ruoyi-common</module>
         <module>ruoyi-system</module>
         <module>ruoyi-framework</module>
-        <module>ruoyi-quartz</module>
-        <module>ruoyi-generator</module>
+        <module>ruoyi-lowcode</module>
         <module>ruoyi-sensor</module>
         <module>ruoyi-admin</module>
     </modules>

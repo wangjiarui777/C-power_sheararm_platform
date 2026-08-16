@@ -37,10 +37,10 @@ git log -1 --oneline --decorate
 - `HEAD`：`f977c47`（`Prevent first-login password gate request and icon regressions`）；
 - 根 `pom.xml` 已恢复并在 Git 跟踪中，Maven 多模块构建可执行；
 - `start-all.ps1` 可执行，支持 `-SkipBuild` / `-ForcePortCleanup` / `-FrontendPort`；
-- 工作区存在未提交改动：低代码控制器与权限迁移 `V2026081402__LowCodePermissionBoundary.java`（未跟踪）、`ruoyi-ui/src/views/monitoring-center/history-data/`（未跟踪）、`deployment/LOWCODE-OPERATIONS.md`（未跟踪）、`VibrationDiagnosisController` 历史下载权限放宽、`request.js` 403 提示等；
+- 工作区存在未提交改动：低代码控制器与权限迁移 `V2026081402__LowCodePermissionBoundary.java`（未跟踪）、`ruoyi-ui/src/views/monitoring-center/history-data/`（未跟踪）、`VibrationDiagnosisController` 历史下载权限放宽、`request.js` 403 提示等；
 - `setup/` 目录已删除；`run-all.ps1`、`run-admin.ps1` 已删除；
 - 新增安全文档：`SECURITY_AUDIT_REPORT_2026-08-13.md`、`SECURITY_EXCEPTIONS.md`、`SECURITY_REMEDIATION_TRACKER.md`；
-- `deployment/` 存在完整离线部署脚本、Nginx/Prometheus/WinSW 配置和协议文档；
+- 离线部署目录已移除，当前项目保留本地开发启动脚本；
 - `REALTIME_DIAGNOSIS_UPGRADE_PLAN.md` 已重写为单台 Windows Server、CPU 优先的多测点多模型实时诊断实施方案；实时策略、窗口缓冲、Redis 任务流、双模型 worker 和部署配置已落地，现场 Redis/IoTDB/模型进程演练仍需执行；
 - `AI_PROJECT_OVERVIEW.md.bak-20260813` 已不存在，不是权威文档。
 
@@ -55,7 +55,7 @@ git log -1 --oneline --decorate
 2. 当前实际生效的 Spring/Vue/Python 配置；
 3. Flyway 迁移、Mapper 和数据库约束；
 4. 自动化测试与 CI 工作流；
-5. `start-all.ps1`、`deployment/` 部署和打包脚本；
+5. `start-all.ps1` 本地开发启动脚本；
 6. 本文件；
 7. 根 README、`sql/` 历史 SQL、安全文档和旧日志。
 
@@ -105,7 +105,7 @@ git log -1 --oneline --decorate
 - 齿轮、轴承模型推理及诊断任务；
 - 低代码工作台（独立数据源、版本化元数据、连接器）；
 - MySQL 业务记录和 IoTDB 时序投影；
-- Windows 本地一键启动及离线部署设计。
+- Windows 本地一键启动设计。
 
 油液监测目前只有前端预留页和菜单，不是已经落地的完整业务服务（见 §5.1）。
 
@@ -141,11 +141,11 @@ Python 只负责模型推理，不持有业务数据库权限。
 
 ### 1.3 代码地图
 
-- 后端入口、公共能力和系统管理分别位于 `ruoyi-admin`、`ruoyi-common`、`ruoyi-framework`、`ruoyi-system`；Quartz 和代码生成分别位于 `ruoyi-quartz`、`ruoyi-generator`。
+- 后端入口、公共能力和系统管理分别位于 `ruoyi-admin`、`ruoyi-common`、`ruoyi-framework`、`ruoyi-system`；低代码工作台位于 `ruoyi-lowcode`。
 - 工业业务核心在 `ruoyi-sensor`；其 `mock` 是独立 Maven 模拟器（`vibration-simulator`），`inference` 是独立 FastAPI/PyTorch 目录。
-- Vue 2 应用在 `ruoyi-ui`；离线设计、Nginx/WinSW/监控配置在 `deployment`；历史 SQL 在 `sql`（不是生产迁移主入口）。
+- Vue 2 应用在 `ruoyi-ui`；历史 SQL 在 `sql`（不是生产迁移主入口）。
 - 安全文档：`SECURITY_AUDIT_REPORT_2026-08-13.md`、`SECURITY_EXCEPTIONS.md`、`SECURITY_REMEDIATION_TRACKER.md`。
-- 低代码 V2：后端在 `ruoyi-generator/lowcode`，公共 SPI 在 `ruoyi-common/lowcode`，前端在 `ruoyi-ui/src/views/tool/lowcode`。
+- 低代码 V2：后端在 `ruoyi-lowcode/core`，公共 SPI 在 `ruoyi-common/lowcode`，前端在 `ruoyi-ui/src/views/tool/lowcode`。
 
 ### 1.4 当前关键注意点
 
@@ -187,7 +187,6 @@ Python 只负责模型推理，不持有业务数据库权限。
 | 算法批处理脚本 | `EXPERIMENTAL` `LOCAL_ONLY` | `04*_diagnose_*.py` | 依赖未完整声明，输入数据很大 |
 | 边缘网关模拟器 | `EXPERIMENTAL` | 独立 mock Maven 模块 | 不代表真实采集器 |
 | 一键本地启动 | `IMPLEMENTED` | `start-all.ps1` 可执行并通过就绪检查 | 依赖本机服务、模型和 .venv |
-| Windows 离线部署 | `IMPLEMENTED` | deployment 脚本与说明 | 干净 VM 端到端演练未留机器证据 |
 
 ---
 ## 3. 运行组件与关键数据流
@@ -263,7 +262,6 @@ sequenceDiagram
 | `sensor.netty.port` | 9000 | `LEGACY` | 配置残留，没有代码监听 |
 修改帧协议时必须同步：
 
-- `deployment/TCP-COLLECTOR-PROTOCOL.md`；
 - `CollectorTcpAuthenticator`；
 - `NettyChannelFrameParser`；
 - `SensorTcpChannelHandler`；
@@ -389,19 +387,17 @@ MySQL 是诊断业务记录的耐久真相，IoTDB 是时序查询投影。
 graph TD
     A["ruoyi-admin"] --> F["ruoyi-framework"]
     A --> S["ruoyi-system"]
-    A --> Q["ruoyi-quartz"]
-    A --> G["ruoyi-generator"]
+    A --> G["ruoyi-lowcode"]
     A --> X["ruoyi-sensor"]
     F --> S
     S --> C["ruoyi-common"]
-    Q --> C
     G --> C
     X --> C
 ```
 
 `ruoyi-sensor/mock` 有独立 POM（`vibration-simulator`），不在根 reactor 中。
 `ruoyi-sensor/inference` 是 Python 目录，不属于 Maven。
-根 reactor 模块：common、system、framework、quartz、generator、sensor、admin。
+根 reactor 模块：common、system、framework、lowcode、sensor、admin。
 
 ### 4.2 后端高价值入口
 
@@ -460,8 +456,8 @@ graph TD
 | `/csrf` | `STABLE` | 匿名 | SysLoginController、SecurityConfig |
 | `/login`、`/getInfo`、`/getRouters` | `STABLE` | 会话 Cookie + CSRF | RuoYi 登录链路 |
 | `/system/*` | `STABLE` | 会话 Cookie + CSRF + 权限 | system 控制器 |
-| `/monitor/*` | `STABLE` | 会话 Cookie + CSRF + 权限 | 监控和 Quartz 控制器 |
-| `/tool/*` | `STABLE` | 会话 Cookie + CSRF + 权限 | generator/低代码 |
+| `/monitor/*` | `STABLE` | 会话 Cookie + CSRF + 权限 | 监控控制器 |
+| `/tool/*` | `STABLE` | 会话 Cookie + CSRF + 权限 | lowcode 控制器 |
 | `/attachments` | `IMPLEMENTED` | 会话 + 所有权/管理员 | AttachmentController、附件测试 |
 | `/sensor/vibration-data` | `STABLE` | 会话或采集器专用令牌 | DeviceVibrationDataController |
 | `/system/vibration` | `LEGACY` | 同正式接口 | 兼容映射（带 Deprecation/Sunset 头） |
@@ -634,7 +630,7 @@ git status --short -- ruoyi-admin/src/main/java/db/migration
 | `application.yml` | 公共默认值，缺省 profile 为 prod |
 | `application-dev.yml` | 本地推理、IoTDB、采集和开发 Origin；低代码写默认开 |
 | `application-prod.yml` | 环境注入、Flyway、管理端口、生产限制、低代码连接器代理 |
-| `application-druid.yml` | MySQL/Druid |
+| `application.yml` | MySQL/Hikari 与公共默认值 |
 | `ruoyi-ui/.env.development` | 开发 API 前缀（`/dev-api`） |
 | `ruoyi-ui/.env.production` | 生产 API 前缀（`/prod-api`） |
 | `ruoyi-ui/.env.staging` | 预发布构建（`/stage-api`） |
@@ -649,9 +645,9 @@ git status --short -- ruoyi-admin/src/main/java/db/migration
 |---|---|
 | Java 编译目标 | JDK 17 |
 | Spring Boot | 3.4.5 |
-| Spring Security/CSRF | Spring Security + CookieCsrfTokenRepository + JJWT 0.13.0（会话化改造后 JJWT 仅保留依赖） |
+| Spring Security/CSRF | Spring Security + CookieCsrfTokenRepository + Redis 会话 |
 | ORM | MyBatis starter 3.0.4、MyBatis-Plus 3.5.9 |
-| Druid | 1.2.28 |
+| HikariCP | Spring Boot 默认连接池 |
 | IoTDB Session | 2.0.8 |
 | Netty | 4.1.118.Final |
 | JTransforms | 3.1 |
@@ -660,7 +656,7 @@ git status --short -- ruoyi-admin/src/main/java/db/migration
 | Element UI | 2.15.14 |
 | ECharts | 6.1.0 |
 | Vue CLI | 5.0.9 |
-| Axios/Core-js/DOMPurify | 1.18.1 / 3.45.1 / 3.4.13 |
+| Axios/Core-js | 1.18.1 / 3.45.1 |
 | FastAPI/Uvicorn | 0.115.12 / 0.34.2 |
 | NumPy/SciPy/PyTorch | 2.2.5 / 1.15.2 / 2.6.0 |
 | pytest | 8.3.5 |
@@ -727,7 +723,7 @@ python --version
 |---|---|---|---|---|
 | `MYSQL_URL` | <code>jdbc:mysql://localhost:3306/ry-yue?useUnicode=true&amp;characterEncoding=utf8&amp;zeroDateTimeBehavior=convertToNull&amp;useSSL=false&amp;allowPublicKeyRetrieval=true&amp;serverTimezone=GMT%2B8</code> | Spring prod | JDBC 地址 | `.env`、`application-prod.yml` |
 | `MYSQL_USERNAME` | <code>root</code> | Spring prod | 数据库用户 | `.env` |
-| `MYSQL_PASSWORD` | <code>admin123</code> | Druid/Spring | 数据库密码（本地开发弱口令） | `.env` |
+| `MYSQL_PASSWORD` | <code>admin123</code> | Spring/Hikari | 数据库密码（本地开发弱口令） | `.env` |
 | `REDIS_HOST` | <code>localhost</code> | Spring prod | Redis 主机 | `.env` |
 | `REDIS_PORT` | <code>6379</code> | Spring | Redis 端口 | `.env` |
 | `REDIS_DATABASE` | <code>0</code> | Spring | Redis DB | `.env` |
@@ -745,7 +741,6 @@ Redis 不仅用于会话和验证码，还承载遥测与通道帧 Streams；运
 | 变量 | 当前真实值 | 使用方 | 用途 | 证据位置 |
 |---|---|---|---|---|
 | `RUOYI_SESSION` | <code>随机不透明值（只存在 Redis/HttpOnly Cookie）</code> | Spring Security | 浏览器会话标识 | `TokenService` |
-| `DRUID_CONSOLE_PASSWORD` | <code>admin123</code> | Druid | 管理控制台密码（本地弱口令；prod 关闭 stat-view） | `.env` |
 | `CORS_ALLOWED_ORIGINS` | <code>http://localhost:80,http://localhost:9528,http://localhost,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:9528</code> | Spring | HTTP CORS 白名单 | `.env`、`application.yml` |
 | `SENSOR_WS_ALLOWED_ORIGINS` | <code>http://localhost:80,http://localhost:9528,http://localhost,http://127.0.0.1,http://127.0.0.1:80,http://127.0.0.1:9528</code> | WebSocket | WS Origin 白名单 | `.env`、`application*.yml` |
 | `REFERER_ALLOWED_DOMAINS` | <code>phm.example.internal</code> | Spring prod | 防盗链/Referer 白名单 | `.env`、`application-prod.yml` |
@@ -849,17 +844,9 @@ Python 服务必须注入内部令牌、模型路径/SHA 和输入白名单后�
 Playwright 用例覆盖登录页渲染、验证码失败不弹 webpack 遮罩、业务错误提示、匿名访问重定向、首次改密跳转、固定工业主题等。
 需要 `PHM_E2E_USER`/`PHM_E2E_PASSWORD` 的账号相关用例在本机无凭据时跳过；CI 未注入变量时同样跳过。
 
-### 8.4 Windows 离线部署
+### 8.4 部署范围
 
-`deployment/` 提供：
-
-- 离线包构建 `build-offline-package.ps1`、验证 `verify-offline-package.ps1`；
-- 运行时准备 `prepare-offline-runtime.ps1`、服务安装 `install-services.ps1`、发布切换 `switch-release.ps1`；
-- WinSW 服务 XML（生产 `phm-infer-gear`/`phm-infer-bearing`，开发可保留统一 `phm-inference`）、Nginx 配置、Prometheus/告警配置；
-- 备份恢复说明 `BACKUP-RESTORE.md`、TCP 协议 `TCP-COLLECTOR-PROTOCOL.md`、低代码运维 `LOWCODE-OPERATIONS.md`（未跟踪）。
-
-安全审计后已修复：打包脚本改用编译产物中的 Flyway 迁移目录；验证脚本增加 zip-slip/重复路径/数量/体积/CMS/逐文件 SHA-256/必需文件检查。
-仍待完成：干净 Windows VM 上的安装、升级、回滚、恢复演练结果未在仓库留档。
+当前仓库仅保留单机本地开发启动方式，不包含 Windows 服务、Nginx、监控或离线安装包脚本。
 
 生产要求仍然成立：
 
@@ -893,7 +880,6 @@ Playwright 用例覆盖登录页渲染、验证码失败不弹 webpack 遮罩、
 | 实时诊断单元/集成 | 窗口组装、同点多模型、幂等、过期、Pending 接管、批内失败隔离 | Redis/MySQL 可用 | 任务/结果 | Docker/外部服务缺失时条件跳过 | 状态和版本一致 | 代码与定向测试已覆盖，现场环境待验收 |
 | 实时负载 | 8/32 点、5120 样本、30 秒间隔 | Redis、MySQL、IoTDB、双 worker | 业务数据 | 否 | 端到端 p95 ≤ 5 秒、过期/丢弃率 < 0.1% | 尚无现场演练记录 |
 | 推理停机恢复 | 两个 worker 停止至少 10 分钟后恢复 | Windows 服务、Redis AOF | 队列/任务状态 | 否 | 采集查询正常、过期有界、无陈旧告警洪峰 | 尚无现场演练记录 |
-| 离线部署 | 干净 Windows VM | 全部 runtime、证书、WinSW | 系统服务/目录 | 否 | 安装、升级、回滚、恢复均通过 | 尚无完整证据 |
 
 ### 9.2 定向验证规则
 
@@ -920,7 +906,7 @@ Python 改动执行：
 
 模型或接口变更还需覆盖错误令牌、live/ready 差异、错误模型哈希、越界输入、恶意 object-array NPY（`allow_pickle=False`）、两类模型输出兼容、Java 超时/错误映射和失败任务状态。
 
-冒烟脚本可能写业务数据，运行前阅读参数和清理逻辑；迁移不在生产库试验。离线包必须在无网络干净 VM 上验证安装、升级、回滚和恢复，并记录 RPO、RTO、缺失 eventId 与人工步骤。
+冒烟脚本可能写业务数据，运行前阅读参数和清理逻辑；迁移不在生产库试验。本地验证应记录 RPO、RTO、缺失 eventId 与人工步骤。
 
 ---
 ## 10. AI 修改规则、陷阱与当前问题
@@ -968,7 +954,6 @@ Python 改动执行：
 | `.venv` 版本漂移且缺 pytest | Python 测试无法直接运行，推理结果不可复现 | `pip list` | 用 Python 3.11 按锁定依赖重建 |
 | 历史数据下载页未跟踪 | 新页面可能在提交中遗漏 | `git status` | 纳入功能提交并补齐 E2E |
 | 低代码权限迁移未提交 | 设计器/运行时权限边界依赖未入库的迁移 | `git status` | 完成验证后提交并同步授权文档 |
-| 离线部署无干净 VM 演练记录 | 安装/升级/回滚/恢复未端到端证明 | 仓库无演练结果 | 在干净 Windows VM 演练并留档 |
 | 实时诊断尚无现场负载与停机演练记录 | p95、过期率、AOF 恢复和告警洪峰未被真实环境证明 | 当前仅代码、编译和单元/模块测试 | 按 8/32 点和双 worker 验收矩阵执行 |
 | 生产秘密轮换未执行 | 默认/开发秘密仍可能进入生产 | 安全审计报告 | 按 `SECURITY_REMEDIATION_TRACKER.md` 发布前清单轮换 |
 | `JWT_SECRET`、`IOTDB_WRITE_ENABLED` 遗留 | 容易误判功能已生效 | 引用搜索为零 | 删除遗留变量或实现并记录 |

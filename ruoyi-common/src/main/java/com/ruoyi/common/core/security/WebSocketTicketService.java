@@ -11,7 +11,7 @@ import com.ruoyi.common.utils.uuid.IdUtils;
 
 /**
  * Issues one-time WebSocket tickets so browser clients do not expose their
- * long-lived JWT in a WebSocket URL.
+ * long-lived bearer token in a WebSocket URL.
  */
 @Component
 public class WebSocketTicketService

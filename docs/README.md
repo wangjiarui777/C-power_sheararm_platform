@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-本项目基于 **若依（RuoYi-Vue）前后端分离框架 3.9.2** 深度改造，面向 **工业设备健康管理（PHM）** 场景，提供设备/测点管理、振动与温度实时监测、齿轮/轴承智能诊断、告警事件报表、历史数据下载、IoTDB 时序存储、低代码工作台与 Windows 离线部署能力。实时诊断支持同一测点配置多个模型，生产按齿轮/轴承拆分为独立推理 worker。
+本项目基于 **若依（RuoYi-Vue）前后端分离框架 3.9.2** 深度改造，面向 **工业设备健康管理（PHM）** 场景，提供设备/测点管理、振动与温度实时监测、齿轮/轴承智能诊断、告警事件报表、历史数据下载、IoTDB 时序存储与低代码工作台。实时诊断支持同一测点配置多个模型。
 
 技术体系：**Spring Boot 3 + MyBatis/MyBatis-Plus + Spring WebSocket + Redis Stream + IoTDB + Vue 2 + FastAPI/PyTorch**。
 
@@ -11,9 +11,9 @@
 ## 核心功能
 
 ### 1. 基础后台管理（RuoYi 原生能力）
-- 用户、角色、菜单、部门、岗位、字典、参数等统一管理
+- 用户、角色、菜单、部门、字典、参数等统一管理
 - 登录认证（会话 Cookie + CSRF 双提交）、权限校验、动态菜单
-- 操作日志、登录日志、在线用户、定时任务、代码生成
+- 操作日志、登录日志、在线用户、低代码工作台
 
 ### 2. 工业监测与采集
 - 设备、测点、振动数据、温度数据管理
@@ -50,7 +50,7 @@
 ### 7. 安全加固（2026-08 审计闭环）
 - 认证由 JWT 迁移为 Redis 不透明会话 Cookie + CSRF 双提交
 - 首次登录强制改密门禁（428），服务端密码策略 12–64 位
-- 公告内容 jsoup 允许列表 + DOMPurify 二次净化
+- 上传内容按类型与大小校验并隔离存储
 - NumPy 推理加载 `allow_pickle=False`，拒绝恶意 object-array
 - PyTorch `weights_only=True`；移除全信任 TLS 工具
 - 生产独立管理端口（127.0.0.1:8081）仅暴露 health/prometheus
@@ -60,18 +60,18 @@
 
 ### 后端
 - **Java 17 / Spring Boot 3.4.5**
-- MyBatis 3.0.4 / MyBatis-Plus 3.5.9 / Druid 1.2.28
-- Spring Security（会话 Cookie + CSRF）、JJWT 0.13.0（兼容依赖）
+- MyBatis 3.0.4 / MyBatis-Plus 3.5.9 / HikariCP
+- Spring Security（会话 Cookie + CSRF）
 - Spring WebSocket、Spring AOP、Fastjson2
 - Netty 4.1.118.Final、JTransforms 3.1、commons-math3
 - Apache IoTDB Session 2.0.8、Redis Streams
-- Flyway Java 迁移、SpringDoc OpenAPI（仅 dev/test 装配）
+- Flyway Java 迁移、Actuator health/prometheus
 - Lombok、POI（导出）、PageHelper
 
 ### 前端（Vue 2）
 - **Vue 2.7.16 / Vue Router 3.6.5 / Vuex 3.6.0**
 - Element UI 2.15.14、ECharts 6.1.0、Axios 1.18.1
-- Vue CLI 5.0.9（Webpack 5）、core-js 3、DOMPurify、Playwright E2E
+- Vue CLI 5.0.9（Webpack 5）、core-js 3、Playwright E2E
 - 固定工业主题（`industrial-theme.scss`）
 
 ### 推理服务（Python）
@@ -92,8 +92,7 @@ Spring Boot 应用（ruoyi-admin）
    ├── ruoyi-framework   安全/会话/CSRF/拦截器/配置
    ├── ruoyi-system      用户、角色、菜单、系统业务
    ├── ruoyi-sensor      采集、Stream、诊断、PHM、WebSocket、IoTDB
-   ├── ruoyi-generator   代码生成 + 低代码工作台（独立数据源）
-   ├── ruoyi-quartz      定时任务
+   ├── ruoyi-lowcode     低代码工作台（独立数据源）
    └── ruoyi-common      公共工具、统一返回、低代码 SPI
    │
    ├── MySQL（ry-yue，业务真相）＋ 低代码独立库（ry-lowcode）
@@ -123,16 +122,13 @@ Spring Boot 应用（ruoyi-admin）
 安全认证与会话、CSRF 过滤器、改密门禁、采集器认证、通用配置。
 
 ### `ruoyi-system`
-用户、角色、部门、菜单、岗位、字典等系统管理。
+用户、角色、部门、菜单、字典等系统管理。
 
 ### `ruoyi-common`
 通用工具、统一响应、异常、低代码 SPI（`LowCodeActionHandler` 等）。
 
-### `ruoyi-quartz`
-定时任务调度。
-
-### `ruoyi-generator`
-代码生成器、低代码工作台（项目/版本/连接器/资源白名单，独立数据源）。
+### `ruoyi-lowcode`
+低代码工作台（项目/版本/连接器/资源白名单，独立数据源）。
 
 ### `ruoyi-sensor`
 工业业务核心：遥测 Stream、多通道帧、TCP 采集、PHM 健康管理、诊断编排、WebSocket、IoTDB 时序存储。
@@ -141,7 +137,7 @@ Spring Boot 应用（ruoyi-admin）
 独立 Maven 模块（`vibration-simulator`），可靠边缘网关参考实现：磁盘优先持久化、断网补传、HMAC 认证。
 
 ### `ruoyi-sensor/inference`
-独立 FastAPI/PyTorch 推理服务：齿轮/轴承模型加载、`/internal/*` 内部接口、模型清单与 SHA-256 校验。开发环境统一运行在 5000；生产由 WinSW 分别运行 `phm-infer-gear:5001` 和 `phm-infer-bearing:5002`，并启用 `POST /internal/infer/batch`。
+独立 FastAPI/PyTorch 推理服务：齿轮/轴承模型加载、`/internal/*` 内部接口、模型清单与 SHA-256 校验。本地开发环境统一运行在 5000，并启用 `POST /internal/infer/batch`。
 
 ## 快速启动（Windows 开发环境）
 
@@ -172,7 +168,7 @@ npm ci
 .\start-all.ps1
 ```
 
-脚本按依赖顺序完成：环境/模型/SHA 校验 → MySQL/Redis 检查（含 Streams 能力）→ 旧进程清理 → Maven 构建 → 启动 IoTDB、统一 FastAPI（5000）、Spring Boot（8080，dev profile）、Vue（80）→ 就绪检查 → 写日志与 PID。生产双 worker 由 WinSW 服务定义管理。
+脚本按依赖顺序完成：环境/模型/SHA 校验 → MySQL/Redis 检查（含 Streams 能力）→ 旧进程清理 → Maven 构建 → 启动 IoTDB、统一 FastAPI（5000）、Spring Boot（8080，dev profile）、Vue（80）→ 就绪检查 → 写日志与 PID。
 
 常用参数：
 
@@ -190,11 +186,10 @@ npm ci
 ```text
 RuoYi-Vue-master
 ├── ruoyi-admin / ruoyi-common / ruoyi-framework
-├── ruoyi-generator / ruoyi-quartz / ruoyi-system / ruoyi-sensor
+├── ruoyi-lowcode / ruoyi-system / ruoyi-sensor
 │   ├── sensor/mock          边缘网关模拟器（独立 POM）
 │   └── sensor/inference     FastAPI 推理服务
 ├── ruoyi-ui                 前端（Vue 2）
-├── deployment               离线部署、Nginx、WinSW、监控、协议文档
 ├── docs                     项目总览、实时诊断部署方案与运维说明
 ├── sql                      历史 SQL（空库安装/溯源，非生产迁移）
 ├── .local-models            模型制品（不提交）
@@ -230,7 +225,7 @@ npm run test:e2e
 - 使用 `.env` 注入真实秘密（`MYSQL_PASSWORD`、`SENSOR_INFERENCE_INTERNAL_TOKEN`、`SENSOR_COLLECTOR_MASTER_KEY` 等），严禁沿用开发默认值；
 - 首次启动通过 `INITIAL_ADMIN_PASSWORD` 初始化管理员并强制改密；
 - 低代码生产必须配置独立 `LOWCODE_DB_*` 账号与出站代理，写默认关闭；
-- 离线部署步骤见 `deployment/README.md` 与 `deployment/BACKUP-RESTORE.md`；
+- 当前项目仅提供单机本地启动方式，使用根目录 `start-all.ps1`；
 - 实时诊断部署、迁移、接口和验收矩阵见 `REALTIME_DIAGNOSIS_UPGRADE_PLAN.md`；
 - 发布前按 `SECURITY_REMEDIATION_TRACKER.md` 的“发布前外部关闭项”逐项完成。
 

@@ -40,12 +40,6 @@
             <artifactId>mybatis-plus</artifactId>
         </dependency>
 
-        <!-- 阿里数据库连接池 -->
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>druid-spring-boot-3-starter</artifactId>
-            <version>${druid.version}</version>
-        </dependency>
 
         <!-- 验证码 -->
         <dependency>
@@ -60,12 +54,6 @@
             </exclusions>
         </dependency>
 
-        <!-- 获取系统信息 -->
-        <dependency>
-            <groupId>com.github.oshi</groupId>
-            <artifactId>oshi-core</artifactId>
-            <version>${oshi.version}</version>
-        </dependency>
 
         <!-- 系统模块-->
         <dependency>

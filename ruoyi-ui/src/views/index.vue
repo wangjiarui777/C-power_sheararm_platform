@@ -20,9 +20,9 @@
             <ul>
               <li>SpringBoot</li>
               <li>Spring Security</li>
-              <li>JWT</li>
+              <li>Redis 会话 Cookie + CSRF</li>
               <li>MyBatis</li>
-              <li>Druid</li>
+              <li>HikariCP</li>
               <li>Fastjson</li>
               <li>...</li>
             </ul>
@@ -35,7 +35,7 @@
               <li>Element-ui</li>
               <li>Axios</li>
               <li>Sass</li>
-              <li>Quill</li>
+              <li>ECharts</li>
               <li>...</li>
             </ul>
           </el-col>

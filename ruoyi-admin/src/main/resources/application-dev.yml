@@ -1,7 +1,5 @@
 # 开发环境配置
-# 注意: 数据源配置在 application-druid.yml 中统一定义
-#       Redis 配置在 application.yml 中统一定义
-#       不同环境请使用 application-druid-{profile}.yml 覆盖
+# 数据源和 Redis 使用 application.yml 中的标准配置。
 
 mybatis:
   typeAliasesPackage: com.ruoyi.**.domain
