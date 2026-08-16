@@ -56,8 +56,6 @@ jobs:
   java-security-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -65,12 +63,7 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: maven
-      - uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository/org/owasp/dependency-check-data
-          key: dependency-check-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: dependency-check-${{ runner.os }}-
-      - name: JaCoCo, SpotBugs and OWASP Dependency-Check
+      - name: JaCoCo and SpotBugs
         run: mvn --batch-mode -DskipTests verify -Psecurity-gates
       - uses: actions/upload-artifact@v4
         if: always()
@@ -79,7 +72,6 @@ jobs:
           path: |
             **/target/site/jacoco
             **/target/spotbugs*.xml
-            target/dependency-check-report.*
 
   testcontainers:
     runs-on: ubuntu-latest

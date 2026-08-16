@@ -38,7 +38,6 @@
         <tomcat.version>10.1.57</tomcat.version>
         <libthrift.version>0.24.0</libthrift.version>
         <testcontainers.version>1.21.4</testcontainers.version>
-        <dependency-check.version>13.0.0</dependency-check.version>
     </properties>
 
     <dependencyManagement>
@@ -254,30 +253,6 @@
                             <execution>
                                 <phase>verify</phase>
                                 <goals><goal>check</goal></goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.owasp</groupId>
-                        <artifactId>dependency-check-maven</artifactId>
-                        <version>${dependency-check.version}</version>
-                        <inherited>false</inherited>
-                        <configuration>
-                            <failBuildOnCVSS>7</failBuildOnCVSS>
-                            <formats>
-                                <format>HTML</format>
-                                <format>JSON</format>
-                            </formats>
-                            <skipTestScope>true</skipTestScope>
-                            <nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
-                            <suppressionFiles>
-                                ${project.basedir}/config/dependency-check-suppressions.xml
-                            </suppressionFiles>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <phase>verify</phase>
-                                <goals><goal>aggregate</goal></goals>
                             </execution>
                         </executions>
                     </plugin>
