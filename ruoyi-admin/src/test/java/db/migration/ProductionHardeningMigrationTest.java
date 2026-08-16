@@ -26,6 +26,7 @@ class ProductionHardeningMigrationTest
     {
         createExistingBaseline();
         Flyway flyway = Flyway.configure()
+            .locations(new String[0])
             .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
             .baselineOnMigrate(true)
             .baselineVersion("2026041700")

@@ -30,7 +30,8 @@ class LowCodeV2MigrationTest
             statement.execute("CREATE TABLE sys_role_menu(role_id BIGINT,menu_id BIGINT,UNIQUE KEY(role_id,menu_id))");
             statement.execute("INSERT INTO sys_menu(menu_name,parent_id,order_num,path,menu_type) VALUES('系统工具',0,1,'tool','M')");
         }
-        Flyway flyway = Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
+        Flyway flyway = Flyway.configure().locations(new String[0])
+            .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
             .baselineOnMigrate(true).baselineVersion("2026081300")
             .javaMigrations(new V2026081301__LowCodeV2Platform()).load();
         assertEquals(1, flyway.migrate().migrationsExecuted);
