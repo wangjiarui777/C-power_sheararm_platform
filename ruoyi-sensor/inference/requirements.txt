@@ -6,6 +6,7 @@ numpy==2.2.5
 pandas==2.2.3
 scipy==1.15.2
 torch==2.13.0
+tqdm==4.67.1
 python-multipart==0.0.32
 prometheus-client==0.22.1
 pytest==9.1.1
