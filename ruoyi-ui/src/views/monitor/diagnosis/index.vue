@@ -358,7 +358,7 @@
                 <template slot-scope="scope"><el-radio v-model="selectedMatFile" :label="scope.row.id"><span /></el-radio></template>
               </el-table-column>
               <el-table-column prop="name" label="文件名" min-width="180" show-overflow-tooltip />
-              <el-table-column label="来源" width="80"><template slot-scope="scope">{{ scope.row.sourceType === 'SERVER_DIRECTORY' ? '目录接入' : '本机上传' }}</template></el-table-column>
+            <el-table-column label="来源" width="80"><template slot-scope="scope">{{ scope.row.sourceType === 'MAT_TCP' ? 'MAT 接入' : '本机上传' }}</template></el-table-column>
               <el-table-column label="大小" width="90"><template slot-scope="scope">{{ formatFileSize(scope.row.fileSize) }}</template></el-table-column>
               <el-table-column label="接入时间" width="150"><template slot-scope="scope">{{ parseTime(scope.row.createdAt, '{y}-{m}-{d} {h}:{i}') }}</template></el-table-column>
             </el-table>

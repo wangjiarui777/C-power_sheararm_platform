@@ -19,7 +19,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.filter.CorsFilter;
 import com.ruoyi.framework.config.properties.PermitAllUrlProperties;
 import com.ruoyi.framework.security.filter.JwtAuthenticationTokenFilter;
-import com.ruoyi.framework.security.filter.SensorCollectorAuthenticationFilter;
 import com.ruoyi.framework.security.filter.PasswordChangeRequiredFilter;
 import com.ruoyi.framework.security.filter.CsrfCookieFilter;
 import com.ruoyi.framework.security.handle.AuthenticationEntryPointImpl;
@@ -51,9 +50,6 @@ public class SecurityConfig
      */
     @Autowired
     private JwtAuthenticationTokenFilter authenticationTokenFilter;
-
-    @Autowired
-    private SensorCollectorAuthenticationFilter sensorCollectorAuthenticationFilter;
 
     @Autowired
     private PasswordChangeRequiredFilter passwordChangeRequiredFilter;
@@ -111,11 +107,8 @@ public class SecurityConfig
                 // 显式使用非 XOR handler，避免 Spring Security 6 默认处理器
                 // 将 Cookie 令牌再次编码后导致所有登录 POST 返回 403。
                 CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
-                csrf.csrfTokenRepository(repository).csrfTokenRequestHandler(requestHandler).ignoringRequestMatchers(
-                    "/sensor/vibration-data/upload", "/system/vibration/upload",
-                    "/sensor/vibration-data/batchUpload", "/system/vibration/batchUpload",
-                    "/sensor/temperature-data/upload", "/system/temperature/upload", "/logout",
-                    "/sensor/diagnosis/receiver/callback", "/sensor/vibration/receiver/callback");
+                csrf.csrfTokenRepository(repository).csrfTokenRequestHandler(requestHandler)
+                    .ignoringRequestMatchers("/logout");
             })
             // 禁用HTTP响应标头
             .headers((headersCustomizer) -> {
@@ -140,7 +133,6 @@ public class SecurityConfig
             // 添加会话认证 filter
             .addFilterBefore(authenticationTokenFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(passwordChangeRequiredFilter, JwtAuthenticationTokenFilter.class)
-            .addFilterBefore(sensorCollectorAuthenticationFilter, JwtAuthenticationTokenFilter.class)
             .addFilterAfter(csrfCookieFilter, org.springframework.security.web.csrf.CsrfFilter.class)
             // 添加CORS filter
             .addFilterBefore(corsFilter, JwtAuthenticationTokenFilter.class)

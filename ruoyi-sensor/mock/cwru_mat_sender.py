@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 """Generate random CWRU-style .mat files and send them to the receiver.
 
-Protocol expected by `ruoyi-sensor/inference/get/CwruMatReceiver.java`:
-1. Send the ASCII protocol line `CWRU_MAT_V1\n`
+Protocol expected by the Spring MAT receiver:
+1. Send the ASCII protocol line `CWRU_MAT_V2\n`
 2. Send a 4-byte big-endian integer header length
 3. Send UTF-8 JSON header bytes
-4. Send raw file bytes
+4. Wait for `READY\n`
+5. Send raw file bytes
 
 Default behavior:
 - generate a fresh random `.mat` file every 10 seconds
@@ -29,13 +30,13 @@ import socket
 import struct
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 from scipy.io import loadmat, savemat
 
-MAGIC = b"CWRU_MAT_V1\n"
+MAGIC = b"CWRU_MAT_V2\n"
 DEFAULT_PORT = 8888
 DEFAULT_INTERVAL = 10
 CHUNK_SIZE = 64 * 1024
@@ -49,12 +50,16 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def build_header(path: Path) -> dict:
+def build_header(path: Path, args: argparse.Namespace) -> dict:
     stat = path.stat()
     return {
         "filename": path.name,
         "filesize": stat.st_size,
         "sha256": sha256_file(path),
+        "deviceCode": args.device_code,
+        "pointCode": args.point_code,
+        "channelId": args.channel_id,
+        "acquisitionTime": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -226,8 +231,8 @@ def generate_random_mat(reference_path: Path, output_dir: Path, sample_index: in
     return output_path
 
 
-def send_one(host: str, port: int, path: Path) -> str:
-    header = build_header(path)
+def send_one(host: str, port: int, path: Path, args: argparse.Namespace) -> str:
+    header = build_header(path, args)
     header_bytes = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
     with socket.create_connection((host, port), timeout=10) as sock:
@@ -235,6 +240,15 @@ def send_one(host: str, port: int, path: Path) -> str:
         sock.sendall(MAGIC)
         sock.sendall(struct.pack(">I", len(header_bytes)))
         sock.sendall(header_bytes)
+
+        ready = b""
+        while not ready.endswith(b"\n"):
+            part = sock.recv(4096)
+            if not part:
+                raise RuntimeError("receiver closed before READY")
+            ready += part
+        if ready.decode("utf-8", errors="replace").strip() != "READY":
+            raise RuntimeError(f"receiver rejected header: {ready!r}")
 
         with path.open("rb") as f:
             for chunk in iter(lambda: f.read(CHUNK_SIZE), b""):
@@ -272,6 +286,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--once", action="store_true", help="Generate and send one file only")
     parser.add_argument("--output-dir", default=str(default_output_dir), help="Directory for generated .mat files")
     parser.add_argument("--keep-generated", action="store_true", help="Keep generated files instead of deleting them after send")
+    parser.add_argument("--device-code", default="DEV-001", help="MAT deviceCode")
+    parser.add_argument("--point-code", default="CH1", help="MAT pointCode")
+    parser.add_argument("--channel-id", type=int, default=1, help="Physical MAT channel number")
     return parser.parse_args()
 
 
@@ -312,7 +329,7 @@ def main() -> int:
             for idx, ref_path in enumerate(files):
                 generated_path = generate_random_mat(ref_path, output_dir, sample_index=idx)
                 print(f"[gen] {generated_path.name}")
-                response = send_one(args.host, args.port, generated_path)
+                response = send_one(args.host, args.port, generated_path, args)
                 print(f"[resp] {response or '<empty>'}")
 
                 if not args.keep_generated:

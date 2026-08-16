@@ -11,8 +11,6 @@ import java.util.stream.Collectors;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,7 +20,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
@@ -37,8 +34,6 @@ import com.ruoyi.sensor.domain.entity.PhmDeviceEntity;
 import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
 import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 import com.ruoyi.sensor.service.PhmService;
-import com.ruoyi.sensor.service.TelemetryPipelineService;
-import com.ruoyi.sensor.service.CollectorAccessService;
 
 @RestController
 @RequestMapping({"/sensor/vibration-data", "/system/vibration"})
@@ -54,12 +49,6 @@ public class DeviceVibrationDataController extends BaseController
 
     @Autowired
     private PhmService phmService;
-
-    @Autowired
-    private TelemetryPipelineService telemetryPipelineService;
-
-    @Autowired
-    private CollectorAccessService collectorAccessService;
 
     @Value("${sensor.default-device-code:}")
     private String defaultDeviceCode;
@@ -152,27 +141,6 @@ public class DeviceVibrationDataController extends BaseController
         data.put("dataStatus", records.isEmpty() ? "noRecentData" : "recentOnly");
         data.put("message", "当前通道暂无高频波形/频谱/瀑布数据，已展示最近趋势数据。");
         return success(data);
-    }
-
-    @Log(title = "vibration data", businessType = BusinessType.INSERT)
-    @PreAuthorize("hasAuthority('sensor:collector:upload')")
-    @PostMapping("/upload")
-    public ResponseEntity<AjaxResult> upload(@RequestBody DeviceVibrationData deviceVibrationData,
-        @RequestHeader(value = "X-Event-Id", required = false) String eventId,
-        @RequestHeader(value = "X-Sequence", required = false) Long sequence)
-    {
-        collectorAccessService.requireDevice(deviceVibrationData.getDeviceCode());
-        var accepted = telemetryPipelineService.accept(TelemetryPipelineService.fromUpload(
-            eventId,
-            deviceVibrationData.getDeviceCode(),
-            "vibration",
-            deviceVibrationData.getChannelId(),
-            deviceVibrationData.getVibrationValue() == null
-                ? null : deviceVibrationData.getVibrationValue().doubleValue(),
-            deviceVibrationData.getSampleTime(),
-            sequence,
-            deviceVibrationData.getQuality()));
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(success(accepted));
     }
 
     private String normalizeDeviceCode(String deviceCode)
@@ -473,29 +441,6 @@ public class DeviceVibrationDataController extends BaseController
             return ((Number) value).doubleValue();
         }
         return defaultValue;
-    }
-
-    @Log(title = "vibration data", businessType = BusinessType.INSERT)
-    @PreAuthorize("hasAuthority('sensor:collector:upload')")
-    @PostMapping("/batchUpload")
-    public ResponseEntity<AjaxResult> batchUpload(@RequestBody List<DeviceVibrationData> deviceVibrationDataList)
-    {
-        if (deviceVibrationDataList == null || deviceVibrationDataList.isEmpty())
-        {
-            return ResponseEntity.badRequest().body(AjaxResult.error("batch data is empty"));
-        }
-        List<com.ruoyi.sensor.domain.dto.TelemetryAcceptance> accepted = new ArrayList<>();
-        for (DeviceVibrationData item : deviceVibrationDataList)
-        {
-            collectorAccessService.requireDevice(item.getDeviceCode());
-            accepted.add(telemetryPipelineService.accept(TelemetryPipelineService.fromUpload(
-                item.getEventId(), item.getDeviceCode(), "vibration", item.getChannelId(),
-                item.getVibrationValue() == null ? null : item.getVibrationValue().doubleValue(),
-                item.getSampleTime(),
-                item.getSampleTime() == null ? null : item.getSampleTime().getTime(),
-                item.getQuality())));
-        }
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(success(accepted));
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:vibration:export')")

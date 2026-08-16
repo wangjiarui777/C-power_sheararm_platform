@@ -28,7 +28,6 @@ class ControllerSecurityContractTest
         VibrationDiagnosisController.class,
         PhmController.class,
         WebSocketTicketController.class,
-        CollectorCredentialController.class,
         ModelReleaseController.class,
         PhmAcquisitionChannelController.class,
         SensorIngestFileController.class
@@ -55,22 +54,8 @@ class ControllerSecurityContractTest
     }
 
     @Test
-    void collectorEndpointsOnlyGrantUploadAuthority()
-    {
-        assertCollectorGuard(DeviceVibrationDataController.class, "upload");
-        assertCollectorGuard(DeviceVibrationDataController.class, "batchUpload");
-        assertCollectorGuard(DeviceTemperatureDataController.class, "upload");
-        assertCollectorGuard(VibrationDiagnosisController.class, "receiverCallback");
-    }
-
-    @Test
     void interactiveEndpointsUseRuoYiPermissionExpressions()
     {
-        List<String> collectorEndpoints = List.of(
-            "DeviceVibrationDataController#upload",
-            "DeviceVibrationDataController#batchUpload",
-            "DeviceTemperatureDataController#upload",
-            "VibrationDiagnosisController#receiverCallback");
         for (Class<?> controller : CONTROLLERS)
         {
             PreAuthorize classGuard = controller.getAnnotation(PreAuthorize.class);
@@ -80,23 +65,9 @@ class ControllerSecurityContractTest
                 PreAuthorize methodGuard = method.getAnnotation(PreAuthorize.class);
                 String expression = methodGuard == null ? classGuard.value() : methodGuard.value();
                 String endpoint = controller.getSimpleName() + "#" + method.getName();
-                if (collectorEndpoints.contains(endpoint))
-                    assertTrue(expression.contains("hasAuthority('sensor:collector:upload')"), endpoint);
-                else
-                    assertTrue(expression.contains("@ss.has"), () -> endpoint + " 未使用若依权限表达式");
+                assertTrue(expression.contains("@ss.has"), () -> endpoint + " 未使用若依权限表达式");
             }
         }
-    }
-
-    private void assertCollectorGuard(Class<?> controller, String methodName)
-    {
-        Method method = Arrays.stream(controller.getDeclaredMethods())
-            .filter(item -> item.getName().equals(methodName))
-            .findFirst()
-            .orElseThrow();
-        PreAuthorize guard = method.getAnnotation(PreAuthorize.class);
-        assertNotNull(guard);
-        assertTrue(guard.value().contains("sensor:collector:upload"));
     }
 
     private boolean isEndpoint(Method method)

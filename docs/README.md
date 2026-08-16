@@ -2,11 +2,11 @@
 
 ## 项目简介
 
-本项目基于 **若依（RuoYi-Vue）前后端分离框架 3.9.2** 深度改造，面向 **工业设备健康管理（PHM）** 场景，提供设备/测点管理、振动与温度实时监测、齿轮/轴承智能诊断、告警事件报表、历史数据下载、IoTDB 时序存储与低代码工作台。实时诊断支持同一测点配置多个模型。
+本项目基于 **若依（RuoYi-Vue）前后端分离框架 3.9.2** 深度改造，面向 **工业设备健康管理（PHM）** 场景，提供设备/测点管理、振动与温度历史查询、齿轮/轴承智能诊断、告警事件报表、历史数据下载、IoTDB 时序存储与低代码工作台。下位机文件接入统一为 8888 端口的 CWRU_MAT_V2。
 
 技术体系：**Spring Boot 3 + MyBatis/MyBatis-Plus + Spring WebSocket + Redis Stream + IoTDB + Vue 2 + FastAPI/PyTorch**。
 
-系统以 **Java（Spring Boot）** 为统一边界：负责用户认证（Redis 会话 Cookie + CSRF）、权限、数据范围、采集认证、诊断编排与持久化；**Python（FastAPI）** 只做模型推理，仅对 Java 暴露内部接口，浏览器不可直接访问。
+系统以 **Java（Spring Boot）** 为统一边界：负责用户认证（Redis 会话 Cookie + CSRF）、权限、数据范围、MAT 文件接收、诊断编排与持久化；**Python（FastAPI）** 只做模型推理，仅对 Java 暴露内部接口，浏览器不可直接访问。
 
 ## 核心功能
 
@@ -17,8 +17,7 @@
 
 ### 2. 工业监测与采集
 - 设备、测点、振动数据、温度数据管理
-- HTTP 采集器认证与 Redis Stream 异步遥测管道
-- 多通道振动帧 Stream、HMAC 签名 TCP（8891）、历史 MAT 接收（8888）
+- Spring 内置 MAT 文件接收（8888/CWRU_MAT_V2），文件校验、隔离、台账和幂等
 - WebSocket（`/ws/sensor`、`/ws/monitoring`）一次性票据握手与实时推送
 - 八通道实时监控页面、实时监测工作台（资产树、KPI 条、趋势图）
 
@@ -27,8 +26,7 @@
 - 告警规则、告警处理、设备事件、实时/历史报表与 CSV 导出
 - 齿轮、轴承模型推理（FastAPI + PyTorch，模型清单 + SHA-256 校验）
 - 单点诊断、批量诊断、诊断任务历史、历史数据下载
-- 多测点多模型实时诊断：窗口缓冲、Redis 任务流、动态批量推理、截止时间、有限重试、Pending 接管和告警/WebSocket 联动
-- 实时策略管理：`/sensor/diagnosis/realtime/policies`、`/sensor/diagnosis/realtime/status`
+- 自动 MAT 诊断任务：按测点唯一主模型绑定，异步推理、结果持久化和 WebSocket 联动
 - MySQL→IoTDB 诊断结果同步（outbox + 重试 + 租约），IoTDB 主读、MySQL 回退
 
 ### 4. 时序存储（IoTDB 2 Table 模型）
@@ -111,7 +109,7 @@ Spring Boot 应用（ruoyi-admin）
 - **安全默认**：会话 Cookie、CSRF、数据范围、附件所有权、低代码白名单、模型哈希
 - **实时可靠性**：采集持久化链路与诊断链路隔离；Redis AOF、ACK、`XPENDING/XCLAIM`、截止时间和有限重试保证实时新鲜度
 
-完整部署实施方案见 [`REALTIME_DIAGNOSIS_UPGRADE_PLAN.md`](../REALTIME_DIAGNOSIS_UPGRADE_PLAN.md)。
+8888 接入协议、迁移和验收说明见 [`AI_PROJECT_OVERVIEW.md`](AI_PROJECT_OVERVIEW.md)。
 
 ## 主要模块说明
 
@@ -119,7 +117,7 @@ Spring Boot 应用（ruoyi-admin）
 项目启动入口、Web 接口聚合层、Flyway 迁移（`src/main/java/db/migration`）。
 
 ### `ruoyi-framework`
-安全认证与会话、CSRF 过滤器、改密门禁、采集器认证、通用配置。
+安全认证与会话、CSRF 过滤器、改密门禁和通用配置。
 
 ### `ruoyi-system`
 用户、角色、部门、菜单、字典等系统管理。
@@ -131,10 +129,10 @@ Spring Boot 应用（ruoyi-admin）
 低代码工作台（项目/版本/连接器/资源白名单，独立数据源）。
 
 ### `ruoyi-sensor`
-工业业务核心：遥测 Stream、多通道帧、TCP 采集、PHM 健康管理、诊断编排、WebSocket、IoTDB 时序存储。
+工业业务核心：MAT TCP 接收、PHM 健康管理、诊断编排、历史查询、WebSocket 和 IoTDB 时序存储。
 
 ### `ruoyi-sensor/mock`
-独立 Maven 模块（`vibration-simulator`），可靠边缘网关参考实现：磁盘优先持久化、断网补传、HMAC 认证。
+MAT V2 Python 测试发送器，负责生成/发送带完整协议头的 `.mat` 文件。
 
 ### `ruoyi-sensor/inference`
 独立 FastAPI/PyTorch 推理服务：齿轮/轴承模型加载、`/internal/*` 内部接口、模型清单与 SHA-256 校验。本地开发环境统一运行在 5000，并启用 `POST /internal/infer/batch`。
@@ -220,13 +218,13 @@ npm run test:e2e
 - 生产经 Nginx（HTTPS）对外，Java/Python 仅绑定内部地址；
 - 生产推理拆分为 `phm-infer-gear:5001` 与 `phm-infer-bearing:5002`；Java 不因单个推理 worker 不可用而停止采集和存储；
 - Redis 实时任务流启用 AOF（`everysec`），任务以 10 秒截止时间和最多两次尝试保障新鲜度，过期任务不补发陈旧告警；
-- 仅 Nginx 443 对用户开放；8891 仅允许采集网段，5001/5002、Java 管理端口、Redis、MySQL、IoTDB 不对用户开放；
+- 8888 仅允许可信采集内网，5001/5002、Java 管理端口、Redis、MySQL、IoTDB 不对用户开放；
 - MySQL、Redis、IoTDB 与采集端口受防火墙限制；
-- 使用 `.env` 注入真实秘密（`MYSQL_PASSWORD`、`SENSOR_INFERENCE_INTERNAL_TOKEN`、`SENSOR_COLLECTOR_MASTER_KEY` 等），严禁沿用开发默认值；
+- 使用 `.env` 注入真实秘密（`MYSQL_PASSWORD`、`SENSOR_INFERENCE_INTERNAL_TOKEN` 等），严禁沿用开发默认值；
 - 首次启动通过 `INITIAL_ADMIN_PASSWORD` 初始化管理员并强制改密；
 - 低代码生产必须配置独立 `LOWCODE_DB_*` 账号与出站代理，写默认关闭；
 - 当前项目仅提供单机本地启动方式，使用根目录 `start-all.ps1`；
-- 实时诊断部署、迁移、接口和验收矩阵见 `REALTIME_DIAGNOSIS_UPGRADE_PLAN.md`；
+- MAT 接入部署、迁移、接口和验收矩阵见 `AI_PROJECT_OVERVIEW.md`；
 - 发布前按 `SECURITY_REMEDIATION_TRACKER.md` 的“发布前外部关闭项”逐项完成。
 
 ## 适用场景

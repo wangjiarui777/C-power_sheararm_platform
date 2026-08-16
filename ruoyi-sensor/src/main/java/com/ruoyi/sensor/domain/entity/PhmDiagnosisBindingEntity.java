@@ -6,23 +6,21 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+/** The single automatic MAT diagnosis model configured for a vibration point. */
 @Data
-@TableName("phm_realtime_diagnosis_policy")
-public class RealtimeDiagnosisPolicyEntity
+@TableName("phm_diagnosis_binding")
+public class PhmDiagnosisBindingEntity
 {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
     private Long deviceId;
+    private String deviceCode;
     private Long pointId;
+    private Long channelId;
     private String modelType;
     private String modelVersion;
-    private Integer windowSamples;
-    private Integer strideSamples;
-    private Integer minIntervalSeconds;
-    private Integer alarmCooldownSeconds;
     private Boolean enabled;
-    private String remark;
-    private String createBy;
     private Date createTime;
     private Date updateTime;
+    private String remark;
 }

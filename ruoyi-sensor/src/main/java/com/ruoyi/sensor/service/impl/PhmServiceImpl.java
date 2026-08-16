@@ -671,7 +671,6 @@ public class PhmServiceImpl implements PhmService
         record.setBatchId(toLong(diagnosis.get("batchId"), null));
         record.setTaskId(toLong(diagnosis.get("taskId"), null));
         record.setSourceType(stringValue(diagnosis.get("sourceType"), "MANUAL"));
-        record.setWindowId(stringValue(diagnosis.get("windowId"), null));
         record.setDeviceCode(stringValue(diagnosis.get("deviceCode"), ""));
         record.setPointId(toLong(diagnosis.get("pointId"), null));
         record.setChannelId(toInteger(diagnosis.get("channelId"), null));

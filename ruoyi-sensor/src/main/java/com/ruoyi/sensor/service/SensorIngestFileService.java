@@ -24,15 +24,17 @@ public class SensorIngestFileService
     private final PhmMeasurePointMapper pointMapper;
     private final PhmAcquisitionChannelService channelService;
     private final PhmDataScopeService dataScope;
+    private final MatFileReceiverService matReceiver;
 
     public SensorIngestFileService(SensorIngestFileMapper mapper,
         PhmMeasurePointMapper pointMapper, PhmAcquisitionChannelService channelService,
-        PhmDataScopeService dataScope)
+        PhmDataScopeService dataScope, MatFileReceiverService matReceiver)
     {
         this.mapper = mapper;
         this.pointMapper = pointMapper;
         this.channelService = channelService;
         this.dataScope = dataScope;
+        this.matReceiver = matReceiver;
     }
 
     /** Unmapped files are visible to every list-permission user; mapped rows remain data-scoped. */
@@ -60,7 +62,10 @@ public class SensorIngestFileService
         PhmMeasurePointEntity point = pointMapper.selectById(request.getPointId());
         if (point == null || !Objects.equals(device.getId(), point.getDeviceId()))
             throw new ServiceException("测点不存在或不属于指定设备");
-        PhmAcquisitionChannelEntity channel = channelService.getScoped(request.getChannelId());
+        if (request.getChannelId() == null || request.getChannelId() < 1 || request.getChannelId() > 64)
+            throw new ServiceException("物理通道号必须在 1 到 64 之间");
+        PhmAcquisitionChannelEntity channel = channelService.findScopedByPhysicalChannel(
+            device.getId(), point.getId(), request.getChannelId());
         if (channel == null || !Objects.equals(device.getId(), channel.getDeviceId())
             || !Objects.equals(point.getId(), channel.getPointId()))
             throw new ServiceException("采集通道不存在、越权或尚未绑定到指定测点");
@@ -77,6 +82,17 @@ public class SensorIngestFileService
         int updated = mapper.associate(id, device.getId(), device.getDeviceCode(), point.getId(),
             point.getPointCode(), channel.getChannelNo());
         if (updated == 0) throw new ServiceException("文件状态已变化，请刷新后重试");
+        if ("MAT_TCP".equals(file.getSourceType()))
+        {
+            try
+            {
+                matReceiver.retryQuarantined(id, device.getId(), point.getId(), channel.getChannelNo());
+            }
+            catch (Exception ex)
+            {
+                throw new ServiceException("MAT 文件重新校验失败: " + ex.getMessage());
+            }
+        }
         return updated;
     }
 
@@ -94,6 +110,18 @@ public class SensorIngestFileService
         }
         int updated = mapper.retry(id);
         if (updated == 0) throw new ServiceException("文件状态已变化，请刷新后重试");
+        if ("MAT_TCP".equals(file.getSourceType()) && file.getDeviceId() != null
+            && file.getPointId() != null && file.getChannelId() != null)
+        {
+            try
+            {
+                matReceiver.retryQuarantined(id, file.getDeviceId(), file.getPointId(), file.getChannelId());
+            }
+            catch (Exception ex)
+            {
+                throw new ServiceException("MAT 文件重试失败: " + ex.getMessage());
+            }
+        }
         return updated;
     }
 }

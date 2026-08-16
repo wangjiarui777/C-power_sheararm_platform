@@ -1294,7 +1294,7 @@ export default {
       this.$set(this.pointFileMappings, pointId, {
         attachmentId: val,
         attachmentName: file ? file.name : '',
-        sourceType: file ? file.sourceType : 'SERVER_DIRECTORY'
+        sourceType: file ? file.sourceType : 'MAT_TCP'
       })
       this.$delete(this.pendingUploadFiles, pointId)
       this.pendingUploadFile = null

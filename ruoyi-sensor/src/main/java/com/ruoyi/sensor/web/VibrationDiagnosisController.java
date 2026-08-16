@@ -128,37 +128,6 @@ public class VibrationDiagnosisController
         this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 
-    @PreAuthorize("hasAuthority('sensor:collector:upload')")
-    @PostMapping("/receiver/callback")
-    public AjaxResult receiverCallback(@RequestBody Map<String, Object> payload)
-    {
-        String filePath = payload == null ? null : String.valueOf(payload.get("filePath"));
-        String filename = payload == null ? null : String.valueOf(payload.get("filename"));
-        Map<String, Object> latest = new LinkedHashMap<>();
-        latest.put("deviceCode", resolveDeviceCode(payload));
-        latest.put("channelId", payload == null ? 1 : toNumber(payload.get("channelId"), 1));
-        latest.put("sampleTime", new Date());
-        latest.put("modelVersion", "best_model_classwise_maha.pth");
-        latest.put("diagnosisResult", "在线诊断任务已接收");
-        latest.put("diagnosisName", "在线诊断任务已接收");
-        latest.put("diagnosisDetail", "MAT 文件已接收，尚未产生模型诊断结果");
-        latest.put("confidence", null);
-        latest.put("healthIndex", null);
-        latest.put("riskLevel", null);
-        latest.put("status", "pending");
-        latest.put("dataStatus", "pending");
-        latest.put("latestRms", null);
-        latest.put("latestPeak", null);
-        latest.put("batchId", null);
-        latest.put("filePath", filePath);
-        latest.put("filename", filename);
-        latest.put("waveform", new ArrayList<>());
-        latest.put("frequencyAxis", new ArrayList<>());
-        latest.put("spectrum", new ArrayList<>());
-        latest.put("evidence", new ArrayList<>());
-        return AjaxResult.success(latest);
-    }
-
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
     @PostMapping("/receiver/analyze")
     public AjaxResult receiverAnalyze(@RequestBody Map<String, Object> payload)
@@ -385,6 +354,68 @@ public class VibrationDiagnosisController
         result.put("deviceCount", visibleDeviceCount);
         result.put("pointCount", points.size());
         return AjaxResult.success(result);
+    }
+
+    /**
+     * Creates an automatic task after the MAT receiver has already validated
+     * the device, point, channel and secure attachment. This method deliberately
+     * does not depend on an HTTP login context.
+     */
+    public Map<String, Object> submitInternalMatTask(String deviceCode, Long pointId, Integer channelId,
+        PhmAttachmentEntity attachment, String modelType, String modelVersion, Date acquisitionTime)
+    {
+        if (attachment == null || attachment.getId() == null)
+        {
+            throw new IllegalArgumentException("MAT 附件不能为空");
+        }
+        if (!SUPPORTED_MODEL_TYPES.contains(modelType))
+        {
+            throw new IllegalArgumentException("MAT 测点模型类型非法");
+        }
+        ResolvedModel resolved = resolveModel(modelType, modelVersion);
+        String idempotencyKey = "MAT_TCP:" + deviceCode + ":" + pointId + ":" + attachment.getSha256();
+        InferenceTaskEntity existing = inferenceTaskMapper.selectOne(
+            new LambdaQueryWrapper<InferenceTaskEntity>()
+                .eq(InferenceTaskEntity::getIdempotencyKey, idempotencyKey)
+                .last("LIMIT 1"));
+        if (existing != null)
+        {
+            return taskSummary(existing);
+        }
+        Date now = new Date();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("deviceCode", deviceCode);
+        payload.put("pointId", pointId);
+        payload.put("channelId", channelId);
+        payload.put("attachmentId", attachment.getId());
+        payload.put("filename", attachment.getFileName());
+        payload.put("sourceType", "MAT_TCP");
+        payload.put("sampleTime", acquisitionTime == null ? now : acquisitionTime);
+        payload.put("modelType", modelType);
+        payload.put("modelVersion", resolved.modelVersion);
+        putResolvedModel(payload, resolved);
+
+        InferenceTaskEntity task = new InferenceTaskEntity();
+        task.setRequestId(UUID.randomUUID().toString());
+        task.setIdempotencyKey(idempotencyKey);
+        task.setAttemptNo(1);
+        task.setDeviceCode(deviceCode);
+        task.setPointId(pointId);
+        task.setChannelId(channelId);
+        task.setModelType(modelType);
+        task.setRequestedModelVersion(resolved.modelVersion);
+        task.setInputType("ATTACHMENT");
+        task.setInputRef(String.valueOf(attachment.getId()));
+        task.setInputSha256(attachment.getSha256());
+        task.setSourceType("MAT_TCP");
+        task.setStatus("PENDING");
+        task.setInputJson(JSON.toJSONString(payload));
+        task.setCreatedBy("mat-tcp");
+        task.setCreateTime(now);
+        task.setUpdateTime(now);
+        inferenceTaskMapper.insert(task);
+        diagnosisExecutor.execute(() -> executeTask(task.getId()));
+        return taskSummary(task);
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
@@ -616,7 +647,7 @@ public class VibrationDiagnosisController
             finishTask(task, "INVALID", "MODEL_UNAVAILABLE", ex.getMessage(), null);
             return;
         }
-        payload.put("sampleTime", DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, new Date()));
+        payload.putIfAbsent("sampleTime", DateUtils.parseDateToStr(DateUtils.YYYY_MM_DD_HH_MM_SS, new Date()));
         PhmAttachmentEntity attachment = attachmentStorageService.getDiagnosisInputForTask(
             toLong(task.getInputRef(), null), task.getInputSha256());
         if (attachment == null)
@@ -981,7 +1012,7 @@ public class VibrationDiagnosisController
                 result.put("pointId", item.getPointId());
                 result.put("channelId", item.getChannelId());
                 result.put("sourceType", item.getRemark() != null
-                    && item.getRemark().contains("SOURCE:SERVER_DIRECTORY") ? "SERVER_DIRECTORY" : "BROWSER_UPLOAD");
+                    && item.getRemark().contains("SOURCE:MAT_TCP") ? "MAT_TCP" : "BROWSER_UPLOAD");
                 result.put("modelType", modelType);
                 return result;
             })

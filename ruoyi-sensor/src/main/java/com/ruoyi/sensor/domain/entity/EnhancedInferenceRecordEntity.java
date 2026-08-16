@@ -16,7 +16,6 @@ public class EnhancedInferenceRecordEntity
     private Long batchId;
     private Long taskId;
     private String sourceType;
-    private String windowId;
     private String deviceCode;
     private Long pointId;
     private Integer channelId;

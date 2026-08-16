@@ -3,7 +3,7 @@
 #
 # 架构：Vue(80) -> Spring Boot(8080) -> FastAPI 统一推理(5000)
 #                         -> Apache IoTDB ConfigNode/DataNode(10710/6667)
-#       采集接收端口 8888/8890/8891/9000 由 Spring Boot 开发配置启动。
+#       MAT 接收端口 8888 由 Spring Boot 内置服务启动。
 #       诊断测点总览由 Vue 路由承载，聚合接口随 Spring Boot 一并启动。
 # 所有模型、附件、上传文件、日志和运行状态都保存在本项目目录内。
 # =============================================================================
@@ -110,8 +110,7 @@ function Test-IsProjectProcess {
     if ($commandLine.IndexOf($projectRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
     if (-not [string]::IsNullOrWhiteSpace($script:iotdbHome) -and
         $commandLine.IndexOf($script:iotdbHome, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
-    # 开发环境的 MAT 接收器以类名启动，命令行不包含工作目录。
-    return $commandLine -match '(^|\s)CwruMatReceiver(\s|$)'
+    return $false
 }
 
 function Stop-Listener {
@@ -269,36 +268,6 @@ function Start-DependencyService {
     Write-Host "[READY] $DisplayName -> 127.0.0.1:$Port" -ForegroundColor Green
 }
 
-function Assert-RedisStreamsSupport {
-    $redisCli = Get-Command redis-cli -ErrorAction SilentlyContinue
-    if ($null -eq $redisCli) {
-        throw '缺少 redis-cli，无法验证 Redis Streams。请安装 Redis 5+ 或 Memurai 4+。'
-    }
-    $redisHost = if ([string]::IsNullOrWhiteSpace($env:REDIS_HOST)) { '127.0.0.1' } else { $env:REDIS_HOST }
-    $redisPort = if ([string]::IsNullOrWhiteSpace($env:REDIS_PORT)) { 6379 } else { [int]$env:REDIS_PORT }
-    $previousAuth = [Environment]::GetEnvironmentVariable('REDISCLI_AUTH', 'Process')
-    try {
-        if (-not [string]::IsNullOrWhiteSpace($env:REDIS_PASSWORD)) {
-            [Environment]::SetEnvironmentVariable('REDISCLI_AUTH', $env:REDIS_PASSWORD, 'Process')
-        }
-        $capability = (& $redisCli.Source -h $redisHost -p $redisPort COMMAND INFO XREADGROUP 2>$null | Out-String).Trim()
-        if ([string]::IsNullOrWhiteSpace($capability) -or $capability -match 'unknown command|\(nil\)') {
-            # 旧版 Windows Redis（例如 3.0.x）常占用默认 6379，无法满足 Streams。
-            # 如果项目目录已有便携式 Redis 运行时，则自动切换到 6380，避免用户
-            # 还要手工停止系统服务；没有运行时仍明确提示安装 Redis 5+/Memurai。
-            $portablePort = if ($redisPort -eq 6379) { 6380 } else { $null }
-            if ($portablePort -and (Start-PortableRedis -Port $portablePort)) {
-                $env:REDIS_PORT = [string]$portablePort
-                Write-Host "[INFO] $redisHost`:$redisPort 不支持 Streams，已切换到项目内 Redis 127.0.0.1:$portablePort" -ForegroundColor Yellow
-                return Assert-RedisStreamsSupport
-            }
-            throw "Redis $redisHost`:$redisPort 不支持 Redis Streams（缺少 XREADGROUP）。当前项目的实时采集/诊断流要求 Redis 5+，Windows 可安装 Memurai 4+。"
-        }
-        Write-Host "[READY] Redis Streams -> $redisHost`:$redisPort" -ForegroundColor Green
-    } finally {
-        [Environment]::SetEnvironmentVariable('REDISCLI_AUTH', $previousAuth, 'Process')
-    }
-}
 $script:iotdbHome = [IO.Path]::GetFullPath($iotdbHomeCandidate)
 $iotdbWindowsSbin = Join-Path $script:iotdbHome 'sbin\windows'
 $iotdbConfigNodeScript = Join-Path $iotdbWindowsSbin 'start-confignode.bat'
@@ -384,7 +353,6 @@ if (-not [string]::IsNullOrWhiteSpace($env:REDIS_SERVICE_NAME)) {
 Start-DependencyService -DisplayName 'MySQL' -CandidateNames $mysqlServiceCandidates -Port 3306
 $redisPort = if ([string]::IsNullOrWhiteSpace($env:REDIS_PORT)) { 6379 } else { [int]$env:REDIS_PORT }
 Start-DependencyService -DisplayName 'Redis' -CandidateNames $redisServiceCandidates -Port $redisPort
-Assert-RedisStreamsSupport
 Write-Step '停止当前项目的旧监听进程'
 # 5001/9528 是历史架构遗留端口；仅在确认属于本项目时才清理。
 foreach ($legacyPort in @(5001, 9528)) {
@@ -393,7 +361,7 @@ foreach ($legacyPort in @(5001, 9528)) {
         Stop-Listener -Port $legacyPort
     }
 }
-foreach ($portToStop in @($FrontendPort, 5000, 6667, 8080, 8888, 8890, 8891, 9000, 10710)) {
+foreach ($portToStop in @($FrontendPort, 5000, 6667, 8080, 8888, 10710)) {
     Stop-Listener -Port $portToStop
 }
 
@@ -476,8 +444,6 @@ try {
         iotdbConfigNode = Get-PortProcessId -Port 10710
         iotdbDataNode = Get-PortProcessId -Port 6667
         matReceiver = Get-PortProcessId -Port 8888
-        tcpCollector = Get-PortProcessId -Port 8890
-        tcpCollectorLegacy = Get-PortProcessId -Port 8891
     }
     $pidState['startedAt'] = (Get-Date).ToString('s')
     $pidState['projectRoot'] = $projectRoot
@@ -496,8 +462,6 @@ try {
     Write-Host "  日志:      $logRoot" -ForegroundColor DarkCyan
     Write-Host "  PID 状态:  $pidFile" -ForegroundColor DarkCyan
     if (Get-PortProcessId -Port 8888) { Write-Host '  MAT接收:   127.0.0.1:8888' -ForegroundColor DarkGray }
-    if (Get-PortProcessId -Port 8890) { Write-Host '  TCP采集:   127.0.0.1:8890' -ForegroundColor DarkGray }
-    if (Get-PortProcessId -Port 8891) { Write-Host '  通道采集:  127.0.0.1:8891' -ForegroundColor DarkGray }
 } catch {
     Write-Host "`n启动失败：$($_.Exception.Message)" -ForegroundColor Red
     foreach ($service in $started) {
@@ -508,7 +472,7 @@ try {
             Stop-Process -Id $startedProcess.Id -Force -ErrorAction SilentlyContinue
         }
     }
-    foreach ($cleanupPort in @($FrontendPort, 5000, 6667, 8080, 8888, 8890, 8891, 9000, 10710)) {
+    foreach ($cleanupPort in @($FrontendPort, 5000, 6667, 8080, 8888, 10710)) {
         $cleanupOwner = Get-PortProcessId -Port $cleanupPort
         if ($cleanupOwner -and (Test-IsProjectProcess -Id $cleanupOwner)) {
             Stop-Process -Id $cleanupOwner -Force -ErrorAction SilentlyContinue

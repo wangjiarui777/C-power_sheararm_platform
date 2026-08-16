@@ -7,14 +7,12 @@ import java.util.stream.Collectors;
 import com.ruoyi.common.annotation.DataScope;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruoyi.common.exception.ServiceException;
-import com.ruoyi.sensor.domain.entity.CollectorCredentialEntity;
 import com.ruoyi.sensor.domain.entity.PhmAcquisitionChannelEntity;
 import com.ruoyi.sensor.domain.entity.PhmDeviceEntity;
 import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
 import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
 import com.ruoyi.sensor.domain.query.PhmAcquisitionChannelQuery;
 import com.ruoyi.sensor.domain.vo.AcquisitionChannelOptionsVo;
-import com.ruoyi.sensor.mapper.CollectorCredentialMapper;
 import com.ruoyi.sensor.mapper.PhmAcquisitionChannelMapper;
 import com.ruoyi.sensor.mapper.PhmMeasurePointMapper;
 import org.springframework.stereotype.Service;
@@ -25,16 +23,14 @@ public class PhmAcquisitionChannelService
 {
     private final PhmAcquisitionChannelMapper channelMapper;
     private final PhmMeasurePointMapper pointMapper;
-    private final CollectorCredentialMapper collectorMapper;
     private final PhmDataScopeService dataScope;
 
     public PhmAcquisitionChannelService(PhmAcquisitionChannelMapper channelMapper,
-        PhmMeasurePointMapper pointMapper, CollectorCredentialMapper collectorMapper,
+        PhmMeasurePointMapper pointMapper,
         PhmDataScopeService dataScope)
     {
         this.channelMapper = channelMapper;
         this.pointMapper = pointMapper;
-        this.collectorMapper = collectorMapper;
         this.dataScope = dataScope;
     }
 
@@ -77,17 +73,6 @@ public class PhmAcquisitionChannelService
                 return option;
             }).toList());
         }
-        List<CollectorCredentialEntity> collectors = collectorMapper.selectList(
-            new LambdaQueryWrapper<CollectorCredentialEntity>()
-                .orderByDesc(CollectorCredentialEntity::getEnabled)
-                .orderByAsc(CollectorCredentialEntity::getCollectorId));
-        result.setCollectors(collectors.stream().map(collector -> {
-            AcquisitionChannelOptionsVo.CollectorOption option = new AcquisitionChannelOptionsVo.CollectorOption();
-            option.setCollectorId(collector.getCollectorId());
-            option.setCollectorName(collector.getCollectorName());
-            option.setEnabled(collector.getEnabled());
-            return option;
-        }).toList());
         return result;
     }
 
@@ -100,10 +85,6 @@ public class PhmAcquisitionChannelService
         if (device == null) throw new IllegalArgumentException("设备不存在或无权访问");
         if (channel.getId() != null && getScoped(channel.getId()) == null)
             throw new ServiceException("采集通道不存在或无权修改");
-        if (channel.getCollectorId() == null || !channel.getCollectorId().matches("[A-Za-z0-9_-]{3,64}"))
-            throw new IllegalArgumentException("采集器编码格式错误");
-        if (channel.getModuleNo() == null || channel.getModuleNo() < 1)
-            throw new IllegalArgumentException("模块号必须大于零");
         if (channel.getChannelNo() == null || channel.getChannelNo() < 1 || channel.getChannelNo() > 64)
             throw new IllegalArgumentException("通道号必须在 1 到 64 之间");
         if (channel.getPointId() != null)
@@ -122,8 +103,7 @@ public class PhmAcquisitionChannelService
             channel.setPointCode(null);
         }
         Long duplicate = channelMapper.selectCount(new LambdaQueryWrapper<PhmAcquisitionChannelEntity>()
-            .eq(PhmAcquisitionChannelEntity::getCollectorId, channel.getCollectorId())
-            .eq(PhmAcquisitionChannelEntity::getModuleNo, channel.getModuleNo())
+            .eq(PhmAcquisitionChannelEntity::getDeviceId, channel.getDeviceId())
             .eq(PhmAcquisitionChannelEntity::getChannelNo, channel.getChannelNo())
             .ne(channel.getId() != null, PhmAcquisitionChannelEntity::getId, channel.getId()));
         if (duplicate != null && duplicate > 0) throw new IllegalArgumentException("采集器模块通道已存在");
@@ -160,6 +140,19 @@ public class PhmAcquisitionChannelService
     {
         if (id == null) return null;
         PhmAcquisitionChannelEntity channel = channelMapper.selectById(id);
+        return channel != null && scopedDevice(channel.getDeviceId()) != null ? channel : null;
+    }
+
+    public PhmAcquisitionChannelEntity findScopedByPhysicalChannel(Long deviceId, Long pointId, Integer channelNo)
+    {
+        if (deviceId == null || pointId == null || channelNo == null) return null;
+        PhmAcquisitionChannelEntity channel = channelMapper.selectOne(
+            new LambdaQueryWrapper<PhmAcquisitionChannelEntity>()
+                .eq(PhmAcquisitionChannelEntity::getDeviceId, deviceId)
+                .eq(PhmAcquisitionChannelEntity::getPointId, pointId)
+                .eq(PhmAcquisitionChannelEntity::getChannelNo, channelNo)
+                .eq(PhmAcquisitionChannelEntity::getEnabled, true)
+                .last("LIMIT 1"));
         return channel != null && scopedDevice(channel.getDeviceId()) != null ? channel : null;
     }
 

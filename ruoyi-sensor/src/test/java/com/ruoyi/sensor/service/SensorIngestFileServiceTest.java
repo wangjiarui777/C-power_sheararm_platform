@@ -23,6 +23,7 @@ class SensorIngestFileServiceTest
     private PhmMeasurePointMapper pointMapper;
     private PhmAcquisitionChannelService channelService;
     private PhmDataScopeService dataScope;
+    private MatFileReceiverService matReceiver;
     private SensorIngestFileService service;
 
     @BeforeEach
@@ -32,7 +33,8 @@ class SensorIngestFileServiceTest
         pointMapper = mock(PhmMeasurePointMapper.class);
         channelService = mock(PhmAcquisitionChannelService.class);
         dataScope = mock(PhmDataScopeService.class);
-        service = new SensorIngestFileService(mapper, pointMapper, channelService, dataScope);
+        matReceiver = mock(MatFileReceiverService.class);
+        service = new SensorIngestFileService(mapper, pointMapper, channelService, dataScope, matReceiver);
     }
 
     @Test
@@ -65,7 +67,7 @@ class SensorIngestFileServiceTest
         when(mapper.selectById(7L)).thenReturn(file);
         when(dataScope.getDevice(any())).thenReturn(device());
         when(pointMapper.selectById(20L)).thenReturn(point());
-        when(channelService.getScoped(30L)).thenReturn(channel());
+        when(channelService.findScopedByPhysicalChannel(1L, 20L, 3)).thenReturn(channel());
         when(mapper.selectCount(any())).thenReturn(0L);
         when(mapper.associate(7L, 1L, "MOTOR-01", 20L, "DE-VIB", 3)).thenReturn(1);
 
@@ -79,7 +81,7 @@ class SensorIngestFileServiceTest
         when(mapper.selectById(7L)).thenReturn(file("UNMAPPED"));
         when(dataScope.getDevice(any())).thenReturn(device());
         when(pointMapper.selectById(20L)).thenReturn(point());
-        when(channelService.getScoped(30L)).thenReturn(channel());
+        when(channelService.findScopedByPhysicalChannel(1L, 20L, 3)).thenReturn(channel());
         when(mapper.selectCount(any())).thenReturn(1L);
 
         assertThatThrownBy(() -> service.associate(7L, request()))
@@ -102,7 +104,7 @@ class SensorIngestFileServiceTest
         SensorIngestAssociateRequest request = new SensorIngestAssociateRequest();
         request.setDeviceId(1L);
         request.setPointId(20L);
-        request.setChannelId(30L);
+        request.setChannelId(3);
         return request;
     }
 

@@ -13,11 +13,11 @@ class ProductionConfigurationValidatorTest
     void rejectsMissingAndDevelopmentSecrets()
     {
         MockEnvironment environment = validEnvironment()
-                .withProperty("sensor.collector.master-key", "dev-collector-key");
+                .withProperty("sensor.inference.internal-token", "dev-inference-token");
 
         List<String> errors = ProductionConfigurationValidator.validate(environment);
 
-        assertTrue(errors.stream().anyMatch(item -> item.contains("sensor.collector.master-key")));
+        assertTrue(errors.stream().anyMatch(item -> item.contains("sensor.inference.internal-token")));
     }
 
     @Test
@@ -42,23 +42,9 @@ class ProductionConfigurationValidatorTest
         assertTrue(errors.stream().anyMatch(item -> item.contains("production origins")));
     }
 
-    @Test
-    void rejectsWildcardTcpBindingWhenCollectorPortIsEnabled()
-    {
-        MockEnvironment environment = validEnvironment()
-                .withProperty("sensor.channel-tcp.enabled", "true")
-                .withProperty("sensor.channel-tcp.bind-address", "0.0.0.0");
-
-        List<String> errors = ProductionConfigurationValidator.validate(environment);
-
-        assertTrue(errors.stream().anyMatch(item -> item.contains("dedicated industrial interface")));
-    }
-
     private MockEnvironment validEnvironment()
     {
         return new MockEnvironment()
-                .withProperty("sensor.collector.token", "collector-token-0123456789-0123456789")
-                .withProperty("sensor.collector.master-key", "collector-master-0123456789-0123456789")
                 .withProperty("sensor.inference.internal-token", "inference-token-0123456789-0123456789")
                 .withProperty("spring.datasource.password", "mysql-password")
                 .withProperty("spring.datasource.url", "jdbc:mysql://db:3306/ry-yue")

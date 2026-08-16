@@ -112,7 +112,7 @@ class PhmAttachmentStorageServiceTest
 
         assertEquals(101L, entity.getId());
         assertEquals("DIAGNOSIS_INPUT", entity.getPurpose());
-        assertEquals("SOURCE:SERVER_DIRECTORY", entity.getRemark());
+        assertEquals("SOURCE:MAT_TCP", entity.getRemark());
         assertNotNull(service.content(entity));
     }
 }

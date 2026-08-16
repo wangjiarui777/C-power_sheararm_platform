@@ -91,7 +91,7 @@ public class LogAspect
         try
         {
             // 获取当前的用户。采集器上传使用的是独立的
-            // UsernamePasswordAuthenticationToken，其 principal 是 collectorId，
+            // UsernamePasswordAuthenticationToken，其 principal 可能是内部服务身份，
             // 不能调用只支持 LoginUser 的 SecurityUtils.getLoginUser()。
             LoginUser loginUser = null;
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

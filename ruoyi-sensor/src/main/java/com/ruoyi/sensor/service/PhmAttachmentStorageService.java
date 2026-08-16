@@ -91,11 +91,7 @@ public class PhmAttachmentStorageService
             modelType, username, true, null);
     }
 
-    /**
-     * Imports a file discovered in the trusted server-side diagnosis inbox. The
-     * same validation, quarantine and object storage pipeline as browser uploads
-     * is used, while device authorization is performed by the ingestion service.
-     */
+    /** Imports a validated MAT file through the secure attachment pipeline. */
     @Transactional(rollbackFor = Exception.class)
     public PhmAttachmentEntity importDiagnosisFile(Path source, Long deviceId, String username) throws Exception
     {
@@ -115,7 +111,7 @@ public class PhmAttachmentStorageService
         String mimeType = "npy".equals(extension) ? "application/x-numpy" : "application/x-matlab-data";
         MultipartFile file = new PathMultipartFile(normalized, mimeType);
         return store(file, "DIAGNOSIS_INPUT", "device", deviceId, pointId, channelId, null, username, false,
-            "SOURCE:SERVER_DIRECTORY");
+            "SOURCE:MAT_TCP");
     }
 
     private PhmAttachmentEntity store(MultipartFile file, String purpose, String bizType, Long bizId,

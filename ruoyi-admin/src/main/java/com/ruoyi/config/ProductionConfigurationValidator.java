@@ -42,7 +42,6 @@ public class ProductionConfigurationValidator implements ApplicationRunner
     static List<String> validate(Environment env)
     {
         List<String> errors = new ArrayList<>();
-        requireSecret(env, errors, "sensor.collector.master-key", 32);
         requireSecret(env, errors, "sensor.inference.internal-token", 32);
         requireSecret(env, errors, "spring.datasource.password", 8);
         requireSecret(env, errors, "spring.data.redis.password", 8);
@@ -68,7 +67,6 @@ public class ProductionConfigurationValidator implements ApplicationRunner
         validateOrigins(env, errors, "cors.allowed-origins");
         validateOrigins(env, errors, "sensor.websocket.allowed-origins");
         validateInternalInferenceUrl(env, errors);
-        validateTcpBinding(env, errors);
         return errors;
     }
 
@@ -152,23 +150,6 @@ public class ProductionConfigurationValidator implements ApplicationRunner
         if (!(value.startsWith("http://127.0.0.1:") || value.startsWith("http://localhost:")))
         {
             errors.add("sensor.inference.gear-url must target the local internal inference service");
-        }
-    }
-
-    private static void validateTcpBinding(Environment env, List<String> errors)
-    {
-        if (!env.getProperty("sensor.channel-tcp.enabled", Boolean.class, false))
-        {
-            return;
-        }
-        String bindAddress = env.getProperty("sensor.channel-tcp.bind-address");
-        if (!StringUtils.hasText(bindAddress))
-        {
-            errors.add("sensor.channel-tcp.bind-address must be configured when TCP ingestion is enabled");
-        }
-        else if ("0.0.0.0".equals(bindAddress.trim()) || "::".equals(bindAddress.trim()))
-        {
-            errors.add("sensor.channel-tcp.bind-address must target the dedicated industrial interface");
         }
     }
 

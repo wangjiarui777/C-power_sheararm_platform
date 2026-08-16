@@ -10,7 +10,6 @@ public class AcquisitionChannelOptionsVo
 {
     private List<DeviceOption> devices = new ArrayList<>();
     private List<PointOption> points = new ArrayList<>();
-    private List<CollectorOption> collectors = new ArrayList<>();
 
     @Data
     public static class DeviceOption
@@ -31,11 +30,4 @@ public class AcquisitionChannelOptionsVo
         private String unit;
     }
 
-    @Data
-    public static class CollectorOption
-    {
-        private String collectorId;
-        private String collectorName;
-        private Boolean enabled;
-    }
 }

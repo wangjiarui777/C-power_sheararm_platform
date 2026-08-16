@@ -28,7 +28,7 @@
             <el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
           <el-select v-model="query.sourceType" clearable placeholder="全部来源" @change="search">
-            <el-option label="采集器上传" value="COLLECTOR" /><el-option label="人工上传" value="MANUAL" /><el-option label="低代码管道" value="PIPELINE" />
+          <el-option label="MAT TCP / 8888" value="MAT_TCP" /><el-option label="人工上传" value="MANUAL" />
           </el-select>
           <el-input v-model.trim="query.keyword" clearable placeholder="文件 / 设备 / 测点" prefix-icon="el-icon-search" @keyup.enter.native="search" @clear="search" />
           <el-button type="primary" @click="search">查询</el-button>
@@ -61,7 +61,7 @@
       <el-form ref="associateForm" :model="associateForm" :rules="associateRules" label-width="92px" class="associate-form">
         <el-form-item label="目标设备" prop="deviceId"><el-select v-model="associateForm.deviceId" filterable @change="onDeviceChange"><el-option v-for="item in devices" :key="item.id" :label="`${item.deviceName} · ${item.deviceCode}`" :value="item.id" /></el-select></el-form-item>
         <el-form-item label="目标测点" prop="pointId"><el-select v-model="associateForm.pointId" filterable @change="onPointChange"><el-option v-for="item in associatePoints" :key="item.id" :label="`${item.pointName} · ${item.pointCode} · ${item.signalType || '--'}`" :value="item.id" /></el-select></el-form-item>
-        <el-form-item label="采集通道" prop="channelId"><el-select v-model="associateForm.channelId" filterable><el-option v-for="item in associateChannels" :key="item.id" :label="`${item.collectorId} / M${pad(item.moduleNo)} / CH${pad(item.channelNo)}${item.enabled ? '' : ' · 已停用'}`" :disabled="!item.enabled" :value="item.id" /></el-select><span v-if="associateForm.pointId && !associateChannels.length" class="field-warning">该测点尚未绑定采集通道，请先在“测点接入”中配置。</span></el-form-item>
+        <el-form-item label="物理通道" prop="channelId"><el-select v-model="associateForm.channelId" filterable><el-option v-for="item in associateChannels" :key="item.id" :label="`CH${pad(item.channelNo)}${item.enabled ? '' : ' · 已停用'}`" :disabled="!item.enabled" :value="item.channelNo" /></el-select><span v-if="associateForm.pointId && !associateChannels.length" class="field-warning">该测点尚未绑定 MAT 通道，请先在“MAT 接入配置”中配置。</span></el-form-item>
       </el-form>
       <span slot="footer"><el-button @click="associateVisible = false">取消</el-button><el-button type="primary" :loading="submitting" @click="submitAssociate">确认关联并校验</el-button></span>
     </el-dialog>
@@ -79,7 +79,8 @@ export default {
       { value: 'RECEIVING', label: '接收中', en: 'RECEIVING', tone: 'cyan' },
       { value: 'UNMAPPED', label: '待映射', en: 'UNMAPPED', tone: 'amber' },
       { value: 'VALIDATING', label: '校验中', en: 'VALIDATING', tone: 'cyan' },
-      { value: 'READY', label: '已就绪', en: 'READY', tone: 'green' },
+      { value: 'ACCEPTED', label: '已接收并入队', en: 'ACCEPTED', tone: 'green' },
+      { value: 'DUPLICATE', label: '重复文件', en: 'DUPLICATE', tone: 'green' },
       { value: 'FAILED', label: '接收失败', en: 'FAILED', tone: 'red' }
     ]
     return {
@@ -143,10 +144,10 @@ export default {
     },
     async retry(row) { await this.$modal.confirm(`确认重新接收“${row.fileName}”？`); await retryIngestFile(row.id); this.$modal.msgSuccess('已重新进入接收队列'); await this.loadFiles() },
     canAssociate(row) { return ['UNMAPPED', 'REJECTED'].includes(row.status) },
-    operationHint(row) { return { RECEIVING: '接收完成后可操作', VALIDATING: '正在校验映射', READY: '已进入分析链路', REJECTED: '请重新关联', FAILED: '可重新接收' }[row.status] || '暂无可用操作' },
+    operationHint(row) { return { RECEIVING: '接收完成后可操作', VALIDATING: '正在校验映射', ACCEPTED: '已进入诊断队列', DUPLICATE: '重复文件未重复诊断', REJECTED: '请重新关联', FAILED: '可重新接收' }[row.status] || '暂无可用操作' },
     statusLabel(value) { const item = this.statuses.find(status => status.value === value); return item ? item.label : (value === 'REJECTED' ? '校验拒绝' : value || '--') },
-    statusTone(value) { return { READY: 'green', FAILED: 'red', REJECTED: 'red', UNMAPPED: 'amber', RECEIVING: 'cyan', VALIDATING: 'cyan' }[value] || '' },
-    sourceLabel(value) { return { COLLECTOR: '采集器', MANUAL: '人工上传', PIPELINE: '诊断管道' }[value] || value || '--' },
+    statusTone(value) { return { ACCEPTED: 'green', DUPLICATE: 'green', FAILED: 'red', REJECTED: 'red', UNMAPPED: 'amber', RECEIVING: 'cyan', VALIDATING: 'cyan' }[value] || '' },
+    sourceLabel(value) { return { MAT_TCP: 'MAT TCP / 8888', MANUAL: '人工上传' }[value] || value || '--' },
     formatSize(value) { if (value == null) return '--'; if (value < 1024) return `${value} B`; if (value < 1048576) return `${(value / 1024).toFixed(1)} KB`; return `${(value / 1048576).toFixed(1)} MB` },
     shortHash(value) { return value ? `${value.slice(0, 8)}…${value.slice(-6)}` : 'HASH PENDING' },
     pad(value) { return String(value == null ? '--' : value).padStart(2, '0') },

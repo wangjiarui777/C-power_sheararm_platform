@@ -18,8 +18,7 @@
 `ruoyi-admin/src/main/resources/db/migration`，现有数据库须先完成结构预检并 baseline。
 历史 SQL 只用于溯源或空库开发安装。
 7. `attachment_security_upgrade.sql`
-8. `telemetry_stream_upgrade.sql`
-9. `collector_credential_upgrade.sql`
+8. 旧接入升级脚本已停用；现有库统一由 Flyway `V2026081602__MatOnlyIngressCleanup` 完成 8888 MAT-only 清理和冲突阻断。
 
 两个脚本均可重复执行。升级脚本不会删除业务表；发现测点通道、设备编码或收藏记录存在重复数据时，会保留数据并跳过对应唯一索引，需先处理脚本末尾校验结果后再执行一次。
 

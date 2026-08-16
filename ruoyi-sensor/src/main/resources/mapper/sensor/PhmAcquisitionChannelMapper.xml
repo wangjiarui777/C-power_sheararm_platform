@@ -13,6 +13,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="deviceId != null">AND c.device_id = #{deviceId}</if>
         <if test="pointId != null">AND c.point_id = #{pointId}</if>
         ${params.dataScope}
-        ORDER BY c.collector_id ASC, c.module_no ASC, c.channel_no ASC
+        ORDER BY c.device_id ASC, c.channel_no ASC
     </select>
 </mapper>

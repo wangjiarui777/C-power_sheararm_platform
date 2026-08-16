@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Unified receive ledger for browser, directory and legacy TCP files. */
+/** MAT TCP receive ledger and quarantine association endpoints. */
 @RestController
 @RequestMapping("/sensor/ingest/files")
 public class SensorIngestFileController extends BaseController

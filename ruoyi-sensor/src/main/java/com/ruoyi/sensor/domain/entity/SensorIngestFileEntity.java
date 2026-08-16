@@ -30,6 +30,8 @@ public class SensorIngestFileEntity
     private String errorMessage;
     private Integer retryCount;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date acquisitionTime;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date receivedTime;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date validatedTime;

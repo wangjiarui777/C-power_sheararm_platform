@@ -16,17 +16,6 @@ export function getRecentVibration(params) {
   return getBearingDiagnosisFftData(params)
 }
 
-/**
- * @deprecated Legacy vibration CRUD endpoint retained for compatibility.
- */
-export function uploadVibration(data) {
-  return request({
-    url: '/sensor/vibration-data/upload',
-    method: 'post',
-    data
-  })
-}
-
 export function getRecentVibrationRecords() {
   return request({
     url: '/sensor/vibration-data/recent',

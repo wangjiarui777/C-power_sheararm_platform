@@ -13,8 +13,6 @@ public class PhmAcquisitionChannelEntity
 {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
-    private String collectorId;
-    private Integer moduleNo;
     private Integer channelNo;
     private Long deviceId;
     private String deviceCode;

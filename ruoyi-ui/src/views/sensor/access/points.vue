@@ -2,9 +2,9 @@
   <div class="access-page">
     <header class="workbench-head">
       <div>
-        <span class="eyebrow">DATA INTAKE / CHANNEL MAP</span>
-        <h1>测点接入工作台</h1>
-        <p>将采集器物理端子绑定到已维护的设备测点，形成可追溯的信号链。</p>
+        <span class="eyebrow">MAT INTAKE / CHANNEL MAP</span>
+        <h1>MAT 接入配置</h1>
+        <p>将 8888 MAT 协议中的物理通道绑定到设备测点，形成可追溯的诊断信号链。</p>
       </div>
       <div class="head-actions">
         <span class="live-indicator"><i />{{ enabledCount }} / {{ total }} 通道在线</span>
@@ -14,13 +14,13 @@
     </header>
 
     <section class="signal-rail" aria-label="采集信号链">
-      <div class="rail-node"><span>01</span><small>COLLECTOR</small><strong>{{ selectedCollector || '全部采集器' }}</strong></div>
+      <div class="rail-node"><span>01</span><small>MAT RECEIVER</small><strong>TCP : 8888</strong></div>
       <i class="rail-line" />
       <div class="rail-node"><span>02</span><small>TERMINAL</small><strong>{{ selectedTerminal }}</strong></div>
       <i class="rail-line" />
       <div class="rail-node is-accent"><span>03</span><small>MEASURE POINT</small><strong>{{ selectedPointName }}</strong></div>
       <i class="rail-line" />
-      <div class="rail-node"><span>04</span><small>PIPELINE</small><strong>{{ activeFilterLabel }}</strong></div>
+      <div class="rail-node"><span>04</span><small>DIAGNOSIS</small><strong>{{ activeFilterLabel }}</strong></div>
     </section>
 
     <section class="filter-panel">
@@ -37,15 +37,15 @@
 
     <section v-loading="loading" class="terminal-panel">
       <div class="panel-heading">
-        <div><span class="section-index">02</span><div><h2>端子排总览</h2><p>每一行对应一个唯一的采集器 / 模块 / 通道。</p></div></div>
+        <div><span class="section-index">02</span><div><h2>MAT 通道总览</h2><p>每一行对应一个设备内唯一的物理通道。</p></div></div>
         <div class="legend"><span><i class="on" />启用</span><span><i />停用</span><span><i class="free" />未绑定</span></div>
       </div>
 
       <div v-if="rows.length" class="terminal-list">
         <article v-for="row in rows" :key="row.id" class="terminal-row" :class="{ 'is-disabled': !row.enabled, 'is-unbound': !row.pointId }">
-          <div class="terminal-port"><span>CH</span><strong>{{ pad(row.channelNo) }}</strong><small>M{{ pad(row.moduleNo) }}</small></div>
+          <div class="terminal-port"><span>CH</span><strong>{{ pad(row.channelNo) }}</strong><small>MAT</small></div>
           <div class="wire"><i /><span /></div>
-          <div class="channel-source"><small>采集器</small><strong>{{ row.collectorId }}</strong><span>{{ collectorName(row.collectorId) }}</span></div>
+          <div class="channel-source"><small>MAT 来源</small><strong>{{ row.deviceCode }}</strong><span>8888 / CWRU_MAT_V2</span></div>
           <div class="channel-metric"><small>采样率</small><strong>{{ formatRate(row.sampleRate) }}</strong><span>{{ row.signalType || '未定义信号' }}</span></div>
           <div class="channel-target"><small>{{ deviceLabel(row.deviceId) }}</small><strong>{{ pointLabel(row.pointId) }}</strong><span>{{ row.pointCode || '等待测点绑定' }} · {{ row.unit || '--' }}</span></div>
           <div class="channel-actions">
@@ -61,11 +61,9 @@
     </section>
 
     <el-dialog :title="form.id ? '编辑通道绑定' : '新增通道绑定'" :visible.sync="dialogVisible" width="760px" append-to-body custom-class="industrial-dialog">
-      <div class="dialog-signal"><span>COLLECTOR</span><i /><span>TERMINAL</span><i /><span>POINT</span></div>
+      <div class="dialog-signal"><span>MAT 8888</span><i /><span>CHANNEL</span><i /><span>POINT</span></div>
       <el-form ref="channelForm" :model="form" :rules="rules" label-width="96px">
         <el-row :gutter="16">
-          <el-col :sm="12" :xs="24"><el-form-item label="采集器" prop="collectorId"><el-select v-model="form.collectorId" filterable><el-option v-for="item in collectors" :key="item.collectorId" :disabled="!item.enabled" :label="`${item.collectorName || item.collectorId} · ${item.enabled ? '启用' : '停用'}`" :value="item.collectorId" /></el-select></el-form-item></el-col>
-          <el-col :sm="6" :xs="12"><el-form-item label="模块号" prop="moduleNo"><el-input-number v-model="form.moduleNo" :min="1" :max="64" /></el-form-item></el-col>
           <el-col :sm="6" :xs="12"><el-form-item label="通道号" prop="channelNo"><el-input-number v-model="form.channelNo" :min="1" :max="64" /></el-form-item></el-col>
           <el-col :sm="12" :xs="24"><el-form-item label="设备" prop="deviceId"><el-select v-model="form.deviceId" filterable @change="onFormDeviceChange"><el-option v-for="item in devices" :key="item.id" :label="`${item.deviceName} · ${item.deviceCode}`" :value="item.id" /></el-select></el-form-item></el-col>
           <el-col :sm="12" :xs="24"><el-form-item label="测点"><el-select v-model="form.pointId" clearable filterable @change="syncPoint"><el-option v-for="item in formPoints" :key="item.id" :label="`${item.pointName} · ${item.pointCode}`" :value="item.id" /></el-select></el-form-item></el-col>
@@ -88,18 +86,16 @@
 <script>
 import { listAcquisitionChannels, getAcquisitionOptions, addAcquisitionChannel, updateAcquisitionChannel, removeAcquisitionChannel } from '@/api/sensor/access'
 
-const emptyForm = () => ({ moduleNo: 1, channelNo: 1, deviceId: null, pointId: null, sampleRate: 25600, unit: '', scaleFactor: 1, offsetValue: 0, qualityPolicySeconds: 300, enabled: true })
+const emptyForm = () => ({ channelNo: 1, deviceId: null, pointId: null, sampleRate: 25600, unit: '', scaleFactor: 1, offsetValue: 0, qualityPolicySeconds: 300, enabled: true })
 
 export default {
   name: 'SensorAccessPoints',
   data() {
     return {
       loading: false, submitting: false, dialogVisible: false, rows: [], total: 0,
-      devices: [], points: [], collectors: [], form: emptyForm(),
+      devices: [], points: [], form: emptyForm(),
       query: { pageNum: 1, pageSize: 10, deviceId: null, pointId: null },
       rules: {
-        collectorId: [{ required: true, message: '请选择采集器', trigger: 'change' }],
-        moduleNo: [{ required: true, message: '请输入模块号', trigger: 'change' }],
         channelNo: [{ required: true, message: '请输入通道号', trigger: 'change' }],
         deviceId: [{ required: true, message: '请选择设备', trigger: 'change' }]
       }
@@ -109,8 +105,7 @@ export default {
     queryPoints() { return this.points.filter(item => !this.query.deviceId || String(item.deviceId) === String(this.query.deviceId)) },
     formPoints() { return this.points.filter(item => String(item.deviceId) === String(this.form.deviceId)) },
     enabledCount() { return this.rows.filter(item => item.enabled).length },
-    selectedCollector() { return this.rows.length && new Set(this.rows.map(item => item.collectorId)).size === 1 ? this.rows[0].collectorId : '' },
-    selectedTerminal() { return this.rows.length === 1 ? `M${this.pad(this.rows[0].moduleNo)} / CH${this.pad(this.rows[0].channelNo)}` : `${this.rows.length} 个端子` },
+    selectedTerminal() { return this.rows.length === 1 ? `CH${this.pad(this.rows[0].channelNo)}` : `${this.rows.length} 个通道` },
     selectedPointName() { return this.query.pointId ? this.pointLabel(this.query.pointId) : '全部测点' },
     activeFilterLabel() { return this.query.deviceId ? this.deviceLabel(this.query.deviceId) : '数据范围内全部设备' }
   },
@@ -121,7 +116,7 @@ export default {
       try {
         const options = await getAcquisitionOptions()
         const data = options.data || {}
-        this.devices = data.devices || []; this.points = data.points || []; this.collectors = data.collectors || []
+        this.devices = data.devices || []; this.points = data.points || []
         await this.loadChannels(false)
       } finally { this.loading = false }
     },
@@ -152,11 +147,10 @@ export default {
     async toggleChannel(row) {
       try { await updateAcquisitionChannel(Object.assign({}, row)); this.$modal.msgSuccess(row.enabled ? '通道已启用' : '通道已停用') } catch (error) { row.enabled = !row.enabled }
     },
-    async removeChannel(row) { await this.$modal.confirm(`确认删除 ${row.collectorId} / M${row.moduleNo} / CH${row.channelNo} 的绑定？`); await removeAcquisitionChannel(row.id); this.$modal.msgSuccess('通道绑定已删除'); await this.loadChannels() },
+    async removeChannel(row) { await this.$modal.confirm(`确认删除 ${row.deviceCode} / CH${row.channelNo} 的绑定？`); await removeAcquisitionChannel(row.id); this.$modal.msgSuccess('通道绑定已删除'); await this.loadChannels() },
     pad(value) { return String(value == null ? '--' : value).padStart(2, '0') },
     deviceLabel(id) { const item = this.devices.find(value => String(value.id) === String(id)); return item ? item.deviceName : '未知设备' },
     pointLabel(id) { const item = this.points.find(value => String(value.id) === String(id)); return item ? item.pointName : '未绑定测点' },
-    collectorName(id) { const item = this.collectors.find(value => value.collectorId === id); return item ? (item.collectorName || '未命名采集器') : '未登记采集器' },
     formatRate(value) { return value == null ? '--' : `${Number(value).toLocaleString()} Hz` }
   }
 }

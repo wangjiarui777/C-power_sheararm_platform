@@ -3,8 +3,6 @@ package com.ruoyi.sensor.web;
 import java.util.List;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,7 +11,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
@@ -23,8 +20,6 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.sensor.domain.DeviceTemperatureData;
 import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
-import com.ruoyi.sensor.service.TelemetryPipelineService;
-import com.ruoyi.sensor.service.CollectorAccessService;
 
 @RestController
 @RequestMapping({"/sensor/temperature-data", "/system/temperature"})
@@ -32,12 +27,6 @@ public class DeviceTemperatureDataController extends BaseController
 {
     @Autowired
     private IDeviceTemperatureDataService deviceTemperatureDataService;
-
-    @Autowired
-    private TelemetryPipelineService telemetryPipelineService;
-
-    @Autowired
-    private CollectorAccessService collectorAccessService;
 
     @PreAuthorize("@ss.hasPermi('sensor:temperature:list')")
     @GetMapping("/list")
@@ -53,27 +42,6 @@ public class DeviceTemperatureDataController extends BaseController
     public AjaxResult recent()
     {
         return success(deviceTemperatureDataService.selectRecentDeviceTemperatureDataList());
-    }
-
-    @Log(title = "temperature data", businessType = BusinessType.INSERT)
-    @PreAuthorize("hasAuthority('sensor:collector:upload')")
-    @PostMapping("/upload")
-    public ResponseEntity<AjaxResult> upload(@RequestBody DeviceTemperatureData deviceTemperatureData,
-        @RequestHeader(value = "X-Event-Id", required = false) String eventId,
-        @RequestHeader(value = "X-Sequence", required = false) Long sequence)
-    {
-        collectorAccessService.requireDevice(deviceTemperatureData.getDeviceCode());
-        var accepted = telemetryPipelineService.accept(TelemetryPipelineService.fromUpload(
-            eventId,
-            deviceTemperatureData.getDeviceCode(),
-            "temperature",
-            deviceTemperatureData.getChannelId(),
-            deviceTemperatureData.getTemperatureValue() == null
-                ? null : deviceTemperatureData.getTemperatureValue().doubleValue(),
-            deviceTemperatureData.getCollectionTime(),
-            sequence,
-            deviceTemperatureData.getQuality()));
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(success(accepted));
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:temperature:export')")

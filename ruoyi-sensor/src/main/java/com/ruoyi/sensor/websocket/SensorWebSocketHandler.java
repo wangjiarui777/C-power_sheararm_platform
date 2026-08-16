@@ -10,7 +10,6 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.ruoyi.common.utils.spring.SpringUtils;
 import com.ruoyi.sensor.domain.vo.ChannelRealtimeVo;
-import com.ruoyi.sensor.domain.dto.TelemetryEnvelope;
 import com.ruoyi.sensor.domain.entity.PhmAlarmEventEntity;
 import com.ruoyi.sensor.domain.vo.SensorWebSocketMessageVo;
 import com.ruoyi.sensor.domain.vo.MonitoringOverviewVo;
@@ -145,41 +144,6 @@ public class SensorWebSocketHandler extends TextWebSocketHandler
     public static void broadcastPhmAlarmChanged(PhmAlarmEventEntity alarm)
     {
         broadcastPhmAlarm(alarm, "changed");
-    }
-
-    public static void broadcastTelemetry(TelemetryEnvelope envelope)
-    {
-        if (envelope == null)
-        {
-            return;
-        }
-        SensorWebSocketMessageVo msg = new SensorWebSocketMessageVo();
-        msg.setType("monitoring");
-        msg.setEvent("metric.changed");
-        msg.setDeviceCode(envelope.getDeviceCode());
-        msg.setPointId(envelope.getPointId());
-        msg.setChannelId(envelope.getChannelId());
-        msg.setMetricCode(envelope.getMetricCode());
-        msg.setQuality(envelope.getQuality());
-        if ("temperature".equals(envelope.getMetricCode()))
-        {
-            msg.setTemperatureValue(envelope.getValue());
-        }
-        else
-        {
-            msg.setVibrationValue(envelope.getValue());
-            msg.setRms(envelope.getValue());
-        }
-        if (envelope.getSampleTime() != null)
-        {
-            msg.setSampleTime(new Timestamp(envelope.getSampleTime().getTime()).toLocalDateTime());
-        }
-        if (envelope.getReceiveTime() != null)
-        {
-            msg.setReceiveTime(new Timestamp(envelope.getReceiveTime().getTime()).toLocalDateTime());
-        }
-        msg.setMessage(JSON.toJSONString(envelope));
-        sendMonitoring(envelope.getDeviceCode(), envelope.getPointId(), msg);
     }
 
     private static void broadcastPhmAlarm(PhmAlarmEventEntity alarm, String event)
