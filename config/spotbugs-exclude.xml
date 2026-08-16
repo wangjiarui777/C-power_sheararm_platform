@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- These classes intentionally expose the legacy RuoYi static utility API. -->
+    <Match>
+        <Class name="com.ruoyi.common.config.RuoYiConfig" />
+        <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD" />
+    </Match>
+    <Match>
+        <Class name="com.ruoyi.common.utils.spring.SpringUtils" />
+        <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD" />
+    </Match>
+    <Match>
+        <Class name="com.ruoyi.generator.config.GenConfig" />
+        <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD" />
+    </Match>
+
+    <!-- These are compatibility wrappers whose names intentionally match their base APIs. -->
+    <Match>
+        <Class name="com.ruoyi.common.utils.DateUtils" />
+        <Bug pattern="NM_SAME_SIMPLE_NAME_AS_SUPERCLASS" />
+    </Match>
+    <Match>
+        <Class name="com.ruoyi.common.utils.StringUtils" />
+        <Bug pattern="NM_SAME_SIMPLE_NAME_AS_SUPERCLASS" />
+    </Match>
+    <Match>
+        <Class name="com.ruoyi.common.utils.bean.BeanUtils" />
+        <Bug pattern="NM_SAME_SIMPLE_NAME_AS_SUPERCLASS" />
+    </Match>
+</FindBugsFilter>

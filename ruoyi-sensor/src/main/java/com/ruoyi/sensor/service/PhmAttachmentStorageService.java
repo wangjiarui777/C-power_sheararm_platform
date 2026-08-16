@@ -444,8 +444,9 @@ public class PhmAttachmentStorageService
         {
             valid = startsWith(header, new byte[] {(byte) 0x89, 'P', 'N', 'G'})
                 || startsWith(header, new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff})
-                || (header.length >= 12 && "RIFF".equals(new String(header, 0, 4))
-                    && "WEBP".equals(new String(header, 8, 4)));
+                || (header.length >= 12
+                    && "RIFF".equals(new String(header, 0, 4, java.nio.charset.StandardCharsets.US_ASCII))
+                    && "WEBP".equals(new String(header, 8, 4, java.nio.charset.StandardCharsets.US_ASCII)));
         }
         if (!valid)
         {

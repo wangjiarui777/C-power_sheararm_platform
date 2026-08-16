@@ -27,7 +27,7 @@ import com.ruoyi.common.utils.uuid.IdUtils;
  */
 public class FileUtils
 {
-    public static String FILENAME_PATTERN = "[a-zA-Z0-9_\\-\\|\\.\\u4e00-\\u9fa5]+";
+    public static final String FILENAME_PATTERN = "[a-zA-Z0-9_\\-\\|\\.\\u4e00-\\u9fa5]+";
 
     /**
      * 输出指定文件的byte数组
@@ -182,23 +182,23 @@ public class FileUtils
         if (agent.contains("MSIE"))
         {
             // IE浏览器
-            filename = URLEncoder.encode(filename, "utf-8");
+            filename = URLEncoder.encode(filename, StandardCharsets.UTF_8.name());
             filename = filename.replace("+", " ");
         }
         else if (agent.contains("Firefox"))
         {
             // 火狐浏览器
-            filename = new String(fileName.getBytes(), "ISO8859-1");
+            filename = new String(fileName.getBytes(StandardCharsets.UTF_8), StandardCharsets.ISO_8859_1);
         }
         else if (agent.contains("Chrome"))
         {
             // google浏览器
-            filename = URLEncoder.encode(filename, "utf-8");
+            filename = URLEncoder.encode(filename, StandardCharsets.UTF_8.name());
         }
         else
         {
             // 其它浏览器
-            filename = URLEncoder.encode(filename, "utf-8");
+            filename = URLEncoder.encode(filename, StandardCharsets.UTF_8.name());
         }
         return filename;
     }

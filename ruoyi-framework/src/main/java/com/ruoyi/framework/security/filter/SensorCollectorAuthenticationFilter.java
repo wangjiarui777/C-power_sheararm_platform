@@ -104,7 +104,7 @@ public class SensorCollectorAuthenticationFilter extends OncePerRequestFilter
                 new Date(), request.getRemoteAddr(), collectorId);
             chain.doFilter(cached, response);
         }
-        catch (Exception ex)
+        catch (RuntimeException ex)
         {
             SecurityContextHolder.clearContext();
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

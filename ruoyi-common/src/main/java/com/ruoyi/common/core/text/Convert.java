@@ -5,6 +5,7 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.util.Set;
 import com.ruoyi.common.utils.StringUtils;
@@ -850,7 +851,7 @@ public class Convert
 
         if (null == charset)
         {
-            return new String(data);
+            return new String(data, StandardCharsets.UTF_8);
         }
         return new String(data, charset);
     }

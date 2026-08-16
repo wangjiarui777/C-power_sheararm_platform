@@ -87,7 +87,7 @@ public class AjaxResult extends HashMap<String, Object>
      */
     public static AjaxResult success(String msg)
     {
-        return AjaxResult.success(msg, null);
+        return new AjaxResult(HttpStatus.SUCCESS, msg);
     }
 
     /**
@@ -110,7 +110,7 @@ public class AjaxResult extends HashMap<String, Object>
      */
     public static AjaxResult warn(String msg)
     {
-        return AjaxResult.warn(msg, null);
+        return new AjaxResult(HttpStatus.WARN, msg);
     }
 
     /**
@@ -143,7 +143,7 @@ public class AjaxResult extends HashMap<String, Object>
      */
     public static AjaxResult error(String msg)
     {
-        return AjaxResult.error(msg, null);
+        return new AjaxResult(HttpStatus.ERROR, msg);
     }
 
     /**
@@ -167,7 +167,7 @@ public class AjaxResult extends HashMap<String, Object>
      */
     public static AjaxResult error(int code, String msg)
     {
-        return new AjaxResult(code, msg, null);
+        return new AjaxResult(code, msg);
     }
 
     /**

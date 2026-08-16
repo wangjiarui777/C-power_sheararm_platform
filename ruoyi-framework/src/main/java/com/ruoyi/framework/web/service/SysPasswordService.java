@@ -63,8 +63,16 @@ public class SysPasswordService
         if (!matches(user, password))
         {
             retryCount = retryCount + 1;
-            int cooldownMinutes = Math.min(lockTime, Math.max(1, retryCount * retryCount));
-            redisCache.setCacheObject(getCacheKey(username), retryCount, cooldownMinutes, TimeUnit.MINUTES);
+            long cooldownMinutes = (long) retryCount * retryCount;
+            if (cooldownMinutes < 1L)
+            {
+                cooldownMinutes = 1L;
+            }
+            if (lockTime > 0 && cooldownMinutes > lockTime)
+            {
+                cooldownMinutes = lockTime;
+            }
+            redisCache.setCacheObject(getCacheKey(username), retryCount, (int) cooldownMinutes, TimeUnit.MINUTES);
             throw new UserPasswordNotMatchException();
         }
         else

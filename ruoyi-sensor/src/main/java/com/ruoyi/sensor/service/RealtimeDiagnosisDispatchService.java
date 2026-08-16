@@ -32,11 +32,14 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Durable, time-bounded dispatch from completed windows to model workers. */
 @Service
 public class RealtimeDiagnosisDispatchService
 {
+    private static final Logger log = LoggerFactory.getLogger(RealtimeDiagnosisDispatchService.class);
     public static final String GEAR_STREAM = "monitoring:diagnosis:job:gear";
     public static final String BEARING_STREAM = "monitoring:diagnosis:job:bearing";
     private static final String GEAR_GROUP = "realtime-infer-gear";
@@ -453,7 +456,11 @@ public class RealtimeDiagnosisDispatchService
     private void ensureGroup(String stream, String group)
     {
         try { redisTemplate.opsForStream().createGroup(stream, ReadOffset.from("0-0"), group); }
-        catch (Exception ignored) { }
+        catch (RuntimeException ex)
+        {
+            log.debug("Redis stream group already exists or is unavailable: stream={}, group={}, reason={}",
+                stream, group, ex.getMessage());
+        }
     }
 
     private void addToQueue(String stream, String payload, String attempt)
@@ -488,6 +495,14 @@ public class RealtimeDiagnosisDispatchService
 
     private Long number(Object value)
     {
-        return value instanceof Number ? ((Number) value).longValue() : value == null ? null : Long.valueOf(String.valueOf(value));
+        if (value == null)
+        {
+            return null;
+        }
+        if (value instanceof Number number)
+        {
+            return number.longValue();
+        }
+        return Long.valueOf(value.toString());
     }
 }

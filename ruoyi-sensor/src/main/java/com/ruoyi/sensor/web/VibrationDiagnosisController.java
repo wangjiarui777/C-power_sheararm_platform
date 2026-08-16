@@ -1077,8 +1077,8 @@ public class VibrationDiagnosisController
             result.put("sha256", attachment.getSha256());
             result.put("sourceType", "BROWSER_UPLOAD");
             result.put("deviceCode", deviceCode);
-            result.put("channelId", point == null ? channelId : point.getChannelId());
-            result.put("pointId", point == null ? null : point.getId());
+            result.put("channelId", point.getChannelId());
+            result.put("pointId", point.getId());
             return AjaxResult.success(result);
         }
         catch (Exception ex)

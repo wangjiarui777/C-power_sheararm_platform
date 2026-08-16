@@ -45,11 +45,27 @@ public class SensorWebSocketPushService
 
     private Long number(Object value)
     {
-        return value instanceof Number ? ((Number) value).longValue() : value == null ? null : Long.valueOf(String.valueOf(value));
+        if (value == null)
+        {
+            return null;
+        }
+        if (value instanceof Number number)
+        {
+            return number.longValue();
+        }
+        return Long.valueOf(value.toString());
     }
 
     private Integer intValue(Object value, int fallback)
     {
-        return value instanceof Number ? ((Number) value).intValue() : value == null ? fallback : Integer.valueOf(String.valueOf(value));
+        if (value == null)
+        {
+            return fallback;
+        }
+        if (value instanceof Number number)
+        {
+            return number.intValue();
+        }
+        return Integer.valueOf(value.toString());
     }
 }
