@@ -16,7 +16,7 @@
         <ruoyi.version>3.9.2</ruoyi.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <java.version>17</java.version>
+        <java.version>25</java.version>
         <spring-boot.version>3.5.16</spring-boot.version>
         <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
         <spring-boot-starter-web.version>3.5.16</spring-boot-starter-web.version>
@@ -30,7 +30,7 @@
         <netty.version>4.1.137.Final</netty.version>
         <jtransforms.version>3.1</jtransforms.version>
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
-        <lombok.version>1.18.36</lombok.version>
+        <lombok.version>1.18.46</lombok.version>
         <iotdb-session.version>2.0.10</iotdb-session.version>
         <jackson.version>2.21.4</jackson.version>
         <jacoco.version>0.8.15</jacoco.version>
@@ -213,6 +213,13 @@
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
         </plugins>

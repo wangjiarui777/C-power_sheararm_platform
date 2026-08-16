@@ -57,7 +57,7 @@
 ## 技术栈
 
 ### 后端
-- **Java 17 / Spring Boot 3.4.5**
+- **Java 25 / Spring Boot 3.5.16**
 - MyBatis 3.0.4 / MyBatis-Plus 3.5.9 / HikariCP
 - Spring Security（会话 Cookie + CSRF）
 - Spring WebSocket、Spring AOP、Fastjson2
@@ -140,7 +140,7 @@ MAT V2 Python 测试发送器，负责生成/发送带完整协议头的 `.mat` 
 ## 快速启动（Windows 开发环境）
 
 ### 前置依赖
-- JDK 17、Maven 3.8+、Node.js、Python 3.11（推荐）
+- JDK 25、Maven 3.8+、Node.js 24、npm 11、Python 3.11（推荐）
 - MySQL（Windows 服务 `MySQL80`/`MySQL96` 等）、Redis 5+（Windows 推荐 Memurai 4+）
 - Apache IoTDB 2.0.x（默认 `C:\iotdb\apache-iotdb-2.0.8-all-bin`）
 - 模型文件放于 `.local-models/`（齿轮 `best_model_classwise_maha.pth`、轴承 `best_model.pth`，SHA 与 `models-manifest.json` 一致）

@@ -68,8 +68,8 @@
     "launch-editor": "2.14.1"
   },
   "engines": {
-    "node": ">=18.20",
-    "npm": ">=10"
+    "node": ">=24.0.0",
+    "npm": ">=11"
   },
   "browserslist": [
     "last 5 Chrome versions",
