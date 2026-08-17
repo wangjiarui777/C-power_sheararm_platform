@@ -45,7 +45,7 @@ class ProductionConfigurationValidatorTest
     private MockEnvironment validEnvironment()
     {
         return new MockEnvironment()
-                .withProperty("sensor.inference.internal-token", "inference-token-0123456789-0123456789")
+                .withProperty("sensor.inference.internal-token", "test-only-inference-token-xxxxxxxxxxxxxxxx")
                 .withProperty("spring.datasource.password", "mysql-password")
                 .withProperty("spring.datasource.url", "jdbc:mysql://db:3306/ry-yue")
                 .withProperty("spring.datasource.username", "ruoyi")
