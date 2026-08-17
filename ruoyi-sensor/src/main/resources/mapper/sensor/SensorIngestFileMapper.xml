@@ -13,6 +13,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="id != null">AND f.id = #{id}</if>
         <if test="status != null and status != ''">AND f.status = #{status}</if>
         <if test="sourceType != null and sourceType != ''">AND f.source_type = #{sourceType}</if>
+        <if test="deviceCode != null and deviceCode != ''">AND (f.device_code = #{deviceCode} OR f.device_id IS NULL)</if>
+        <if test="pointId != null">AND (f.point_id = #{pointId} OR f.point_id IS NULL)</if>
+        <if test="attachmentId != null">AND f.attachment_id = #{attachmentId}</if>
         <if test="keyword != null and keyword != ''">
             AND (f.file_name LIKE CONCAT('%', #{keyword}, '%')
               OR f.device_code LIKE CONCAT('%', #{keyword}, '%')

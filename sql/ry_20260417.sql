@@ -135,7 +135,6 @@ create table sys_menu (
 -- ----------------------------
 -- 一级菜单
 insert into sys_menu values('1', '系统管理', '0', '1', 'system',           null, '', '', 1, 0, 'M', '0', '0', '', 'system',   'admin', sysdate(), '', null, '系统管理目录');
-insert into sys_menu values('2', '系统监控', '0', '2', 'monitor',          null, '', '', 1, 0, 'M', '0', '0', '', 'monitor',  'admin', sysdate(), '', null, '系统监控目录');
 insert into sys_menu values('3', '系统工具', '0', '3', 'tool',             null, '', '', 1, 0, 'M', '0', '0', '', 'tool',     'admin', sysdate(), '', null, '系统工具目录');
 -- “若依官网”菜单已移除，避免工业监测平台侧边栏出现无关入口
 -- insert into sys_menu values('4', '若依官网', '0', '4', 'http://ruoyi.vip', null, '', '', 0, 0, 'M', '0', '0', '', 'guide',    'admin', sysdate(), '', null, '若依官网地址');
@@ -150,7 +149,7 @@ insert into sys_menu values('108',  '日志管理', '1',   '9', 'log',        ''
 -- 如果运行数据库中已有这些记录，执行以下语句清除：
 -- delete from sys_menu where menu_id between 2000 and 2007;
 
-insert into sys_menu values('109',  '在线用户', '2',   '1', 'online',     'monitor/online/index',     '', '', 1, 0, 'C', '0', '0', 'monitor:online:list',     'online',        'admin', sysdate(), '', null, '在线用户菜单');
+insert into sys_menu values('109',  '在线用户', '1',   '8', 'online',     'monitor/online/index',     '', '', 1, 0, 'C', '0', '0', 'monitor:online:list',     'online',        'admin', sysdate(), '', null, '在线用户菜单');
 -- 三级菜单
 insert into sys_menu values('500',  '操作日志', '108', '1', 'operlog',    'monitor/operlog/index',    '', '', 1, 0, 'C', '0', '0', 'monitor:operlog:list',    'form',          'admin', sysdate(), '', null, '操作日志菜单');
 insert into sys_menu values('501',  '登录日志', '108', '2', 'logininfor', 'monitor/logininfor/index', '', '', 1, 0, 'C', '0', '0', 'monitor:logininfor:list', 'logininfor',    'admin', sysdate(), '', null, '登录日志菜单');
@@ -245,7 +244,6 @@ create table sys_role_menu (
 -- 初始化-角色和菜单关联表数据
 -- ----------------------------
 insert into sys_role_menu values ('2', '1');
-insert into sys_role_menu values ('2', '2');
 insert into sys_role_menu values ('2', '3');
 insert into sys_role_menu values ('2', '100');
 insert into sys_role_menu values ('2', '101');

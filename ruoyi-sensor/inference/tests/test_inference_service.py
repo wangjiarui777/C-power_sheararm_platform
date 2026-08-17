@@ -53,10 +53,22 @@ class InferenceServiceContractTest(unittest.TestCase):
         self.assertEqual(routes, {
             ("POST", "/internal/infer"),
             ("POST", "/internal/infer/batch"),
+            ("POST", "/internal/preview"),
             ("GET", "/internal/health/live"),
             ("GET", "/internal/health/ready"),
             ("GET", "/internal/metrics"),
         })
+
+    def test_preview_is_read_only_and_returns_normalized_signal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            source = root / "sample.npy"
+            np.save(source, np.sin(np.linspace(0, 12, 2048)).astype(np.float32))
+            with patch.object(service, "ALLOWED_INPUT_ROOTS", (root,)):
+                result = service.preview({"filePath": str(source), "maxPoints": 512})
+            self.assertTrue(result["success"])
+            self.assertLessEqual(len(result["data"]["waveform"]), 512)
+            self.assertEqual(result["data"]["source"], "FILE")
 
     def test_internal_token_is_required(self):
         with patch.object(service, "INTERNAL_TOKEN", "a" * 32):

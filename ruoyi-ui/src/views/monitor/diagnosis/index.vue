@@ -24,7 +24,7 @@
     <!-- 设备 → 测点 → 模型 → 版本，构成一次可追溯诊断的完整上下文。 -->
     <section class="context-rail" :class="{ 'is-ready': contextComplete, 'is-loading': optionsLoading }" aria-label="诊断上下文">
       <div class="context-heading">
-        <span class="context-kicker">DIAG CONTEXT</span>
+        <span class="context-kicker">诊断上下文</span>
         <strong>诊断上下文</strong>
         <span class="context-state">
           <i class="context-state-dot" />{{ optionsLoading ? '正在装载选项' : (contextComplete ? '上下文就绪' : '等待完整选择') }}
@@ -55,20 +55,20 @@
         <label for="diagnosis-version">04 / 模型版本</label>
         <el-select id="diagnosis-version" v-model="selectedModelVersion" filterable clearable placeholder="选择可执行版本" popper-class="dark-select-dropdown" :disabled="!selectedModelType || optionsLoading || uploading" @change="handleVersionChange">
           <el-option v-for="item in availableModelVersions" :key="`${item.modelType}-${item.semanticVersion}`" :label="versionOptionLabel(item)" :value="item.semanticVersion" :disabled="!item.available">
-            <span>{{ item.semanticVersion }}</span><span class="version-option-status" :class="`status-${String(item.status).toLowerCase()}`">{{ item.status }}{{ item.available ? '' : ' · 不可用' }}</span>
+            <span>{{ item.semanticVersion }}</span><span class="version-option-status" :class="`status-${String(item.status).toLowerCase()}`">{{ modelStatusText(item.status) }}{{ item.available ? '' : ' · 不可用' }}</span>
           </el-option>
         </el-select>
       </div>
       <div v-if="contextNotice || retiredVersionSelected" class="context-notice" :class="{ 'is-warning': retiredVersionSelected, 'is-error': contextError }" role="status">
         <i :class="retiredVersionSelected ? 'el-icon-warning-outline' : (contextError ? 'el-icon-circle-close' : 'el-icon-info')" />
-        <span>{{ retiredVersionSelected ? '该 RETIRED 版本仅用于回溯诊断，不产生正式告警。' : contextNotice }}</span>
+        <span>{{ retiredVersionSelected ? '该已退役版本仅用于回溯诊断，不产生正式告警。' : contextNotice }}</span>
         <el-button v-if="noAttachment" v-hasPermi="['sensor:diagnosis:run']" type="text" @click="uploadDialogVisible = true">选择诊断文件</el-button>
       </div>
     </section>
 
     <section v-if="diagnosisBatchId" class="point-matrix" aria-label="多测点诊断进度">
       <div class="point-matrix-head">
-        <div><span class="context-kicker">POINT MATRIX</span><strong>测点诊断总览</strong></div>
+        <div><span class="context-kicker">测点诊断进度</span><strong>测点诊断总览</strong></div>
         <div class="point-matrix-actions">
           <span class="batch-progress">{{ batchProgressText }}</span>
           <el-button v-if="batchHasFailures" v-hasPermi="['sensor:diagnosis:run']" type="warning" plain size="mini" :loading="polling" @click="retryFailedPoints">重试失败项</el-button>
@@ -86,7 +86,7 @@
           <span class="point-cell-code">CH {{ item.channelId == null ? '--' : item.channelId }}</span>
           <strong>{{ item.pointName || item.pointCode || `测点 ${item.pointId}` }}</strong>
           <span class="point-cell-status">{{ batchItemStatusText(item.status) }}</span>
-          <span v-if="item.result" class="point-cell-metric">健康 {{ item.result.healthIndex == null ? '--' : item.result.healthIndex }} · 风险 {{ item.result.riskLevel || '--' }}</span>
+          <span v-if="item.result" class="point-cell-metric">健康 {{ item.result.healthIndex == null ? '--' : item.result.healthIndex }} · 风险 {{ riskLevelText(item.result.riskLevel) }}</span>
           <span v-else-if="item.errorMessage" class="point-cell-error" :title="item.errorMessage">{{ item.errorMessage }}</span>
         </button>
       </div>
@@ -275,7 +275,7 @@
         <el-table-column prop="healthIndex" label="健康" width="60" />
         <el-table-column prop="riskLevel" label="风险" width="60">
           <template slot-scope="scope">
-            <span class="history-risk-badge" :class="'history-risk-' + riskTagType(scope.row.riskLevel)">{{ scope.row.riskLevel || '--' }}</span>
+            <span class="history-risk-badge" :class="'history-risk-' + riskTagType(scope.row.riskLevel)">{{ riskLevelText(scope.row.riskLevel) }}</span>
           </template>
         </el-table-column>
       </el-table>

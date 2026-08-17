@@ -218,6 +218,7 @@ import {
 import OilMetricCard from './components/OilMetricCard'
 import ParticleDistribution from './components/ParticleDistribution'
 import OilTrendChart from './components/OilTrendChart'
+import { oilStatusText } from '@/utils/industrialLabels'
 
 const METRICS = [
   { code: 'cleanlinessNas', label: '污染度 NAS', unit: '级', precision: 0, group: 'cleanliness' },
@@ -360,7 +361,7 @@ export default {
         BAD: '质量异常',
         OFFLINE: '设备离线',
         UNKNOWN: '等待接入'
-      }[this.overallStatus] || this.overallStatus
+      }[this.overallStatus] || this.oilStatusText(this.overallStatus)
     },
     railItems() {
       return [
@@ -389,6 +390,7 @@ export default {
     this.disconnectRealtime()
   },
   methods: {
+    oilStatusText(value) { return oilStatusText(value) },
     async loadDevices() {
       this.loadingDevices = true
       try {

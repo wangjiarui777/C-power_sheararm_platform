@@ -6,7 +6,7 @@
         <h2>{{ device.deviceName || '主扇风机' }}</h2>
         <div class="asset-meta">
           <span>{{ device.deviceCode || deviceCode }}</span>
-          <span>{{ device.deviceType || 'Rotating machinery' }}</span>
+          <span>{{ device.deviceType || '旋转机械' }}</span>
           <span>最近采样 {{ formatTime(summary.latestSampleTime) }}</span>
         </div>
       </div>
@@ -69,10 +69,10 @@
             <div class="channel-name">{{ item.channelName }}</div>
             <div class="channel-value">
               <strong>{{ formatMetric(item.rms) }}</strong>
-              <span>mm/s RMS</span>
+              <span>mm/s · RMS 有效值</span>
             </div>
             <div class="channel-mini">
-              <span>Peak {{ formatMetric(item.peak) }}</span>
+              <span>峰值 Peak {{ formatMetric(item.peak) }}</span>
               <span>{{ formatMetric(item.temperature) }} °C</span>
             </div>
             <div class="health-bar">
@@ -90,7 +90,7 @@
           </div>
           <div class="metric-strip">
             <div><span>RMS</span><strong>{{ formatMetric(activeChannel.rms) }}</strong></div>
-            <div><span>Peak</span><strong>{{ formatMetric(activeChannel.peak) }}</strong></div>
+            <div><span>峰值 Peak</span><strong>{{ formatMetric(activeChannel.peak) }}</strong></div>
             <div><span>健康度</span><strong>{{ activeChannel.health || 0 }}%</strong></div>
           </div>
         </div>

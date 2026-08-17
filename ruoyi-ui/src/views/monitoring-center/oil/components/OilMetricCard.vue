@@ -21,6 +21,8 @@
 </template>
 
 <script>
+import { oilStatusText } from '@/utils/industrialLabels'
+
 export default {
   name: 'OilMetricCard',
   props: {
@@ -35,17 +37,7 @@ export default {
     normalizedStatus() {
       return String(this.status || 'UNKNOWN').toLowerCase()
     },
-    statusText() {
-      return {
-        NORMAL: '正常',
-        GOOD: '正常',
-        WARNING: '预警',
-        ALARM: '报警',
-        BAD: '异常',
-        OFFLINE: '离线',
-        UNKNOWN: '待接入'
-      }[String(this.status || 'UNKNOWN').toUpperCase()] || String(this.status)
-    }
+    statusText() { return oilStatusText(this.status) }
   },
   methods: {
     valueText(value, precision) {

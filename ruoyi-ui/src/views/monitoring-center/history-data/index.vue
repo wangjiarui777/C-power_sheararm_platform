@@ -3,7 +3,7 @@
     <el-card shadow="never" class="history-card">
       <div slot="header" class="page-header">
         <div>
-          <span class="eyebrow">HISTORY DATA</span>
+          <span class="eyebrow">历史数据</span>
           <h2>历史数据下载</h2>
           <p>查询指定时间范围内的诊断记录，并导出为 CSV 文件。</p>
         </div>

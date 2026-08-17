@@ -67,7 +67,7 @@
           <kbd>↵</kbd> 选择
         </span>
         <span class="shortcut-item">
-          <kbd>Esc</kbd> 关闭
+          <kbd>退出</kbd> 关闭
         </span>
       </div>
     </el-dialog>

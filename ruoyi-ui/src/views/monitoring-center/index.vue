@@ -12,7 +12,7 @@
     <section class="kpi-strip">
       <div><span>在线设备</span><strong>{{ summary.onlineDevices || 0 }}</strong><small>当前筛选范围</small></div>
       <div><span>异常设备</span><strong class="alarm">{{ summary.abnormalDevices || 0 }}</strong><small>需优先复核</small></div>
-      <div><span>未确认告警</span><strong class="warning">{{ summary.unacknowledgedAlarms || 0 }}</strong><small>NEW 状态</small></div>
+      <div><span>未确认告警</span><strong class="warning">{{ summary.unacknowledgedAlarms || 0 }}</strong><small>待确认状态</small></div>
       <div><span>数据延迟</span><strong>{{ delayText }}</strong><small>最后采样至今</small></div>
     </section>
 

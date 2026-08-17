@@ -79,5 +79,57 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.runtime-page{min-height:calc(100vh - 84px);padding:24px;background:#f5f7fa;color:#18212b}.runtime-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px;padding:22px 26px;background:#18212b;color:#fff;border-left:5px solid #2f80ed;h1{margin:5px 0 0;font-size:27px}.runtime-head>div:last-child{display:flex;align-items:center;gap:10px}}.runtime-code{font-family:Bahnschrift,Consolas,monospace;font-size:11px;letter-spacing:.08em;color:#8db9ed}.query-panel,.data-panel{padding:18px 20px;margin-bottom:16px;background:#fff;border:1px solid #dce3ea}.query-panel::v-deep .el-form-item{margin-bottom:8px}.panel-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;b{font-size:18px}span{margin-left:9px;color:#7b8896;font-family:Bahnschrift,monospace}}.danger{color:#c45656}.record-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}.record-form::v-deep .el-input-number,.record-form::v-deep .el-select,.record-form::v-deep .el-date-editor{width:100%}@media(max-width:800px){.runtime-head{align-items:flex-start;gap:18px;flex-direction:column}.record-form{grid-template-columns:1fr}}
+.runtime-page {
+  min-height: calc(100vh - 84px);
+  margin: -20px;
+  padding: 24px;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  background:
+    linear-gradient(rgba(34, 211, 238, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, .025) 1px, transparent 1px),
+    var(--color-canvas);
+  background-size: 48px 48px;
+}
+.runtime-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 88px;
+  margin-bottom: 14px;
+  padding: 20px 24px;
+  background: rgba(17, 28, 48, .92);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+.runtime-head h1 { margin: 5px 0 0; color: var(--color-heading); font-size: 24px; }
+.runtime-head > div:last-child { display: flex; align-items: center; gap: 10px; }
+.runtime-code { color: var(--color-accent); font-family: var(--font-data); font-size: 10px; letter-spacing: .12em; }
+.query-panel, .data-panel {
+  margin-bottom: 14px;
+  padding: 18px 20px;
+  background: rgba(17, 28, 48, .9);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+}
+.query-panel::v-deep .el-form-item { margin-bottom: 8px; }
+.panel-title { margin-bottom: 14px; color: var(--color-heading); }
+.panel-title b { font-size: 17px; }
+.panel-title span { color: var(--color-accent); font-family: var(--font-data); }
+.data-panel::v-deep .el-table { background: transparent; }
+.data-panel::v-deep .el-table th, .data-panel::v-deep .el-table td { background: transparent; border-bottom-color: var(--color-border); }
+.data-panel::v-deep .el-table tr { background: transparent; }
+.data-panel::v-deep .el-table--enable-row-hover .el-table__body tr:hover > td { background: var(--color-accent-soft); }
+.danger { color: var(--color-danger); }
+.record-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.record-form::v-deep .el-input-number, .record-form::v-deep .el-select, .record-form::v-deep .el-date-editor { width: 100%; }
+@media (max-width: 800px) {
+  .runtime-page { margin: -10px; padding: 14px; }
+  .runtime-head { align-items: flex-start; gap: 18px; flex-direction: column; }
+  .runtime-head > div:last-child { width: 100%; justify-content: space-between; }
+  .record-form { grid-template-columns: 1fr; }
+}
 </style>

@@ -66,9 +66,10 @@ public class IndustrialMonitoringController extends BaseController
             @PathVariable Long pointId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Date from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Date to,
-            @RequestParam(defaultValue = "1200") Integer maxPoints)
+            @RequestParam(defaultValue = "1200") Integer maxPoints,
+            @RequestParam(required = false) Long attachmentId)
     {
-        return success(monitoringService.vibrationAnalysis(pointId, from, to, maxPoints));
+        return success(monitoringService.vibrationAnalysis(pointId, from, to, maxPoints, attachmentId));
     }
 
     @GetMapping("/points/{pointId}/temperature-analysis")

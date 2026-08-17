@@ -2,7 +2,7 @@
   <div class="access-page">
     <header class="workbench-head">
       <div>
-        <span class="eyebrow">MAT INTAKE / CHANNEL MAP</span>
+        <span class="eyebrow">MAT 接入与通道绑定</span>
         <h1>MAT 接入配置</h1>
         <p>将 8888 MAT 协议中的物理通道绑定到设备测点，形成可追溯的诊断信号链。</p>
       </div>
@@ -14,13 +14,13 @@
     </header>
 
     <section class="signal-rail" aria-label="采集信号链">
-      <div class="rail-node"><span>01</span><small>MAT RECEIVER</small><strong>TCP : 8888</strong></div>
+      <div class="rail-node"><span>01</span><small>MAT 采集端</small><strong>TCP : 8888</strong></div>
       <i class="rail-line" />
-      <div class="rail-node"><span>02</span><small>TERMINAL</small><strong>{{ selectedTerminal }}</strong></div>
+      <div class="rail-node"><span>02</span><small>采集终端</small><strong>{{ selectedTerminal }}</strong></div>
       <i class="rail-line" />
-      <div class="rail-node is-accent"><span>03</span><small>MEASURE POINT</small><strong>{{ selectedPointName }}</strong></div>
+      <div class="rail-node is-accent"><span>03</span><small>设备测点</small><strong>{{ selectedPointName }}</strong></div>
       <i class="rail-line" />
-      <div class="rail-node"><span>04</span><small>DIAGNOSIS</small><strong>{{ activeFilterLabel }}</strong></div>
+      <div class="rail-node"><span>04</span><small>诊断信号</small><strong>{{ activeFilterLabel }}</strong></div>
     </section>
 
     <section class="filter-panel">
@@ -61,7 +61,7 @@
     </section>
 
     <el-dialog :title="form.id ? '编辑通道绑定' : '新增通道绑定'" :visible.sync="dialogVisible" width="760px" append-to-body custom-class="industrial-dialog">
-      <div class="dialog-signal"><span>MAT 8888</span><i /><span>CHANNEL</span><i /><span>POINT</span></div>
+      <div class="dialog-signal"><span>MAT 8888</span><i /><span>采集通道</span><i /><span>设备测点</span></div>
       <el-form ref="channelForm" :model="form" :rules="rules" label-width="96px">
         <el-row :gutter="16">
           <el-col :sm="6" :xs="12"><el-form-item label="通道号" prop="channelNo"><el-input-number v-model="form.channelNo" :min="1" :max="64" /></el-form-item></el-col>

@@ -31,7 +31,7 @@
       <div><span>温升速率</span><strong>{{ metric(statistics.latestRoc) }}</strong><small>℃/min</small></div>
       <div><span>历史极值</span><strong>{{ metric(statistics.maximum) }}</strong><small>℃</small></div>
       <div><span>同步振动</span><strong>{{ metric(statistics.latestVibration) }}</strong><small>mm/s</small></div>
-      <div><span>数据质量</span><strong class="quality-value">{{ snapshot.quality || 'OFFLINE' }}</strong><small>{{ dataStatusText }}</small></div>
+      <div><span>数据质量</span><strong class="quality-value">{{ qualityText(snapshot.quality) }}</strong><small>{{ dataStatusText }}</small></div>
     </section>
 
     <main class="temperature-layout">
@@ -80,7 +80,7 @@
           <div class="panel-head"><div><strong>温升告警</strong><span>条件与流程状态并列</span></div></div>
           <div class="alarm-list">
             <button v-for="alarm in alarms" :key="alarm.id" @click="openAlarm(alarm)">
-              <span><strong>{{ alarm.diagnosisResult || '温度告警' }}</strong><small>{{ alarm.conditionStatus || 'ACTIVE' }} · {{ alarm.workflowStatus || 'NEW' }}</small></span>
+              <span><strong>{{ alarm.diagnosisResult || '温度告警' }}</strong><small>{{ conditionStatusText(alarm.conditionStatus) }} · {{ workflowStatusText(alarm.workflowStatus) }}</small></span>
               <i class="el-icon-arrow-right"></i>
             </button>
             <div v-if="!alarms.length" class="empty-card">当前测点无温升告警</div>
@@ -98,6 +98,7 @@ import { getTemperatureAnalysis } from '@/api/monitoring'
 import ContextBar from '@/components/IndustrialMonitoring/ContextBar'
 import TimeRangeSelect from '@/components/IndustrialMonitoring/TimeRangeSelect'
 import { industrialChartTheme } from '@/utils/industrialTheme'
+import { conditionStatusText, qualityText, workflowStatusText } from '@/utils/industrialLabels'
 
 export default {
   name: 'Temperature',
@@ -255,6 +256,9 @@ export default {
     },
     openAlarm(alarm) { this.$router.push({ path: '/phm/alarms', query: { alarmId: alarm.id } }) },
     eventType(value) { return { repair: '维修', maintenance: '保养', alarm_handle: '告警处置', diagnosis: '诊断', access: '投运', other: '事件' }[value] || value },
+    qualityText(value) { return qualityText(value) },
+    conditionStatusText(value) { return conditionStatusText(value) },
+    workflowStatusText(value) { return workflowStatusText(value) },
     metric(value) { return value === null || value === undefined ? '--' : Number(value).toFixed(2) },
     formatTime(value) { return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '--' },
     axisTime(value) { return value ? new Date(value).toLocaleTimeString('zh-CN', { hour12: false }) : '' },

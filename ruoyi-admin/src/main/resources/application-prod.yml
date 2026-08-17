@@ -13,6 +13,7 @@ sensor:
   inference:
     gear-url: ${SENSOR_GEAR_INFER_URL:http://127.0.0.1:5001/internal/infer}
     bearing-url: ${SENSOR_BEARING_INFER_URL:http://127.0.0.1:5002/internal/infer}
+    preview-url: ${SENSOR_INFERENCE_PREVIEW_URL:}
     gear-model-version: ${GEAR_MODEL_VERSION:gear-unregistered}
     bearing-model-version: ${BEARING_MODEL_VERSION:bearing-unregistered}
     internal-token: ${SENSOR_INFERENCE_INTERNAL_TOKEN}

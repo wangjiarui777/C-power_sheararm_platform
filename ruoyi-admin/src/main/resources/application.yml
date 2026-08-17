@@ -1,7 +1,7 @@
 # 项目相关配置
 ruoyi:
   # 名称
-  name: 振动温度监测平台
+  name: 采煤机摇臂振动监测平台
   # 版本
   version: 3.9.2
   # 版权年份
@@ -72,6 +72,7 @@ sensor:
   inference:
     gear-url: ${SENSOR_GEAR_INFER_URL:}
     bearing-url: ${SENSOR_BEARING_INFER_URL:}
+    preview-url: ${SENSOR_INFERENCE_PREVIEW_URL:}
     gear-model-version: ${GEAR_MODEL_VERSION:gear-unregistered}
     bearing-model-version: ${BEARING_MODEL_VERSION:bearing-unregistered}
     default-device-code: ${SENSOR_DEFAULT_DEVICE_CODE:}

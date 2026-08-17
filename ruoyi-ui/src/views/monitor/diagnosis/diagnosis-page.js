@@ -2,6 +2,7 @@ import echarts from '@/utils/echarts'
 import { getDiagnosisOptions, getInferenceHealth, inferWithAttachment, listMatFiles, uploadDiagnosisToInferenceService, fetchHistory, getServiceURL, createDiagnosisBatch, getDiagnosisBatch, retryDiagnosisBatch } from '@/api/system/bearingDiagnosis'
 import { translateDiagnosisLabel, translateAlarmLevel, translateRiskLevel, translateAll } from '@/utils/diagnosis-translations'
 import { getErrorMessage } from '@/utils/request'
+import { modelStatusText, riskLevelText } from '@/utils/industrialLabels'
 import MeasurementPointOverview from './MeasurementPointOverview.vue'
 
 export default {
@@ -435,7 +436,7 @@ export default {
       return `${point} / ${device} / ${channel}`
     },
     versionOptionLabel(item) {
-      return `${item.semanticVersion} · ${item.status}${item.available ? '' : ' · 不可用'}`
+      return `${item.semanticVersion} · ${modelStatusText(item.status)}${item.available ? '' : ' · 不可用'}`
     },
     updateTrustedPointContext() {
       const point = this.selectedPointOption
@@ -1507,6 +1508,14 @@ export default {
       if (status === 'INVALID') return '输入无效'
       if (status === 'FAILED') return '失败'
       return '待配置'
+    },
+
+    modelStatusText(status) {
+      return modelStatusText(status)
+    },
+
+    riskLevelText(level) {
+      return riskLevelText(level)
     },
 
     /** 上传到 Java 安全附件存储，再用返回的附件 ID 创建异步诊断任务。 */

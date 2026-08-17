@@ -1337,6 +1337,53 @@ def infer(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"success": True, "data": result}
 
 
+@app.post("/internal/preview", dependencies=[Depends(require_internal_token)])
+def preview(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Read-only signal preview; never loads a model or writes an inference result."""
+    file_path = payload.get("filePath") or payload.get("file_path")
+    if not file_path:
+        raise HTTPException(status_code=400, detail="filePath is required")
+    source_path = _resolve_trusted_input_path(str(file_path))
+    max_points = max(256, min(int(payload.get("maxPoints", DISPLAY_POINTS)), 4096))
+    raw_signal, source_name, metadata = _load_signal_from_path(source_path)
+    if raw_signal.size < 2:
+        raise HTTPException(status_code=422, detail="signal contains fewer than two samples")
+    sample_rate = float(metadata.get("sample_rate") or payload.get("sampleRate") or 5120.0)
+    if not np.isfinite(sample_rate) or sample_rate <= 0:
+        raise HTTPException(status_code=422, detail="sample rate must be positive")
+
+    signal = np.asarray(raw_signal, dtype=np.float64).reshape(-1)
+    time_axis = np.arange(signal.size, dtype=np.float64) / sample_rate
+    _, waveform = v6.downsample_curve(time_axis, signal, max_points=max_points)
+    spectrum = v6.compute_fft_full_curve(
+        signal, fs=sample_rate, max_points=min(max_points, DISPLAY_SPECTRUM_POINTS), f_min=0.0
+    )
+    metrics = v6.compute_industrial_metrics(signal, fs=sample_rate)
+    features = {
+        "rms": v6.safe_float(metrics.get("rms")),
+        "peak": v6.safe_float(metrics.get("peak")),
+        "peakToPeak": v6.safe_float(metrics.get("peak_to_peak")),
+        "kurtosis": v6.safe_float(metrics.get("kurtosis")),
+        "crestFactor": v6.safe_float(metrics.get("crest_factor")),
+        "mainFrequency": v6.safe_float(metrics.get("frequency_center")),
+    }
+    return {"success": True, "data": {
+        "source": "FILE",
+        "sourceName": source_name,
+        "sampleRate": sample_rate,
+        "sampleTime": metadata.get("sample_time"),
+        "waveform": waveform,
+        "frequencyAxis": spectrum["freq_hz"],
+        "spectrum": spectrum["amplitude"],
+        "envelopeSpectrum": [],
+        "waterfall": [],
+        "features": features,
+        "dataStatus": "full",
+        "message": "已加载文件原始时域与频域数据",
+        "metadata": {"rpm": metadata.get("rpm"), "sampleCount": int(signal.size)},
+    }}
+
+
 @app.post("/internal/infer/batch", dependencies=[Depends(require_internal_token)])
 def infer_batch(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Run independent realtime windows while preserving per-item failures."""

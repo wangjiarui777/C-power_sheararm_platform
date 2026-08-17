@@ -64,7 +64,7 @@ class IndustrialPipelineMenuMigrationTest
         Path uiRoot = Path.of("ruoyi-ui", "src", "views");
         if (!Files.isDirectory(uiRoot)) uiRoot = Path.of("..", "ruoyi-ui", "src", "views");
         assertTrue(Files.isRegularFile(uiRoot.resolve("sensor/access/points.vue")));
-        assertTrue(Files.isRegularFile(uiRoot.resolve("sensor/ingest/files.vue")));
+        assertTrue(Files.isRegularFile(uiRoot.resolve("system/vibration/index.vue")));
     }
 
     private int count(Statement statement, String sql) throws Exception

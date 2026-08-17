@@ -45,6 +45,9 @@ public class IndustrialMonitoringService
     @Autowired
     private TimeSeriesAnalysisService timeSeriesAnalysisService;
 
+    @Autowired
+    private VibrationFilePreviewService vibrationFilePreviewService;
+
     public List<Map<String, Object>> assetTree()
     {
         List<PhmDeviceEntity> devices = phmService.listDevices(null);
@@ -123,8 +126,18 @@ public class IndustrialMonitoringService
 
     public Map<String, Object> vibrationAnalysis(Long pointId, Date from, Date to, int maxPoints)
     {
+        return vibrationAnalysis(pointId, from, to, maxPoints, null);
+    }
+
+    public Map<String, Object> vibrationAnalysis(Long pointId, Date from, Date to, int maxPoints,
+                                                 Long attachmentId)
+    {
         PhmMeasurePointEntity point = requirePoint(pointId);
         PhmDeviceEntity device = resolveDevice(point.getDeviceCode());
+        if (attachmentId != null)
+        {
+            return vibrationFileAnalysis(point, device, maxPoints, attachmentId);
+        }
         List<Map<String, Object>> trend = downsample(vibrationTrend(point, from, to), maxPoints);
         DeviceVibrationData latest = latestVibration(point, from, to);
         Map<String, Object> frameData = loadLatestVibrationFrameData(point);
@@ -147,6 +160,37 @@ public class IndustrialMonitoringService
         result.put("message", hasWaveform || hasSpectrum
                 ? "已加载真实时域与频域数据"
                 : "当前仅有低频特征趋势，尚未采集原始波形或频谱");
+        return result;
+    }
+
+    private Map<String, Object> vibrationFileAnalysis(PhmMeasurePointEntity point,
+                                                       PhmDeviceEntity device, int maxPoints,
+                                                       Long attachmentId)
+    {
+        if (device == null)
+        {
+            throw new IllegalArgumentException("设备不存在或无权访问");
+        }
+        Map<String, Object> preview = vibrationFilePreviewService.preview(attachmentId, device, point, maxPoints);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("device", device);
+        result.put("point", point);
+        result.put("snapshot", pointSnapshot(device, point, null, null));
+        result.put("features", preview.getOrDefault("features", new LinkedHashMap<>()));
+        result.put("trend", preview.getOrDefault("trend", new ArrayList<>()));
+        result.put("waveform", preview.getOrDefault("waveform", new ArrayList<>()));
+        result.put("frequencyAxis", preview.getOrDefault("frequencyAxis", new ArrayList<>()));
+        result.put("spectrum", preview.getOrDefault("spectrum", new ArrayList<>()));
+        result.put("envelopeSpectrum", preview.getOrDefault("envelopeSpectrum", new ArrayList<>()));
+        result.put("waterfall", preview.getOrDefault("waterfall", new ArrayList<>()));
+        result.put("thresholds", threshold(point, "vibration"));
+        result.put("alarms", alarmsForPoint(point));
+        result.put("source", "FILE");
+        result.put("attachmentId", attachmentId);
+        result.put("attachment", preview.get("attachment"));
+        result.put("fileStatus", preview.getOrDefault("fileStatus", "ACCEPTED"));
+        result.put("dataStatus", preview.getOrDefault("dataStatus", "full"));
+        result.put("message", preview.getOrDefault("message", "已加载文件原始时域与频域数据"));
         return result;
     }
 

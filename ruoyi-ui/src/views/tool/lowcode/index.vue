@@ -2,7 +2,7 @@
   <div class="lc-shell">
     <header class="lc-command-bar">
       <div>
-        <span class="lc-eyebrow">INDUSTRIAL CONFIGURATION / V2</span>
+        <span class="lc-eyebrow">工业配置工作台</span>
         <h1>低代码工作台</h1>
         <p>把数据对象、页面规则和诊断动作封装为可审计的发布版本。</p>
       </div>
@@ -42,7 +42,7 @@
             <div class="stage-toolbar"><div><h2>五阶段信号链</h2><p>每个绑定固定设备、测点、通道和已验证模型版本。</p></div><div><el-button v-hasPermi="['tool:lowcode:test']" size="small" @click="runPipelineTest">试运行</el-button><el-button v-hasPermi="['tool:lowcode:activate']" size="small" type="success" @click="activatePipelineNow">启用管道</el-button><el-button v-hasPermi="['tool:lowcode:activate']" size="small" @click="deactivatePipelineNow">停用</el-button></div></div>
             <el-steps :active="pipelineStage" finish-status="success" simple class="pipeline-steps"><el-step title="测点接入"/><el-step title="IoTDB 映射"/><el-step title="模型服务"/><el-step title="触发策略"/><el-step title="试运行与发布"/></el-steps>
             <div class="pipeline-grid"><article class="config-card"><h3>绑定测点</h3><div v-for="(binding,index) in metadata.pipeline.bindings" :key="index" class="binding-row"><el-input v-model="binding.deviceId" placeholder="设备 ID"/><el-input v-model="binding.pointId" placeholder="测点 ID"/><el-input v-model="binding.acquisitionChannelId" placeholder="通道 ID"/><el-select v-model="binding.modelType"><el-option label="齿轮" value="gear"/><el-option label="轴承" value="bearing"/></el-select><el-input v-model="binding.modelReleaseId" placeholder="模型发布 ID"/><el-input v-model="binding.modelVersion" placeholder="固定版本"/></div><el-button size="small" icon="el-icon-plus" @click="addBinding">增加绑定</el-button></article><article class="config-card"><h3>IoTDB 与质量策略</h3><el-form label-position="top" class="pipeline-form"><el-form-item label="库 / 表"><el-input v-model="metadata.pipeline.iotdb.database"/><el-input v-model="metadata.pipeline.iotdb.table"/></el-form-item><el-form-item label="最大帧龄（秒）"><el-input-number v-model="metadata.pipeline.iotdb.maxFrameAgeSeconds" :min="1" :max="86400"/></el-form-item><el-form-item label="调度 Cron"><el-input v-model="metadata.pipeline.trigger.schedule.cron" placeholder="0 0/15 * * * ?"/></el-form-item></el-form><div class="quality-chip"><i class="el-icon-success"/> 只读探测 · 不执行 DDL</div></article></div>
-            <el-table :data="pipelineRuns" size="small" class="pipeline-runs"><el-table-column prop="trigger_type" label="触发" width="110"/><el-table-column prop="status" label="状态" width="110"/><el-table-column prop="detail" label="详情"/><el-table-column prop="started_at" label="开始时间" width="180"/></el-table>
+            <el-table :data="pipelineRuns" size="small" class="pipeline-runs"><el-table-column prop="trigger_type" label="触发方式" width="110"><template slot-scope="scope">{{ eventText(scope.row.trigger_type) }}</template></el-table-column><el-table-column prop="status" label="运行状态" width="110"><template slot-scope="scope">{{ pipelineStatusText(scope.row.status) }}</template></el-table-column><el-table-column prop="detail" label="执行详情"/><el-table-column prop="started_at" label="开始时间" width="180"/></el-table>
           </el-tab-pane>
           <el-tab-pane v-if="!isPipeline" label="对象建模" name="model">
             <div class="stage-toolbar">
@@ -90,7 +90,7 @@
             <div class="stage-toolbar"><div><h2>受控动作</h2><p>动作只调用已注册处理器或白名单连接器，不执行自由脚本。</p></div><el-button size="small" @click="addAction">增加动作</el-button></div>
             <article v-for="(action, index) in metadata.actions" :key="index" class="config-card action-card">
               <el-input v-model="action.code" placeholder="动作编码" />
-              <el-select v-model="action.event"><el-option v-for="event in actionEvents" :key="event" :value="event" /></el-select>
+              <el-select v-model="action.event"><el-option v-for="event in actionEvents" :key="event" :label="eventText(event)" :value="event" /></el-select>
               <el-select v-model="action.handler"><el-option label="HTTP 白名单连接器" value="connector.http" /><el-option label="IoTDB 趋势只读" value="iotdb.telemetry.trend" /><el-option label="传感器诊断" value="sensor.diagnosis.run" /></el-select>
               <el-input v-if="action.handler === 'connector.http'" v-model="action.connectorCode" placeholder="连接器编码" />
               <el-input v-if="action.handler === 'connector.http'" v-model="action.path" placeholder="精确白名单路径" />
@@ -103,7 +103,7 @@
             <div v-if="validation.errors && validation.errors.length" class="validation-list">
               <article v-for="error in validation.errors" :key="error.code + error.path"><b>{{ error.code }}</b><span>{{ error.message }}</span><code>{{ error.path }}</code></article>
             </div>
-            <el-table :data="current.versions || []"><el-table-column prop="versionNo" label="版本" width="90" /><el-table-column prop="versionState" label="状态" width="120" /><el-table-column prop="checksum" label="校验和" show-overflow-tooltip /><el-table-column prop="publishBy" label="发布人" width="120" /><el-table-column label="操作" width="100"><template slot-scope="scope"><el-button v-hasPermi="['tool:lowcode:rollback']" v-if="scope.row.versionState === 'PUBLISHED' && scope.row.id !== current.activeVersionId" type="text" @click="rollback(scope.row.id)">回滚</el-button></template></el-table-column></el-table>
+            <el-table :data="current.versions || []"><el-table-column prop="versionNo" label="版本" width="90" /><el-table-column prop="versionState" label="状态" width="120"><template slot-scope="scope">{{ modelStatusText(scope.row.versionState) }}</template></el-table-column><el-table-column prop="checksum" label="校验和" show-overflow-tooltip /><el-table-column prop="publishBy" label="发布人" width="120" /><el-table-column label="操作" width="100"><template slot-scope="scope"><el-button v-hasPermi="['tool:lowcode:rollback']" v-if="scope.row.versionState === 'PUBLISHED' && scope.row.id !== current.activeVersionId" type="text" @click="rollback(scope.row.id)">回滚</el-button></template></el-table-column></el-table>
             <el-collapse class="advanced-json"><el-collapse-item title="高级：查看并编辑统一元数据 JSON"><el-input v-model="metadataText" type="textarea" :rows="18" @change="applyMetadataText" /></el-collapse-item></el-collapse>
           </el-tab-pane>
         </el-tabs>
@@ -122,6 +122,7 @@
 <script>
 import draggable from 'vuedraggable'
 import { listProjects, getProject, createProject, saveDraft, validateProject, diffProject, publishProject, rollbackProject, inspectDatabase, previewDdl, exportUrl, testPipeline, activatePipeline, deactivatePipeline, listPipelineRuns } from '@/api/tool/lowcode'
+import { modelStatusText } from '@/utils/industrialLabels'
 
 const emptyMetadata = () => ({ schemaVersion: 2, appType: 'DATA_APP', preset: 'generic-crud', dataSource: 'mysql', model: { table: '', primaryKey: 'id', fields: [], relations: [] }, pages: [{ code: 'index', type: 'crud', regions: ['query', 'list', 'form', 'detail'] }], rules: [], actions: [], pipeline: { bindings: [], iotdb: { database: 'monitoring', table: 'vibration_frame', maxFrameAgeSeconds: 300 }, trigger: { schedule: { cron: '0 0/15 * * * ?' } } } })
 
@@ -167,6 +168,9 @@ export default {
     async inspect() { const res = await inspectDatabase(this.current.id); const options = (res.data || []).map(item => ({ value: item.table, label: `${item.table} · ${item.columns.length} 字段`, columns: item.columns })); this.$prompt('输入要导入的数据库表名', '导入数据库表', { inputType: 'text' }).then(({ value }) => { const selected = options.find(item => item.value === value); if (!selected) return this.$modal.msgError('没有找到该表'); this.metadata.model.table = selected.value; this.metadata.model.fields = selected.columns.map(col => ({ name: col.name, label: col.name, type: this.mapDbType(col.databaseType), list: true, query: false, required: !col.nullable, readOnly: col.name === 'id', insert: col.name !== 'id', edit: col.name !== 'id' })); this.metadata.model.primaryKey = this.metadata.model.fields.some(f => f.name === 'id') ? 'id' : this.metadata.model.fields[0].name }) },
     async ddlPreview() { const res = await previewDdl(this.current.id, this.metadata); this.ddlStatements = res.data.statements || []; this.ddlVisible = true },
     mapDbType(type) { const text = String(type).toLowerCase(); if (text.includes('int') || text.includes('decimal') || text.includes('double')) return 'number'; if (text.includes('date') || text.includes('time')) return 'datetime'; if (text.includes('text') || text.includes('json')) return 'textarea'; return 'text' },
+    modelStatusText(status) { return modelStatusText(status) },
+    eventText(value) { return { FORM_CHANGE: '表单变更', BEFORE_SAVE: '保存前', AFTER_SAVE: '保存后', MANUAL: '手动触发' }[value] || String(value || '未标注') },
+    pipelineStatusText(value) { return { PENDING: '排队中', RUNNING: '执行中', SUCCEEDED: '已完成', FAILED: '执行失败', SUCCESS: '已完成' }[String(value || '').toUpperCase()] || String(value || '未标注') },
     escape(text) { return text.replace(/[&<>]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char])) }
   }
 }
@@ -197,4 +201,136 @@ $graphite: #18212b; $steel: #334155; $work: #f5f7fa; $signal: #2f80ed; $amber: #
 .designer-stage{padding:0;overflow:hidden}.workspace-tabs{background:#fff;border:1px solid #ebeef5;border-radius:4px;padding:0 18px 18px}.workspace-tabs::v-deep .el-tabs__header{margin-bottom:18px}.workspace-tabs::v-deep .el-tabs__item{font-weight:400}.workspace-tabs::v-deep .el-tabs__item.is-active{font-weight:600}.stage-toolbar{min-height:42px;margin-bottom:16px}.stage-toolbar h2{font-size:18px;font-weight:600;color:#303133}.stage-toolbar p{font-size:12px;color:#909399}.config-card,.field-row,.region-card{box-shadow:none;border:1px solid #ebeef5;border-radius:3px}.config-card{border-left:3px solid #e6a23c}.action-card{border-left-color:#409eff}.pipeline-bus{border-radius:3px;background:#f4f8ff;color:#409eff;border:1px solid #d9ecff}.pipeline-bus i{color:#9cc8f5}.quality-chip{padding:6px 10px;background:#f0f9eb;border-radius:3px}.pipeline-runs{border:1px solid #ebeef5}
 .stage-empty{min-height:420px}.sensor-mark i{border-radius:2px}
 @media(max-width:1100px){.lc-shell{padding:16px}.lc-grid{grid-template-columns:190px minmax(0,1fr)}.release-rail{gap:12px}.release-actions{gap:4px}}
+
+/* Low-code control-room skin: a dense, signal-led workspace aligned with PHM. */
+.lc-shell {
+  position: relative;
+  min-height: calc(100vh - 84px);
+  margin: -20px;
+  padding: 24px;
+  overflow: hidden;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  background:
+    linear-gradient(rgba(34, 211, 238, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, .025) 1px, transparent 1px),
+    var(--color-canvas);
+  background-size: 48px 48px;
+}
+.lc-shell::after {
+  position: absolute;
+  top: 0;
+  right: 12%;
+  width: 360px;
+  height: 160px;
+  pointer-events: none;
+  content: "";
+  background: radial-gradient(ellipse, rgba(34, 211, 238, .08), transparent 70%);
+}
+.lc-command-bar {
+  position: relative;
+  z-index: 1;
+  align-items: center;
+  min-height: 98px;
+  padding: 22px 24px 20px 28px;
+  overflow: hidden;
+  color: var(--color-heading);
+  background: rgba(17, 28, 48, .9);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+.lc-command-bar::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42%;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent, var(--color-accent));
+  opacity: .8;
+}
+.lc-command-bar h1 { margin: 5px 0 7px; color: var(--color-heading); font-size: 26px; font-weight: 700; letter-spacing: .02em; }
+.lc-command-bar p { margin: 0; color: var(--color-muted); font-size: 13px; }
+.lc-eyebrow { color: var(--color-accent); font-family: var(--font-data); font-size: 10px; letter-spacing: .12em; }
+.lc-header-actions { display: flex; gap: 8px; }
+.lc-header-actions .el-button { min-width: 112px; }
+.release-rail {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 14px 0;
+  padding: 13px 16px;
+  color: var(--color-text);
+  background: rgba(15, 23, 42, .88);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+}
+.release-node { min-width: 145px; }
+.release-node:not(:last-of-type)::after { background: var(--color-border-strong); }
+.release-index { width: 26px; height: 26px; color: var(--color-muted); background: var(--color-surface-raised); border: 1px solid var(--color-border-strong); font-family: var(--font-data); }
+.release-node.done .release-index { color: var(--color-on-accent); background: var(--color-accent); border-color: var(--color-accent); box-shadow: 0 0 16px rgba(34, 211, 238, .22); }
+.release-node.error .release-index { color: #fff; background: var(--color-danger); border-color: var(--color-danger); }
+.release-node b { color: var(--color-heading); font-size: 13px; }
+.release-node small { color: var(--color-muted); }
+.release-actions { gap: 7px; }
+.lc-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px; min-height: calc(100vh - 250px); }
+.project-rail {
+  align-self: start;
+  min-height: 520px;
+  padding: 18px 12px;
+  color: var(--color-text);
+  background: rgba(15, 23, 42, .9);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+}
+.rail-title { align-items: center; padding: 0 9px 14px; color: var(--color-heading); border-bottom-color: var(--color-border); }
+.rail-title span::before { display: inline-block; width: 6px; height: 6px; margin-right: 8px; vertical-align: 2px; content: ""; background: var(--color-accent); border-radius: 50%; box-shadow: 0 0 10px var(--color-accent); }
+.rail-title em { padding: 2px 7px; color: var(--color-accent); background: var(--color-accent-soft); border-radius: 999px; font-family: var(--font-data); font-size: 11px; }
+.project-card { margin: 8px 0 0; padding: 13px 12px; color: var(--color-text); background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); }
+.project-card strong { color: var(--color-heading); font-weight: 600; }
+.project-card small { color: var(--color-muted); }
+.project-card:hover { background: var(--color-accent-soft); border-color: var(--color-border-strong); }
+.project-card.active { background: linear-gradient(90deg, rgba(34, 211, 238, .14), rgba(34, 211, 238, .035)); border-color: var(--color-accent-strong); box-shadow: inset 3px 0 var(--color-accent), 0 8px 20px rgba(2, 8, 20, .18); }
+.project-code { color: var(--color-accent); font-family: var(--font-data); font-size: 10px; }
+.rail-empty { color: var(--color-muted); }
+.designer-stage { min-width: 0; padding: 0; }
+.workspace-tabs { padding: 0 20px 20px; overflow: hidden; background: rgba(17, 28, 48, .9); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-panel); }
+.workspace-tabs::v-deep .el-tabs__header { margin: 0 -20px 22px; padding: 0 20px; background: rgba(15, 23, 42, .72); border-bottom: 1px solid var(--color-border); }
+.workspace-tabs::v-deep .el-tabs__item { height: 48px; color: var(--color-muted); font-size: 13px; }
+.workspace-tabs::v-deep .el-tabs__item.is-active, .workspace-tabs::v-deep .el-tabs__item:hover { color: var(--color-accent); }
+.workspace-tabs::v-deep .el-tabs__active-bar { height: 2px; background: var(--color-accent); box-shadow: 0 0 10px rgba(34, 211, 238, .5); }
+.stage-toolbar h2 { color: var(--color-heading); font-size: 19px; }
+.stage-toolbar p { color: var(--color-muted); }
+.pipeline-bus { padding: 13px 16px; color: var(--color-accent); background: rgba(34, 211, 238, .065); border: 1px solid var(--color-accent-strong); border-radius: var(--radius-sm); font-family: var(--font-data); }
+.pipeline-bus i { color: var(--color-muted); }
+.pipeline-grid { gap: 14px; }
+.config-card, .field-row, .region-card { color: var(--color-text); background: var(--color-surface-soft); border-color: var(--color-border); border-radius: var(--radius-sm); box-shadow: none; }
+.config-card { border-left: 3px solid var(--color-warning); }
+.action-card { border-left-color: var(--color-accent); }
+.field-row { padding: 11px 12px; }
+.field-grip { color: var(--color-muted); }
+.region-card { background: rgba(15, 23, 42, .76); }
+.region-card.enabled { border-color: var(--color-accent-strong); background: var(--color-accent-soft); box-shadow: inset 3px 0 var(--color-accent); }
+.region-card > i { color: var(--color-accent); }
+.region-card span { color: var(--color-muted); }
+.validation-list article { color: var(--color-text); background: rgba(239, 68, 68, .08); border-left-color: var(--color-danger); }
+.ddl-output { color: #8fffe9; background: var(--color-canvas-deep); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-family: var(--font-data); }
+.stage-empty { min-height: 460px; color: var(--color-muted); }
+.stage-empty h2 { color: var(--color-heading); }
+.sensor-mark i { border-radius: 3px; box-shadow: 0 0 18px currentColor; }
+.sensor-mark i:first-child { color: var(--color-accent); background: var(--color-accent); }
+.sensor-mark i:nth-child(2) { color: var(--color-warning); background: var(--color-warning); }
+.sensor-mark i:nth-child(3) { color: var(--color-success); background: var(--color-success); }
+.pipeline-runs { border-color: var(--color-border); }
+.pipeline-runs::v-deep th, .pipeline-runs::v-deep td { background: transparent; border-bottom-color: var(--color-border); }
+.advanced-json { border-color: var(--color-border); }
+.model-basics { gap: 14px; }
+@media (max-width: 1100px) { .lc-shell { padding: 16px; } .lc-grid { grid-template-columns: 190px minmax(0, 1fr); } .release-rail { gap: 12px; } .release-actions { gap: 4px; } }
+@media (max-width: 760px) { .lc-command-bar, .release-rail { align-items: flex-start; flex-direction: column; } .lc-command-bar { gap: 16px; } .lc-header-actions, .release-actions { width: 100%; flex-wrap: wrap; } .lc-grid { grid-template-columns: 1fr; } .project-rail { min-height: auto; } .release-node { min-width: 0; } .release-node:not(:last-of-type)::after { display: none; } .model-basics, .pipeline-grid { grid-template-columns: 1fr; } .field-row { grid-template-columns: 24px 1fr 1fr; } .field-row .field-flags { grid-column: 2 / 4; } .action-card, .config-head { grid-template-columns: 1fr; } }
 </style>

@@ -2,7 +2,7 @@
   <main class="point-overview-page">
     <header class="overview-hero">
       <div class="hero-copy">
-        <span class="hero-eyebrow">VIBRATION POINT NETWORK</span>
+        <span class="hero-eyebrow">振动测点总览</span>
         <h1>测点诊断总览</h1>
         <p>按部门和设备定位振动测点，查看最近一次诊断状态并进入详细分析。</p>
       </div>
@@ -64,7 +64,7 @@
         >
           <span class="department-rail" aria-hidden="true"><i /></span>
           <span class="department-title">
-            <small>DEPARTMENT</small>
+            <small>所属部门</small>
             <strong>{{ department.deptName || '未分配部门' }}</strong>
           </span>
           <span class="department-meta">

@@ -143,7 +143,7 @@
           <p v-if="detailDiagnosis.id">
             {{ detailDiagnosis.diagnosisResult || '--' }}，
             健康指数 {{ detailDiagnosis.healthIndex || '--' }}，
-            风险 {{ detailDiagnosis.riskLevel || '--' }}，
+            风险 {{ riskLevelText(detailDiagnosis.riskLevel) }}，
             置信度 {{ detailDiagnosis.confidence || '--' }}，
             模型版本 {{ detailDiagnosis.modelVersion || '--' }}
           </p>
@@ -173,6 +173,7 @@ import echarts from '@/utils/echarts'
 import { listAlarms, getAlarm, handleAlarm, ignoreAlarm, listAlarmRules, saveAlarmRule, getFeatureTrend } from '@/api/phm'
 import sensorWebSocket from '@/utils/sensor-websocket'
 import { industrialChartTheme } from '@/utils/industrialTheme'
+import { riskLevelText } from '@/utils/industrialLabels'
 
 export default {
   name: 'PhmAlarms',
@@ -341,6 +342,9 @@ export default {
     },
     sourceText(source) {
       return source === 'MODEL' ? '模型诊断' : '业务/阈值'
+    },
+    riskLevelText(level) {
+      return riskLevelText(level)
     }
   }
 }

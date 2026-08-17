@@ -12,5 +12,8 @@ public class SensorIngestFileQuery extends BaseEntity
     private String status;
     private String sourceType;
     private String keyword;
+    private String deviceCode;
+    private Long pointId;
+    private Long attachmentId;
     private Long scopeUserId;
 }

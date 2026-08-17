@@ -19,6 +19,8 @@
 </template>
 
 <script>
+import { qualityClass, qualityText } from '@/utils/industrialLabels'
+
 export default {
   name: 'MonitoringPointCard',
   props: {
@@ -27,10 +29,8 @@ export default {
   },
   computed: {
     statusClass() { return String(this.point.status || 'UNKNOWN').toLowerCase() },
-    qualityClass() { return String(this.point.quality || 'OFFLINE').toLowerCase() },
-    qualityText() {
-      return { GOOD: '数据正常', STALE: '数据延迟', BAD: '质量异常', OFFLINE: '数据离线' }[this.point.quality] || this.point.quality
-    },
+    qualityClass() { return qualityClass(this.point.quality) },
+    qualityText() { return qualityText(this.point.quality) },
     valueText() { return this.metric(this.point.value) },
     timeText() {
       if (!this.point.sampleTime) return '无采样'
