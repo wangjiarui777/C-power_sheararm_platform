@@ -118,6 +118,7 @@ CREATE TABLE phm_alarm_event (
   feature_code VARCHAR(64) DEFAULT NULL,
   alarm_scope VARCHAR(32) NOT NULL DEFAULT 'point' COMMENT 'device/point',
   alarm_type VARCHAR(32) NOT NULL DEFAULT 'threshold' COMMENT 'threshold/trend/diagnosis/manual',
+  alarm_source VARCHAR(16) NOT NULL DEFAULT 'BUSINESS' COMMENT 'BUSINESS/MODEL',
   alarm_level INT NOT NULL DEFAULT 1 COMMENT 'Device alarm level 1-5',
   point_alarm_level VARCHAR(32) DEFAULT NULL COMMENT 'normal/high/high_high',
   alarm_value DECIMAL(12,4) DEFAULT NULL,
@@ -136,7 +137,8 @@ CREATE TABLE phm_alarm_event (
   UNIQUE KEY uk_phm_alarm_no (alarm_no),
   KEY idx_phm_alarm_device_time (device_code, alarm_time),
   KEY idx_phm_alarm_status (status),
-  KEY idx_phm_alarm_level (alarm_level)
+  KEY idx_phm_alarm_level (alarm_level),
+  KEY idx_phm_alarm_source_status_time (alarm_source, status, alarm_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='PHM alarm event';
 
 CREATE TABLE phm_alarm_handle_record (
@@ -239,11 +241,11 @@ VALUES
 (190000000000003002, '温度通用阈值', NULL, NULL, 'temperature', 'threshold', 65.0000, 75.0000, 5, 3.0000, 5.0000, 2, 1, '温度超过阈值触发告警', '检查润滑、负载和散热条件', 'Global demo rule');
 
 INSERT INTO phm_alarm_event
-(id, alarm_no, device_id, device_code, device_name, point_id, point_name, feature_code, alarm_scope, alarm_type, alarm_level, point_alarm_level, alarm_value, diagnosis_result, status, handler, handle_time, handle_remark, related_record_id, alarm_time, remark)
+(id, alarm_no, device_id, device_code, device_name, point_id, point_name, feature_code, alarm_scope, alarm_type, alarm_source, alarm_level, point_alarm_level, alarm_value, diagnosis_result, status, handler, handle_time, handle_remark, related_record_id, alarm_time, remark)
 VALUES
-(190000000000004001, 'ALM202605080001', 190000000000000001, 'DEV-001', '一号主轴承试验台', 190000000000002001, '驱动端轴承', 'vibration', 'point', 'threshold', 2, 'high', 0.2380, '轴承外圈故障趋势', 'unhandled', NULL, NULL, NULL, NULL, '2026-05-08 09:40:00', 'Seed alarm'),
-(190000000000004002, 'ALM202605090001', 190000000000000003, 'FAN-MAIN-001', '主排风机', 190000000000002003, '风机驱动端', 'rms', 'device', 'diagnosis', 3, 'high_high', 0.9156, '联轴器不平衡风险', 'unhandled', NULL, NULL, NULL, NULL, '2026-05-09 10:10:00', 'Seed alarm'),
-(190000000000004003, 'ALM202605100001', 190000000000000002, 'DEV-002', '二号齿轮箱综合台', NULL, NULL, 'temperature', 'device', 'threshold', 1, 'high', 68.5000, '齿轮箱温度偏高', 'handled', 'admin', '2026-05-10 15:05:00', '已检查润滑和散热状态，调整巡检频率并持续观察温度趋势。', NULL, '2026-05-10 14:20:00', 'Seed handled alarm');
+(190000000000004001, 'ALM202605080001', 190000000000000001, 'DEV-001', '一号主轴承试验台', 190000000000002001, '驱动端轴承', 'vibration', 'point', 'threshold', 'BUSINESS', 2, 'high', 0.2380, '轴承外圈故障趋势', 'unhandled', NULL, NULL, NULL, NULL, '2026-05-08 09:40:00', 'Seed alarm'),
+(190000000000004002, 'ALM202605090001', 190000000000000003, 'FAN-MAIN-001', '主排风机', 190000000000002003, '风机驱动端', 'rms', 'device', 'diagnosis', 'MODEL', 3, 'high_high', 0.9156, '联轴器不平衡风险', 'unhandled', NULL, NULL, NULL, NULL, '2026-05-09 10:10:00', 'Seed alarm'),
+(190000000000004003, 'ALM202605100001', 190000000000000002, 'DEV-002', '二号齿轮箱综合台', NULL, NULL, 'temperature', 'device', 'threshold', 'BUSINESS', 1, 'high', 68.5000, '齿轮箱温度偏高', 'handled', 'admin', '2026-05-10 15:05:00', '已检查润滑和散热状态，调整巡检频率并持续观察温度趋势。', NULL, '2026-05-10 14:20:00', 'Seed handled alarm');
 
 INSERT INTO phm_alarm_handle_record
 (id, alarm_id, action_type, operator_name, ignore_reason, before_status, after_status, remark, create_time)

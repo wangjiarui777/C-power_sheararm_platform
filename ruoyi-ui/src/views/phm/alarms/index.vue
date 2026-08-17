@@ -19,6 +19,10 @@
       <el-select v-model="query.alarmLevel" placeholder="告警等级" size="small" clearable @change="loadAlarms">
         <el-option v-for="level in [1,2,3,4,5]" :key="level" :label="`${level}级告警`" :value="level" />
       </el-select>
+      <el-select v-model="query.alarmSource" placeholder="告警来源" size="small" clearable @change="loadAlarms">
+        <el-option label="业务告警" value="BUSINESS" />
+        <el-option label="模型告警" value="MODEL" />
+      </el-select>
       <el-button size="small" @click="loadAlarms">查询</el-button>
     </section>
 
@@ -27,6 +31,11 @@
       <el-table-column prop="deviceName" label="设备名称" min-width="160" />
       <el-table-column prop="pointName" label="测点" width="130" />
       <el-table-column prop="featureCode" label="特征值" width="100" />
+      <el-table-column prop="alarmSource" label="告警来源" width="105">
+        <template slot-scope="scope">
+          <el-tag :type="scope.row.alarmSource === 'MODEL' ? 'warning' : 'info'" size="mini">{{ sourceText(scope.row.alarmSource) }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="alarmLevel" label="等级" width="90">
         <template slot-scope="scope">
           <el-tag :type="alarmTag(scope.row.alarmLevel)" size="mini">{{ scope.row.alarmLevel }}级</el-tag>
@@ -88,12 +97,15 @@
         <el-descriptions :column="2" size="small" border>
           <el-descriptions-item label="告警编号">{{ detailAlarm.alarmNo || '--' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ statusText(detailAlarm.status) }}</el-descriptions-item>
+          <el-descriptions-item label="告警来源">{{ sourceText(detailAlarm.alarmSource) }}</el-descriptions-item>
           <el-descriptions-item label="设备">{{ detailAlarm.deviceName || detailAlarm.deviceCode || '--' }}</el-descriptions-item>
           <el-descriptions-item label="测点">{{ detailAlarm.pointName || '--' }}</el-descriptions-item>
           <el-descriptions-item label="特征值">{{ detailAlarm.featureCode || '--' }}</el-descriptions-item>
           <el-descriptions-item label="告警值">{{ detailAlarm.alarmValue || '--' }}</el-descriptions-item>
           <el-descriptions-item label="等级">{{ detailAlarm.alarmLevel ? detailAlarm.alarmLevel + '级' : '--' }}</el-descriptions-item>
           <el-descriptions-item label="告警时间">{{ parseTime(detailAlarm.alarmTime) }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailAlarm.alarmSource === 'MODEL'" label="风险等级">{{ detailAlarm.pointAlarmLevel || '--' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detailAlarm.alarmSource === 'MODEL'" label="关联推理记录">{{ detailAlarm.relatedRecordId || '--' }}</el-descriptions-item>
           <el-descriptions-item label="诊断/建议" :span="2">{{ detailAlarm.diagnosisResult || detailAlarm.remark || '--' }}</el-descriptions-item>
         </el-descriptions>
 
@@ -131,7 +143,9 @@
           <p v-if="detailDiagnosis.id">
             {{ detailDiagnosis.diagnosisResult || '--' }}，
             健康指数 {{ detailDiagnosis.healthIndex || '--' }}，
-            风险 {{ detailDiagnosis.riskLevel || '--' }}
+            风险 {{ detailDiagnosis.riskLevel || '--' }}，
+            置信度 {{ detailDiagnosis.confidence || '--' }}，
+            模型版本 {{ detailDiagnosis.modelVersion || '--' }}
           </p>
           <p v-else class="empty-text">暂无关联诊断记录</p>
         </div>
@@ -174,7 +188,8 @@ export default {
       query: {
         deviceCode: '',
         status: '',
-        alarmLevel: ''
+        alarmLevel: '',
+        alarmSource: ''
       },
       actionForm: {
         ignoreReason: '传感器异常',
@@ -323,6 +338,9 @@ export default {
     },
     statusText(status) {
       return { unhandled: '未处理', handled: '已处理', ignored: '已忽略', expired: '已过期' }[status] || status
+    },
+    sourceText(source) {
+      return source === 'MODEL' ? '模型诊断' : '业务/阈值'
     }
   }
 }

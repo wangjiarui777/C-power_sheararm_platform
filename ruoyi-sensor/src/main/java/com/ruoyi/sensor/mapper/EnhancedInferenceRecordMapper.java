@@ -26,6 +26,20 @@ public interface EnhancedInferenceRecordMapper extends BaseMapper<EnhancedInfere
         @Param("limit") int limit);
 
     @Select({"<script>",
+        "SELECT r.* FROM enhanced_inference_record r INNER JOIN diagnosis_iotdb_sync s ON s.record_id=r.id",
+        "WHERE 1=1",
+        "<if test='deviceCode != null and deviceCode != \"\"'> AND r.device_code=#{deviceCode}</if>",
+        "<if test='pointId != null'> AND r.point_id=#{pointId}</if>",
+        "<if test='from != null'> AND r.create_time &gt;= #{from}</if>",
+        "<if test='to != null'> AND r.create_time &lt;= #{to}</if>",
+        "<if test='unsyncedOnly'> AND s.sync_status != 'SYNCED'</if>",
+        "ORDER BY r.create_time DESC LIMIT #{limit}",
+        "</script>"})
+    List<EnhancedInferenceRecordEntity> selectManagedHistoryByPoint(@Param("deviceCode") String deviceCode,
+        @Param("pointId") Long pointId, @Param("from") Date from, @Param("to") Date to,
+        @Param("unsyncedOnly") boolean unsyncedOnly, @Param("limit") int limit);
+
+    @Select({"<script>",
         "SELECT r.* FROM enhanced_inference_record r",
         "WHERE r.point_id IN",
         "<foreach collection='pointIds' item='pointId' open='(' separator=',' close=')'>#{pointId}</foreach>",

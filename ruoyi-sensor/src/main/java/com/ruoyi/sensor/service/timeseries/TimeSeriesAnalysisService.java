@@ -4,20 +4,36 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
+import com.ruoyi.sensor.service.PhmDataScopeService;
 
 @Service
 public class TimeSeriesAnalysisService
 {
     private final TimeSeriesStore timeSeriesStore;
+    private final PhmDataScopeService dataScopeService;
 
     public TimeSeriesAnalysisService(TimeSeriesStore timeSeriesStore)
     {
+        this(timeSeriesStore, null);
+    }
+
+    @Autowired
+    public TimeSeriesAnalysisService(TimeSeriesStore timeSeriesStore, PhmDataScopeService dataScopeService)
+    {
         this.timeSeriesStore = timeSeriesStore;
+        this.dataScopeService = dataScopeService;
     }
 
     public Map<String, Object> loadDiagnosisData(String deviceCode, Integer channelId, int timeLimit, int fftLimit)
     {
+        if (dataScopeService != null && (deviceCode == null || deviceCode.isBlank()
+            || dataScopeService.getDevice(scopedDevice(deviceCode)) == null))
+        {
+            return emptyResult(deviceCode, channelId);
+        }
         VibrationFrameSnapshot latest = timeSeriesStore.loadLatestVibrationFrame(deviceCode, channelId);
         List<VibrationFrameSnapshot> recent = timeSeriesStore.loadRecentVibrationFrames(deviceCode, channelId,
                 Math.max(1, Math.min(timeLimit, 24)));
@@ -41,6 +57,33 @@ public class TimeSeriesAnalysisService
         result.put("diagnosisDetail", waveform.isEmpty() ? null : "时域与频域数据来自时序存储，未执行模型诊断");
         result.put("rms", waveform.isEmpty() ? null : rms(waveform));
         result.put("peak", waveform.isEmpty() ? null : peak(waveform));
+        return result;
+    }
+
+    private PhmDeviceScopeQuery scopedDevice(String deviceCode)
+    {
+        PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+        query.setDeviceCode(deviceCode.trim());
+        return query;
+    }
+
+    private Map<String, Object> emptyResult(String deviceCode, Integer channelId)
+    {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("deviceCode", deviceCode);
+        result.put("sampleTime", null);
+        result.put("requestedDeviceCode", deviceCode);
+        result.put("channelId", channelId == null || channelId <= 0 ? 1 : channelId);
+        result.put("waveform", new ArrayList<>());
+        result.put("frequencyAxis", new ArrayList<>());
+        result.put("spectrum", new ArrayList<>());
+        result.put("waterfall", new ArrayList<>());
+        result.put("dataStatus", "no_data");
+        result.put("confidence", null);
+        result.put("diagnosis", null);
+        result.put("diagnosisDetail", null);
+        result.put("rms", null);
+        result.put("peak", null);
         return result;
     }
 

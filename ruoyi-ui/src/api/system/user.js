@@ -133,10 +133,19 @@ export function updateAuthRole(data) {
   })
 }
 
-// 查询部门下拉树结构
-export function deptTreeSelect() {
+// 查询用户设备权限
+export function getDeviceAuth(userId) {
   return request({
-    url: '/system/user/deptTree',
+    url: '/system/user/deviceAuth/' + userId,
     method: 'get'
   })
+}
+
+// 保存用户设备权限
+export function updateDeviceAuth(data) {
+  return bootstrapCsrf().then(() => request({
+    url: '/system/user/deviceAuth',
+    method: 'put',
+    data: data
+  }))
 }

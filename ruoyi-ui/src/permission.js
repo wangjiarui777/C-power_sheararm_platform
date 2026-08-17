@@ -4,7 +4,7 @@ import Message from 'element-ui/lib/message'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
 import { isPathMatch } from '@/utils/validate'
-import { isRelogin } from '@/utils/request'
+import { getErrorMessage, isRelogin, isRuoyiRequestError } from '@/utils/request'
 
 NProgress.configure({ showSpinner: false })
 
@@ -66,13 +66,17 @@ router.beforeEach((to, from, next) => {
               return
             }
             store.dispatch('LogOut').then(() => {
-              Message.error(err)
+              if (!isRuoyiRequestError(err)) Message.error(getErrorMessage(err))
+              next({ path: '/' })
+            }).catch(() => {
               next({ path: '/' })
             })
           })
         }).catch(err => {
             store.dispatch('LogOut').then(() => {
-              Message.error(err)
+              if (!isRuoyiRequestError(err)) Message.error(getErrorMessage(err))
+              next({ path: '/' })
+            }).catch(() => {
               next({ path: '/' })
             })
           })

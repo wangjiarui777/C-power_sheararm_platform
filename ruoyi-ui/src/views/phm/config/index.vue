@@ -290,6 +290,7 @@ import {
   listSystemConfig, saveSystemConfig
 } from '@/api/phm'
 import { getCsrfHeaders } from '@/utils/csrf'
+import { getErrorMessage } from '@/utils/request'
 
 export default {
   name: 'PhmConfig',
@@ -631,8 +632,7 @@ export default {
       }
     },
     errorMessage(error) {
-      if (!error) return '未知错误'
-      return error.message || (error.response && error.response.data && error.response.data.msg) || String(error)
+      return getErrorMessage(error, '未知错误')
     }
   },
   computed: {

@@ -136,6 +136,7 @@
 
 <script>
 import { getDiagnosisOverview } from '@/api/system/bearingDiagnosis'
+import { getErrorMessage } from '@/utils/request'
 
 export default {
   name: 'MeasurementPointOverview',
@@ -218,7 +219,7 @@ export default {
       } catch (error) {
         this.departments = []
         this.summary = { departmentCount: 0, deviceCount: 0, pointCount: 0 }
-        this.errorMessage = (error && error.message) || '请确认账号具有诊断查看权限，然后重试。'
+        this.errorMessage = getErrorMessage(error, '请确认账号具有诊断查看权限，然后重试。')
       } finally {
         this.loading = false
       }

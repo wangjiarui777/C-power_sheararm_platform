@@ -1,6 +1,7 @@
 import echarts from '@/utils/echarts'
 import { getDiagnosisOptions, getInferenceHealth, inferWithAttachment, listMatFiles, uploadDiagnosisToInferenceService, fetchHistory, getServiceURL, createDiagnosisBatch, getDiagnosisBatch, retryDiagnosisBatch } from '@/api/system/bearingDiagnosis'
 import { translateDiagnosisLabel, translateAlarmLevel, translateRiskLevel, translateAll } from '@/utils/diagnosis-translations'
+import { getErrorMessage } from '@/utils/request'
 import MeasurementPointOverview from './MeasurementPointOverview.vue'
 
 export default {
@@ -1222,7 +1223,7 @@ export default {
         this.clearDiagnosis()
         this.resultState = 'failed'
         this.contextError = true
-        this.contextNotice = backendMessage || error.message || '诊断失败，请检查推理服务和模型制品。'
+        this.contextNotice = backendMessage || getErrorMessage(error, '诊断失败，请检查推理服务和模型制品。')
         console.error('诊断上下文分析失败', error)
       } finally {
         if (sequence === this.requestSequence) this.polling = false
@@ -1274,7 +1275,7 @@ export default {
         this.clearDiagnosis()
         this.resultState = 'failed'
         this.contextError = true
-        this.contextNotice = (error && error.message) || '分析失败，请检查文件或推理服务。'
+        this.contextNotice = getErrorMessage(error, '分析失败，请检查文件或推理服务。')
         if (error && error.response && error.response.status !== 500) {
           console.error('获取最新推理结果失败', error)
         }
@@ -1430,7 +1431,7 @@ export default {
         this.polling = false
         this.resultState = 'failed'
         this.contextError = true
-        this.contextNotice = (error && error.message) || '创建诊断批次失败'
+        this.contextNotice = getErrorMessage(error, '创建诊断批次失败')
         this.$message.error(this.contextNotice)
       } finally {
         this.uploading = false
@@ -1495,7 +1496,7 @@ export default {
         this.pollDiagnosisBatch()
       } catch (error) {
         this.polling = false
-        this.$message.error((error && error.message) || '重试失败')
+        this.$message.error(getErrorMessage(error, '重试失败'))
       }
     },
 

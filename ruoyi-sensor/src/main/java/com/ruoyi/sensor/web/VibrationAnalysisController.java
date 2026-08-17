@@ -6,6 +6,8 @@ import java.util.Map;
 
 import com.ruoyi.common.core.domain.AjaxResult;
 import com.ruoyi.sensor.domain.vo.VibrationAnalysisResultVo;
+import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
+import com.ruoyi.sensor.service.PhmDataScopeService;
 import com.ruoyi.sensor.service.VibrationAnalysisService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,10 +20,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 public class VibrationAnalysisController
 {
     private final VibrationAnalysisService vibrationAnalysisService;
+    private final PhmDataScopeService dataScopeService;
 
-    public VibrationAnalysisController(VibrationAnalysisService vibrationAnalysisService)
+    public VibrationAnalysisController(VibrationAnalysisService vibrationAnalysisService,
+                                       PhmDataScopeService dataScopeService)
     {
         this.vibrationAnalysisService = vibrationAnalysisService;
+        this.dataScopeService = dataScopeService;
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:diagnosis:run')")
@@ -47,6 +52,15 @@ public class VibrationAnalysisController
 
         double sampleRate = Double.parseDouble(sampleRateObj.toString());
         String deviceCode = deviceCodeObj == null ? null : deviceCodeObj.toString();
+        if (deviceCode != null && !deviceCode.isBlank())
+        {
+            PhmDeviceScopeQuery query = new PhmDeviceScopeQuery();
+            query.setDeviceCode(deviceCode.trim());
+            if (dataScopeService.getDevice(query) == null)
+            {
+                return AjaxResult.error("设备不存在或无权访问");
+            }
+        }
         Long batchId = batchIdObj == null ? null : Long.valueOf(batchIdObj.toString());
 
         VibrationAnalysisResultVo result = vibrationAnalysisService.analyze(signal, sampleRate, deviceCode, batchId);

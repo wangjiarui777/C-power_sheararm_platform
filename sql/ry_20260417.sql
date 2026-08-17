@@ -143,7 +143,6 @@ insert into sys_menu values('3', '系统工具', '0', '3', 'tool',             n
 insert into sys_menu values('100',  '用户管理', '1',   '1', 'user',       'system/user/index',        '', '', 1, 0, 'C', '0', '0', 'system:user:list',        'user',          'admin', sysdate(), '', null, '用户管理菜单');
 insert into sys_menu values('101',  '角色管理', '1',   '2', 'role',       'system/role/index',        '', '', 1, 0, 'C', '0', '0', 'system:role:list',        'peoples',       'admin', sysdate(), '', null, '角色管理菜单');
 insert into sys_menu values('102',  '菜单管理', '1',   '3', 'menu',       'system/menu/index',        '', '', 1, 0, 'C', '0', '0', 'system:menu:list',        'tree-table',    'admin', sysdate(), '', null, '菜单管理菜单');
-insert into sys_menu values('103',  '部门管理', '1',   '4', 'dept',       'system/dept/index',        '', '', 1, 0, 'C', '0', '0', 'system:dept:list',        'tree',          'admin', sysdate(), '', null, '部门管理菜单');
 insert into sys_menu values('105',  '字典管理', '1',   '6', 'dict',       'system/dict/index',        '', '', 1, 0, 'C', '0', '0', 'system:dict:list',        'dict',          'admin', sysdate(), '', null, '字典管理菜单');
 insert into sys_menu values('106',  '参数设置', '1',   '7', 'config',     'system/config/index',      '', '', 1, 0, 'C', '0', '0', 'system:config:list',      'edit',          'admin', sysdate(), '', null, '参数设置菜单');
 insert into sys_menu values('108',  '日志管理', '1',   '9', 'log',        '',                         '', '', 1, 0, 'M', '0', '0', '',                        'log',           'admin', sysdate(), '', null, '日志管理菜单');
@@ -174,11 +173,6 @@ insert into sys_menu values('1012', '菜单查询', '102', '1',  '', '', '', '',
 insert into sys_menu values('1013', '菜单新增', '102', '2',  '', '', '', '', 1, 0, 'F', '0', '0', 'system:menu:add',            '#', 'admin', sysdate(), '', null, '');
 insert into sys_menu values('1014', '菜单修改', '102', '3',  '', '', '', '', 1, 0, 'F', '0', '0', 'system:menu:edit',           '#', 'admin', sysdate(), '', null, '');
 insert into sys_menu values('1015', '菜单删除', '102', '4',  '', '', '', '', 1, 0, 'F', '0', '0', 'system:menu:remove',         '#', 'admin', sysdate(), '', null, '');
--- 部门管理按钮
-insert into sys_menu values('1016', '部门查询', '103', '1',  '', '', '', '', 1, 0, 'F', '0', '0', 'system:dept:query',          '#', 'admin', sysdate(), '', null, '');
-insert into sys_menu values('1017', '部门新增', '103', '2',  '', '', '', '', 1, 0, 'F', '0', '0', 'system:dept:add',            '#', 'admin', sysdate(), '', null, '');
-insert into sys_menu values('1018', '部门修改', '103', '3',  '', '', '', '', 1, 0, 'F', '0', '0', 'system:dept:edit',           '#', 'admin', sysdate(), '', null, '');
-insert into sys_menu values('1019', '部门删除', '103', '4',  '', '', '', '', 1, 0, 'F', '0', '0', 'system:dept:remove',         '#', 'admin', sysdate(), '', null, '');
 -- 字典管理按钮
 insert into sys_menu values('1025', '字典查询', '105', '1', '#', '', '', '', 1, 0, 'F', '0', '0', 'system:dict:query',          '#', 'admin', sysdate(), '', null, '');
 insert into sys_menu values('1026', '字典新增', '105', '2', '#', '', '', '', 1, 0, 'F', '0', '0', 'system:dict:add',            '#', 'admin', sysdate(), '', null, '');
@@ -222,9 +216,23 @@ create table sys_user_role (
 insert into sys_user_role values ('1', '1');
 insert into sys_user_role values ('2', '2');
 
+-- ----------------------------
+-- 6、用户和设备关联表  用户N-1设备
+-- ----------------------------
+drop table if exists sys_user_device;
+create table sys_user_device (
+  user_id    bigint(20) not null comment '用户ID',
+  device_id  bigint(20) not null comment 'PHM设备ID',
+  create_by  varchar(64) default null comment '授权人',
+  create_time datetime not null default current_timestamp comment '授权时间',
+  primary key(user_id, device_id),
+  key idx_sys_user_device_user(user_id),
+  key idx_sys_user_device_device(device_id)
+) engine=innodb default charset=utf8mb4 comment = '用户设备授权表';
+
 
 -- ----------------------------
--- 6、角色和菜单关联表  角色1-N菜单
+-- 7、角色和菜单关联表  角色1-N菜单
 -- ----------------------------
 drop table if exists sys_role_menu;
 create table sys_role_menu (
@@ -242,7 +250,6 @@ insert into sys_role_menu values ('2', '3');
 insert into sys_role_menu values ('2', '100');
 insert into sys_role_menu values ('2', '101');
 insert into sys_role_menu values ('2', '102');
-insert into sys_role_menu values ('2', '103');
 insert into sys_role_menu values ('2', '105');
 insert into sys_role_menu values ('2', '106');
 insert into sys_role_menu values ('2', '108');
@@ -265,10 +272,6 @@ insert into sys_role_menu values ('2', '1012');
 insert into sys_role_menu values ('2', '1013');
 insert into sys_role_menu values ('2', '1014');
 insert into sys_role_menu values ('2', '1015');
-insert into sys_role_menu values ('2', '1016');
-insert into sys_role_menu values ('2', '1017');
-insert into sys_role_menu values ('2', '1018');
-insert into sys_role_menu values ('2', '1019');
 insert into sys_role_menu values ('2', '1025');
 insert into sys_role_menu values ('2', '1026');
 insert into sys_role_menu values ('2', '1027');
@@ -291,7 +294,7 @@ insert into sys_role_menu values ('2', '1047');
 insert into sys_role_menu values ('2', '1048');
 
 -- ----------------------------
--- 7、角色和部门关联表  角色1-N部门
+-- 8、角色和部门关联表  角色1-N部门（历史兼容数据）
 -- ----------------------------
 drop table if exists sys_role_dept;
 create table sys_role_dept (
@@ -309,7 +312,7 @@ insert into sys_role_dept values ('2', '105');
 
 
 -- ----------------------------
--- 8、操作日志记录
+-- 9、操作日志记录
 -- ----------------------------
 drop table if exists sys_oper_log;
 create table sys_oper_log (

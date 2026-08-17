@@ -96,7 +96,6 @@ public class LowCodeRuntimeService
                 params.addValue(field, "LIKE".equals(operator) ? "%" + value + "%" : value);
             }
         }
-        applyDataScope(runtime, predicates, params);
         String where = predicates.isEmpty() ? "" : " WHERE " + String.join(" AND ", predicates);
         String columns = runtime.listFields.stream().map(this::quote).collect(Collectors.joining(","));
         Long total = namedJdbc.queryForObject("SELECT COUNT(*) FROM " + quote(runtime.table) + where, params, Long.class);
@@ -111,7 +110,6 @@ public class LowCodeRuntimeService
         RuntimeModel runtime = model(appCode);
         MapSqlParameterSource params = new MapSqlParameterSource("id", id);
         List<String> predicates = new ArrayList<>(List.of(quote(runtime.primaryKey) + "=:id"));
-        applyDataScope(runtime, predicates, params);
         List<Map<String, Object>> rows = namedJdbc.queryForList("SELECT " + runtime.allFields.stream().map(this::quote).collect(Collectors.joining(","))
             + " FROM " + quote(runtime.table) + " WHERE " + String.join(" AND ", predicates) + " LIMIT 1", params);
         if (rows.isEmpty()) throw new IllegalArgumentException("记录不存在或无权访问");
@@ -127,7 +125,6 @@ public class LowCodeRuntimeService
         generateValues(runtime, values, true);
         applyRuleValidation(runtime.metadata, values);
         requireAllowed(values, runtime.insertFields, runtime.generatedFields);
-        stampScope(runtime, values, true);
         String operationId = java.util.UUID.randomUUID().toString();
         executeEvent(runtime, "BEFORE_SAVE", values, operationId);
         if (values.isEmpty()) throw new IllegalArgumentException("没有允许新增的字段");
@@ -152,14 +149,12 @@ public class LowCodeRuntimeService
             && !java.util.Objects.equals(existing.get(key), value)) values.put(key, value); });
         generateValues(runtime, values, false);
         requireAllowed(values, runtime.editFields, runtime.generatedFields);
-        stampScope(runtime, values, false);
         String operationId = java.util.UUID.randomUUID().toString();
         executeEvent(runtime, "BEFORE_SAVE", values, operationId);
         if (values.isEmpty()) throw new IllegalArgumentException("没有允许修改的字段");
         MapSqlParameterSource params = new MapSqlParameterSource(values).addValue("recordId", id);
         List<String> predicates = new ArrayList<>();
         predicates.add(quote(runtime.primaryKey) + "=:recordId");
-        applyDataScope(runtime, predicates, params);
         String set = values.keySet().stream().map(field -> quote(field) + "=:" + field).collect(Collectors.joining(","));
         int affected = namedJdbc.update("UPDATE " + quote(runtime.table) + " SET " + set + " WHERE " + String.join(" AND ", predicates), params);
         if (affected != 1) throw new IllegalStateException("记录不存在、无权修改或数据已并发变化");
@@ -176,7 +171,6 @@ public class LowCodeRuntimeService
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("recordId", id);
         List<String> predicates = new ArrayList<>();
         predicates.add(quote(runtime.primaryKey) + "=:recordId");
-        applyDataScope(runtime, predicates, params);
         int affected = namedJdbc.update("DELETE FROM " + quote(runtime.table) + " WHERE " + String.join(" AND ", predicates), params);
         if (affected != 1) throw new IllegalStateException("记录不存在、无权删除或数据已并发变化");
     }
@@ -380,47 +374,6 @@ public class LowCodeRuntimeService
             WHERE app_code=? AND action_code=? AND idempotency_key=? AND status='RUNNING'
             """, status, System.currentTimeMillis() - start,
             response == null ? null : JSON.toJSONString(response), error, appCode, actionCode, key);
-    }
-
-    private void applyDataScope(RuntimeModel runtime, List<String> predicates, MapSqlParameterSource params)
-    {
-        JSONObject permission = runtime.metadata.getJSONObject("permissions");
-        if (permission == null) return;
-        String scope = permission.getString("dataScope");
-        if ("DEPT".equals(scope) || "DEPT_AND_CHILD".equals(scope))
-        {
-            String field = permission.getString("deptField");
-            if (!runtime.allFields.contains(field)) throw new IllegalStateException("部门权限字段未发布");
-            if ("DEPT_AND_CHILD".equals(scope))
-            {
-                List<Long> deptIds = systemJdbc.queryForList(
-                    "SELECT dept_id FROM sys_dept WHERE dept_id=? OR FIND_IN_SET(?, ancestors)",
-                    Long.class, SecurityUtils.getDeptId(), SecurityUtils.getDeptId());
-                predicates.add(quote(field) + " IN (:scopeDeptIds)");
-                params.addValue("scopeDeptIds", deptIds.isEmpty() ? List.of(-1L) : deptIds);
-            }
-            else
-            {
-                predicates.add(quote(field) + "=:scopeDeptId");
-                params.addValue("scopeDeptId", SecurityUtils.getDeptId());
-            }
-        }
-        else if ("SELF".equals(scope))
-        {
-            String field = permission.getString("userField");
-            if (!runtime.allFields.contains(field)) throw new IllegalStateException("本人权限字段未发布");
-            predicates.add(quote(field) + "=:scopeUserId"); params.addValue("scopeUserId", SecurityUtils.getUserId());
-        }
-    }
-
-    private void stampScope(RuntimeModel runtime, Map<String, Object> values, boolean insert)
-    {
-        if (!insert) return;
-        JSONObject permission = runtime.metadata.getJSONObject("permissions");
-        if (permission == null) return;
-        String scope = permission.getString("dataScope");
-        if ("DEPT".equals(scope) || "DEPT_AND_CHILD".equals(scope)) values.put(permission.getString("deptField"), SecurityUtils.getDeptId());
-        if ("SELF".equals(scope)) values.put(permission.getString("userField"), SecurityUtils.getUserId());
     }
 
     private void requireWrites() { if (!writeEnabled) throw new IllegalStateException("动态运行时写入已关闭"); }

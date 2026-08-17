@@ -14,6 +14,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONWriter;
 import com.ruoyi.common.utils.SecurityUtils;
 
@@ -214,14 +215,15 @@ public class LowCodeProjectService
 
     private Long insertVersion(Long projectId, int no, String state, String metadata, Long base, String username)
     {
+        String normalizedMetadata = canonical(metadata);
         GeneratedKeyHolder key = new GeneratedKeyHolder();
         jdbc.update(connection -> {
             PreparedStatement ps = connection.prepareStatement("""
                 INSERT INTO lc_version(project_id,version_no,version_state,metadata_json,checksum,base_version_id,create_by,create_time)
                 VALUES(?,?,?,?,?,?,?,NOW())
                 """, Statement.RETURN_GENERATED_KEYS);
-            ps.setLong(1, projectId); ps.setInt(2, no); ps.setString(3, state); ps.setString(4, metadata);
-            ps.setString(5, checksum(metadata)); ps.setObject(6, base); ps.setString(7, username);
+            ps.setLong(1, projectId); ps.setInt(2, no); ps.setString(3, state); ps.setString(4, normalizedMetadata);
+            ps.setString(5, checksum(normalizedMetadata)); ps.setObject(6, base); ps.setString(7, username);
             return ps;
         }, key);
         return key.getKey().longValue();
@@ -245,7 +247,12 @@ public class LowCodeProjectService
     private String canonical(Object metadata)
     {
         Object parsed = metadata instanceof String text ? JSON.parse(text) : metadata;
-        return JSON.toJSONString(parsed, JSONWriter.Feature.MapSortField);
+        JSONObject normalized = parsed instanceof JSONObject object
+            ? object
+            : JSON.parseObject(JSON.toJSONString(parsed));
+        if (normalized == null) throw new IllegalArgumentException("项目元数据必须是 JSON 对象");
+        normalized.remove("permissions");
+        return JSON.toJSONString(normalized, JSONWriter.Feature.MapSortField);
     }
 
     private String checksum(String value)

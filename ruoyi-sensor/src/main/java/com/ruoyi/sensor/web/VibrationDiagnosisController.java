@@ -1123,12 +1123,13 @@ public class VibrationDiagnosisController
     public AjaxResult inferenceHistory(@RequestParam(required = false, name = "start_time") String startTime,
         @RequestParam(required = false, name = "end_time") String endTime,
         @RequestParam(required = false, name = "device_code") String deviceCode,
+        @RequestParam(required = false, name = "point_id") Long pointId,
         @RequestParam(required = false, name = "sourceType") String sourceType)
     {
         PhmService.DateRange range = new PhmService.DateRange(
             startTime == null ? null : DateUtils.parseDate(startTime),
             endTime == null ? null : DateUtils.parseDate(endTime));
-        List<EnhancedInferenceRecordEntity> rows = phmService.listDiagnosisHistory(range, deviceCode);
+        List<EnhancedInferenceRecordEntity> rows = phmService.listDiagnosisHistory(range, deviceCode, pointId);
         java.util.Set<String> accessibleCodes = dataScopeService.listDevices(new PhmDeviceScopeQuery()).stream()
             .map(com.ruoyi.sensor.domain.entity.PhmDeviceEntity::getDeviceCode)
             .collect(java.util.stream.Collectors.toSet());

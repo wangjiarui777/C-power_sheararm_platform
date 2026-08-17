@@ -51,8 +51,8 @@ sensor:
     max-length: ${SENSOR_STREAM_MAX_LENGTH:45000000}
     poll-delay-ms: ${SENSOR_STREAM_POLL_DELAY_MS:500}
   diagnosis:
-    # 必须完成模型验收与至少14天影子运行后，才可在生产显式打开。
-    auto-alarm-enabled: ${SENSOR_DIAGNOSIS_AUTO_ALARM_ENABLED:false}
+    # 默认开启，但仍受 ACTIVE 模型、置信度和连续命中门槛约束。
+    auto-alarm-enabled: ${SENSOR_DIAGNOSIS_AUTO_ALARM_ENABLED:true}
     multi-point-enabled: ${SENSOR_DIAGNOSIS_MULTI_POINT_ENABLED:false}
     read-mode: ${SENSOR_DIAGNOSIS_READ_MODE:iotdb-primary}
     iotdb-sync:

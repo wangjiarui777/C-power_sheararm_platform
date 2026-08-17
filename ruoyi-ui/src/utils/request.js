@@ -13,6 +13,128 @@ import Cookies from 'js-cookie'
 let downloadLoadingInstance
 let passwordChangeRedirecting = false
 let csrfBootstrapPromise = null
+export const RUOYI_REQUEST_ERROR = '__ruoyiRequestError'
+export const RUOYI_REQUEST_ERROR_NOTIFIED = '__ruoyiRequestErrorNotified'
+
+const REQUEST_NOTIFICATION_DEDUPE_WINDOW = 1500
+const requestNotificationCache = new Map()
+
+export function isRuoyiRequestError(error) {
+  return Boolean(error && error[RUOYI_REQUEST_ERROR])
+}
+
+export function isRuoyiRequestErrorNotified(error) {
+  return Boolean(error && error[RUOYI_REQUEST_ERROR_NOTIFIED])
+}
+
+export function getErrorMessage(error, fallback = errorCode['default']) {
+  if (!error) return fallback
+  if (typeof error === 'string') return error
+  const responseData = error.response && error.response.data
+  if (responseData && typeof responseData === 'object' && responseData.msg) {
+    return String(responseData.msg)
+  }
+  if (error.message && error.message !== 'Network Error') return String(error.message)
+  return fallback
+}
+
+function createHandledError(message, source, response) {
+  const safeError = new Error(String(message || errorCode['default']))
+  safeError[RUOYI_REQUEST_ERROR] = true
+  if (source && source.code) safeError.code = source.code
+  if (source && source.config) safeError.config = source.config
+  if (response) safeError.response = response
+  else if (source && source.response) safeError.response = source.response
+  return safeError
+}
+
+function notifyRequestError(type, message, options = {}) {
+  const safeMessage = String(message || errorCode['default'])
+  const key = `${type}:${safeMessage}`
+  const now = Date.now()
+  const previous = requestNotificationCache.get(key)
+  if (previous && now - previous < REQUEST_NOTIFICATION_DEDUPE_WINDOW) return
+  requestNotificationCache.set(key, now)
+
+  requestNotificationCache.forEach((timestamp, cacheKey) => {
+    if (now - timestamp >= REQUEST_NOTIFICATION_DEDUPE_WINDOW) requestNotificationCache.delete(cacheKey)
+  })
+
+  if (type === 'notification') {
+    Notification.error({ title: safeMessage, ...options })
+    return
+  }
+  Message({ message: safeMessage, type, duration: options.duration || 5 * 1000 })
+}
+
+function markNotified(error) {
+  if (error) error[RUOYI_REQUEST_ERROR_NOTIFIED] = true
+  return error
+}
+
+function rejectHandledError(message, source, response, type, options) {
+  if (type) notifyRequestError(type, message, options)
+  return Promise.reject(markNotified(createHandledError(message, source, response)))
+}
+
+function responseMessage(response, fallback) {
+  const data = response && response.data
+  const code = data && data.code
+  return errorCode[code] || (data && data.msg) || fallback || errorCode['default']
+}
+
+function showLoginExpiredDialog() {
+  if (isRelogin.show) return
+  isRelogin.show = true
+  MessageBox.confirm('登录状态已过期，您可以继续留在该页面，或者重新登录', '系统提示', {
+    confirmButtonText: '重新登录',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    isRelogin.show = false
+    store.dispatch('LogOut').then(() => {
+      location.href = '/index'
+    }).catch(() => {
+      store.dispatch('FedLogOut').finally(() => {
+        location.href = '/index'
+      })
+    })
+  }).catch(() => {
+    isRelogin.show = false
+  })
+}
+
+function rejectHttpError(error) {
+  if (isRuoyiRequestError(error)) return Promise.reject(error)
+
+  const response = error && error.response
+  const status = response ? response.status : null
+  const rawMessage = error && error.message ? String(error.message) : ''
+
+  if (status === 428) {
+    redirectToPasswordChange()
+    const passwordError = createHandledError('PASSWORD_CHANGE_REQUIRED', error, response)
+    passwordError.passwordChangeRequired = true
+    return Promise.reject(markNotified(passwordError))
+  }
+  if (status === 401) {
+    showLoginExpiredDialog()
+    return Promise.reject(markNotified(createHandledError('无效的会话，或者会话已过期，请重新登录。', error, response)))
+  }
+  if (status === 403) {
+    return rejectHandledError(errorCode['403'] || '当前操作没有权限', error, response, 'warning', { duration: 5000 })
+  }
+
+  let message = rawMessage || errorCode['default']
+  if (rawMessage === 'Network Error') {
+    message = '后端接口连接异常'
+  } else if (/timeout/i.test(rawMessage)) {
+    message = '系统接口请求超时'
+  } else if (status) {
+    message = responseMessage(response, `系统接口${status}异常`)
+  }
+  return rejectHandledError(message, error, response, 'error')
+}
 
 // The login page bootstraps CSRF once, but a browser can restore a valid
 // RUOYI_SESSION after a full-page refresh without restoring Axios' in-memory
@@ -39,24 +161,44 @@ function ensureCsrfHeader(config) {
     return Promise.resolve(config)
   }
 
-  if (!csrfBootstrapPromise) {
-    csrfBootstrapPromise = service.get('/csrf', {
-      headers: { isToken: false, repeatSubmit: false }
-    }).then(data => {
-      const token = data && data.token ? data.token : Cookies.get('XSRF-TOKEN')
-      if (token) service.defaults.headers.common[headerName] = token
-      return token
-    }).finally(() => {
-      csrfBootstrapPromise = null
-    })
-  }
-  return csrfBootstrapPromise.then(token => {
+  return refreshCsrfToken().then(token => {
     if (token) {
       config.headers = config.headers || {}
       config.headers[headerName] = token
     }
     return config
   })
+}
+
+function refreshCsrfToken() {
+  if (!csrfBootstrapPromise) {
+    csrfBootstrapPromise = service.get('/csrf', {
+      headers: { isToken: false, repeatSubmit: false }
+    }).then(data => {
+      const token = data && data.token ? data.token : Cookies.get('XSRF-TOKEN')
+      if (token) service.defaults.headers.common['X-XSRF-TOKEN'] = token
+      return token
+    }).finally(() => {
+      csrfBootstrapPromise = null
+    })
+  }
+  return csrfBootstrapPromise
+}
+
+function isStateChanging(config) {
+  return ['post', 'put', 'patch', 'delete'].includes(String(config && config.method || 'get').toLowerCase())
+}
+
+function shouldRetryCsrf(error) {
+  const response = error && error.response
+  const config = error && error.config
+  if (!response || response.status !== 403 || !config || !isStateChanging(config) || config._csrfRetried) return false
+
+  // Spring's CSRF rejection is normally an empty/non-RuoYi response. A RuoYi
+  // permission response already contains an AjaxResult body and should not be
+  // retried as a token problem.
+  const data = response.data
+  return !data || typeof data !== 'object' || typeof data.code === 'undefined'
 }
 
 function redirectToPasswordChange() {
@@ -135,85 +277,56 @@ service.interceptors.request.use(config => {
     return config
   })
 }, error => {
-    console.log(error)
-    Promise.reject(error)
+    console.error('[request config]', error)
+    return rejectHttpError(error)
 })
 
 // 响应拦截器
 service.interceptors.response.use(res => {
     // 未设置状态码则默认成功状态
-    const code = res.data.code || 200
+    const code = (res.data && res.data.code) || 200
     // 获取错误信息
-    const msg = errorCode[code] || res.data.msg || errorCode['default']
+    const msg = responseMessage(res, errorCode['default'])
     // 二进制数据则直接返回
     if (res.request.responseType ===  'blob' || res.request.responseType ===  'arraybuffer') {
       return res.data
     }
     if (code === 428) {
       redirectToPasswordChange()
-      const passwordError = new Error('PASSWORD_CHANGE_REQUIRED')
+      const passwordError = createHandledError('PASSWORD_CHANGE_REQUIRED', null, res)
       passwordError.passwordChangeRequired = true
-      return Promise.reject(passwordError)
+      return Promise.reject(markNotified(passwordError))
     } else if (code === 401) {
-      if (!isRelogin.show) {
-        isRelogin.show = true
-        MessageBox.confirm('登录状态已过期，您可以继续留在该页面，或者重新登录', '系统提示', { confirmButtonText: '重新登录', cancelButtonText: '取消', type: 'warning' }).then(() => {
-          isRelogin.show = false
-          store.dispatch('LogOut').then(() => {
-            location.href = '/index'
-          }).catch(() => {
-            // 401 本身表示会话已失效，登出接口失败时也要回到登录页，
-            // 不能让这个预期分支产生未捕获 Promise，触发 webpack overlay。
-            store.dispatch('FedLogOut').finally(() => {
-              location.href = '/index'
-            })
-          })
-      }).catch(() => {
-        isRelogin.show = false
-      })
-    }
-      return Promise.reject('无效的会话，或者会话已过期，请重新登录。')
+      showLoginExpiredDialog()
+      return Promise.reject(markNotified(createHandledError('无效的会话，或者会话已过期，请重新登录。', null, res)))
     } else if (code === 500) {
-      return Promise.reject(new Error(msg))
+      return rejectHandledError(msg, null, res, 'error')
     } else if (code === 601) {
-      Message({ message: msg, type: 'warning' })
-      return Promise.reject('error')
+      return rejectHandledError(msg, null, res, 'warning')
     } else if (code !== 200) {
-      Notification.error({ title: msg })
-      return Promise.reject('error')
+      return rejectHandledError(msg, null, res, 'notification')
     } else {
       return res.data
     }
   },
   error => {
-    console.log('err' + error)
-    let { message } = error
-    if (message == "Network Error") {
-      message = "后端接口连接异常"
-    } else if (message.includes("timeout")) {
-      message = "系统接口请求超时"
-    } else if (message.includes("Request failed with status code")) {
-      const statusMatch = message.match(/status code (\d{3})/)
-      const statusCode = statusMatch ? statusMatch[1] : message.slice(-3)
-      if (statusCode === '428') {
-        redirectToPasswordChange()
-        const passwordError = new Error('PASSWORD_CHANGE_REQUIRED')
-        passwordError.passwordChangeRequired = true
-        return Promise.reject(passwordError)
-      }
-      if (statusCode === '403') {
-        message = '当前账号没有执行此低代码操作的权限，请联系管理员分配对应功能权限'
-        Message({ message: message, type: 'warning', duration: 5000 })
-        return Promise.reject(error)
-      }
-      if (statusCode !== '500') {
-        message = "系统接口" + statusCode + "异常"
-      } else {
-        return Promise.reject(error)
-      }
+    console.error('[request]', error)
+    const status = error && error.response ? error.response.status : null
+    if (shouldRetryCsrf(error)) {
+      const retryConfig = error.config
+      retryConfig._csrfRetried = true
+      return refreshCsrfToken().then(token => {
+        if (!token) return rejectHttpError(error)
+        retryConfig.headers = retryConfig.headers || {}
+        retryConfig.headers['X-XSRF-TOKEN'] = token
+        retryConfig.headers.repeatSubmit = false
+        return service(retryConfig)
+      }).catch(retryError => {
+        if (isRuoyiRequestError(retryError)) return Promise.reject(retryError)
+        return rejectHttpError(retryError && retryError.config && retryError.config._csrfRetried ? retryError : error)
+      })
     }
-    Message({ message: message, type: 'error', duration: 5 * 1000 })
-    return Promise.reject(error)
+    return rejectHttpError(error)
   }
 )
 

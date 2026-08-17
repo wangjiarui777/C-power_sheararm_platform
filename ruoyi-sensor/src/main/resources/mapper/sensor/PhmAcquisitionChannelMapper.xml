@@ -12,7 +12,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         WHERE 1 = 1
         <if test="deviceId != null">AND c.device_id = #{deviceId}</if>
         <if test="pointId != null">AND c.point_id = #{pointId}</if>
-        ${params.dataScope}
+        <if test="scopeUserId != null">
+            AND EXISTS (
+                SELECT 1 FROM sys_user_device ud
+                WHERE ud.user_id = #{scopeUserId} AND ud.device_id = c.device_id
+            )
+        </if>
         ORDER BY c.device_id ASC, c.channel_no ASC
     </select>
 </mapper>

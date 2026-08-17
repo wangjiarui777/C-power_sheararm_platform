@@ -28,6 +28,11 @@
         <el-form-item label="设备编码">
           <el-input v-model.trim="deviceCode" clearable placeholder="可选" style="width: 190px" />
         </el-form-item>
+        <el-form-item label="测点">
+          <el-select v-model="pointId" clearable filterable :loading="pointsLoading" placeholder="全部测点" style="width: 240px">
+            <el-option v-for="item in pointOptions" :key="item.id" :label="pointLabel(item)" :value="item.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" icon="el-icon-search" :loading="loading" @click="loadHistory">查询</el-button>
           <el-button icon="el-icon-refresh" @click="resetFilters">重置</el-button>
@@ -39,6 +44,9 @@
       <el-table v-loading="loading" :data="rows" border stripe empty-text="当前时间范围内暂无诊断记录" class="history-table">
         <el-table-column prop="deviceCode" label="设备编码" min-width="140" show-overflow-tooltip>
           <template slot-scope="scope">{{ valueOf(scope.row, 'deviceCode', 'device_code') || '--' }}</template>
+        </el-table-column>
+        <el-table-column label="测点" min-width="180" show-overflow-tooltip>
+          <template slot-scope="scope">{{ pointLabelById(valueOf(scope.row, 'pointId', 'point_id')) }}</template>
         </el-table-column>
         <el-table-column label="诊断结果" min-width="140" show-overflow-tooltip>
           <template slot-scope="scope">{{ valueOf(scope.row, 'diagnosisResult', 'diagnosis_result') || '--' }}</template>
@@ -64,7 +72,7 @@
 </template>
 
 <script>
-import { fetchHistory } from '@/api/system/bearingDiagnosis'
+import { fetchHistory, getDiagnosisOptions } from '@/api/system/bearingDiagnosis'
 
 function defaultDateRange() {
   const end = new Date()
@@ -82,6 +90,9 @@ export default {
     return {
       dateRange: defaultDateRange(),
       deviceCode: '',
+      pointId: null,
+      pointOptions: [],
+      pointsLoading: false,
       rows: [],
       loading: false,
       exporting: false,
@@ -89,9 +100,32 @@ export default {
     }
   },
   created() {
+    this.loadPointOptions()
     this.loadHistory()
   },
   methods: {
+    async loadPointOptions() {
+      this.pointsLoading = true
+      try {
+        const response = await getDiagnosisOptions()
+        this.pointOptions = response.data && response.data.points ? response.data.points : []
+      } catch (error) {
+        this.pointOptions = []
+      } finally {
+        this.pointsLoading = false
+      }
+    },
+    pointLabel(item) {
+      if (!item) return '--'
+      const name = item.pointName || item.pointCode || `测点 ${item.id}`
+      const code = item.pointCode && item.pointCode !== name ? ` · ${item.pointCode}` : ''
+      return `${name}${code}`
+    },
+    pointLabelById(pointId) {
+      if (pointId === null || pointId === undefined || pointId === '') return '--'
+      const point = this.pointOptions.find(item => String(item.id) === String(pointId))
+      return point ? this.pointLabel(point) : `测点 ${pointId}`
+    },
     valueOf(row, ...keys) {
       for (const key of keys) {
         if (row && row[key] !== undefined && row[key] !== null) return row[key]
@@ -115,7 +149,8 @@ export default {
         const response = await fetchHistory({
           start_time: this.dateRange[0],
           end_time: this.dateRange[1],
-          device_code: this.deviceCode || undefined
+          device_code: this.deviceCode || undefined,
+          point_id: this.pointId || undefined
         })
         this.rows = response.data || []
       } catch (error) {
@@ -128,6 +163,7 @@ export default {
     resetFilters() {
       this.dateRange = defaultDateRange()
       this.deviceCode = ''
+      this.pointId = null
       this.loadHistory()
     },
     csvValue(row, ...keys) {

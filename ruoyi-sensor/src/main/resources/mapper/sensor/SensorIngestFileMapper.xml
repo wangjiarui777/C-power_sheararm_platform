@@ -18,7 +18,17 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
               OR f.device_code LIKE CONCAT('%', #{keyword}, '%')
               OR f.point_code LIKE CONCAT('%', #{keyword}, '%'))
         </if>
-        AND (f.device_id IS NULL OR (1 = 1 ${params.dataScope}))
+        <choose>
+            <when test="scopeUserId == null">
+                AND 1 = 1
+            </when>
+            <otherwise>
+                AND (f.device_id IS NULL OR EXISTS (
+                    SELECT 1 FROM sys_user_device ud
+                    WHERE ud.user_id = #{scopeUserId} AND ud.device_id = f.device_id
+                ))
+            </otherwise>
+        </choose>
         ORDER BY f.id DESC
     </select>
 

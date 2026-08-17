@@ -4,7 +4,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import com.ruoyi.common.annotation.DataScope;
+import com.ruoyi.common.utils.SecurityUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.sensor.domain.entity.PhmAcquisitionChannelEntity;
@@ -34,12 +34,13 @@ public class PhmAcquisitionChannelService
         this.dataScope = dataScope;
     }
 
-    @DataScope(deptAlias = "d")
     public List<PhmAcquisitionChannelEntity> list(Long deviceId, Long pointId)
     {
         PhmAcquisitionChannelQuery query = new PhmAcquisitionChannelQuery();
         query.setDeviceId(deviceId);
         query.setPointId(pointId);
+        Long userId = SecurityUtils.getUserId();
+        query.setScopeUserId(SecurityUtils.isAdmin() ? null : userId == null ? -1L : userId);
         return channelMapper.selectScopedList(query);
     }
 

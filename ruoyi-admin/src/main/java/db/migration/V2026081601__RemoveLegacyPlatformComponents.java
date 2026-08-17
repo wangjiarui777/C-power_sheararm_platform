@@ -3,6 +3,9 @@ package db.migration;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
 
@@ -35,13 +38,10 @@ public class V2026081601__RemoveLegacyPlatformComponents extends BaseJavaMigrati
             boolean added;
             do
             {
-                try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT IGNORE INTO tmp_legacy_menu_ids(menu_id)
-                    SELECT menu_id FROM sys_menu WHERE parent_id IN (SELECT menu_id FROM tmp_legacy_menu_ids)
-                    """))
-                {
-                    added = statement.executeUpdate() > 0;
-                }
+                // MySQL does not allow reopening a temporary table when it is both
+                // the INSERT target and the source of a subquery. Read the current
+                // parent ids first, then query and insert descendants separately.
+                added = addDescendantMenuIds(connection);
             }
             while (added);
 
@@ -69,6 +69,53 @@ public class V2026081601__RemoveLegacyPlatformComponents extends BaseJavaMigrati
             statement.execute("DROP TABLE IF EXISTS sys_notice");
             dropQuartzTables(statement);
         }
+    }
+
+    private boolean addDescendantMenuIds(Connection connection) throws Exception
+    {
+        List<Long> parentIds = new ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             var result = statement.executeQuery("SELECT menu_id FROM tmp_legacy_menu_ids"))
+        {
+            while (result.next())
+            {
+                parentIds.add(result.getLong(1));
+            }
+        }
+        if (parentIds.isEmpty())
+        {
+            return false;
+        }
+
+        String placeholders = String.join(",", Collections.nCopies(parentIds.size(), "?"));
+        List<Long> childIds = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(
+            "SELECT menu_id FROM sys_menu WHERE parent_id IN (" + placeholders + ")"))
+        {
+            for (int i = 0; i < parentIds.size(); i++)
+            {
+                statement.setLong(i + 1, parentIds.get(i));
+            }
+            try (var result = statement.executeQuery())
+            {
+                while (result.next())
+                {
+                    childIds.add(result.getLong(1));
+                }
+            }
+        }
+
+        boolean added = false;
+        try (PreparedStatement statement = connection.prepareStatement(
+            "INSERT IGNORE INTO tmp_legacy_menu_ids(menu_id) VALUES (?)"))
+        {
+            for (Long childId : childIds)
+            {
+                statement.setLong(1, childId);
+                added |= statement.executeUpdate() > 0;
+            }
+        }
+        return added;
     }
 
     private boolean tableExists(Connection connection, String tableName) throws Exception

@@ -144,10 +144,16 @@ export const dynamicRoutes = [
     permissions: ['system:user:edit'],
     children: [
       {
-        path: 'role/:userId(\d+)',
+        path: 'role/:userId(\\d+)',
         component: () => import('@/views/system/user/authRole'),
         name: 'AuthRole',
         meta: { title: '分配角色', activeMenu: '/system/user' }
+      },
+      {
+        path: 'device/:userId(\\d+)',
+        component: () => import('@/views/system/user/deviceAuth'),
+        name: 'DeviceAuth',
+        meta: { title: '设备权限', activeMenu: '/system/user' }
       }
     ]
   },

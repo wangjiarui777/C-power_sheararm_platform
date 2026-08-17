@@ -28,6 +28,8 @@ import com.ruoyi.sensor.domain.entity.PhmSystemConfigEntity;
 import com.ruoyi.sensor.domain.vo.PhmHistoryReportVo;
 import com.ruoyi.sensor.domain.vo.PhmRealtimeReportVo;
 import com.ruoyi.sensor.service.PhmService;
+import com.ruoyi.sensor.service.IPhmAlarmService;
+import com.ruoyi.sensor.domain.constant.PhmAlarmSource;
 import com.ruoyi.sensor.service.PhmAttachmentStorageService;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.enums.BusinessType;
@@ -44,6 +46,9 @@ public class PhmController extends BaseController
 {
     @Autowired
     private PhmService phmService;
+
+    @Autowired
+    private IPhmAlarmService phmAlarmService;
 
     @Autowired
     private PhmAttachmentStorageService attachmentStorageService;
@@ -170,30 +175,37 @@ public class PhmController extends BaseController
     @GetMapping("/alarms")
     public AjaxResult alarms(@RequestParam(required = false) String deviceCode,
                              @RequestParam(required = false) String status,
-                             @RequestParam(required = false) Integer alarmLevel)
+                             @RequestParam(required = false) Integer alarmLevel,
+                             @RequestParam(required = false) String alarmSource)
     {
-        return success(phmService.listAlarms(deviceCode, status, alarmLevel));
+        if (org.springframework.util.StringUtils.hasText(alarmSource) && !PhmAlarmSource.isValid(alarmSource))
+        {
+            return error("告警来源仅支持 BUSINESS 或 MODEL");
+        }
+        return success(phmAlarmService.listAlarms(deviceCode, status, alarmLevel, alarmSource));
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:query')")
     @GetMapping("/alarms/{alarmId}")
     public AjaxResult alarm(@PathVariable Long alarmId)
     {
-        return success(phmService.getAlarm(alarmId));
+        return success(phmAlarmService.getAlarm(alarmId));
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:handle')")
+    @Log(title = "PHM告警处理", businessType = BusinessType.UPDATE)
     @PostMapping("/alarms/{alarmId}/handle")
     public AjaxResult handleAlarm(@PathVariable Long alarmId, @RequestBody(required = false) PhmAlarmActionRequest request)
     {
-        return success(phmService.handleAlarm(alarmId, getUsernameSafe(), request));
+        return success(phmAlarmService.handleAlarm(alarmId, getUsernameSafe(), request));
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:handle')")
+    @Log(title = "PHM告警忽略", businessType = BusinessType.UPDATE)
     @PostMapping("/alarms/{alarmId}/ignore")
     public AjaxResult ignoreAlarm(@PathVariable Long alarmId, @RequestBody(required = false) PhmAlarmActionRequest request)
     {
-        return success(phmService.ignoreAlarm(alarmId, getUsernameSafe(), request));
+        return success(phmAlarmService.ignoreAlarm(alarmId, getUsernameSafe(), request));
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:handle')")
@@ -201,7 +213,7 @@ public class PhmController extends BaseController
     @PostMapping("/alarms/{alarmId}/acknowledge")
     public AjaxResult acknowledgeAlarm(@PathVariable Long alarmId, @RequestBody(required = false) PhmAlarmActionRequest request)
     {
-        return success(phmService.acknowledgeAlarm(alarmId, getUsernameSafe(), request));
+        return success(phmAlarmService.acknowledgeAlarm(alarmId, getUsernameSafe(), request));
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:handle')")
@@ -209,7 +221,7 @@ public class PhmController extends BaseController
     @PostMapping("/alarms/{alarmId}/assign")
     public AjaxResult assignAlarm(@PathVariable Long alarmId, @RequestBody PhmAlarmActionRequest request)
     {
-        return success(phmService.assignAlarm(alarmId, getUsernameSafe(), request));
+        return success(phmAlarmService.assignAlarm(alarmId, getUsernameSafe(), request));
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:handle')")
@@ -217,14 +229,14 @@ public class PhmController extends BaseController
     @PostMapping("/alarms/{alarmId}/close")
     public AjaxResult closeAlarm(@PathVariable Long alarmId, @RequestBody(required = false) PhmAlarmActionRequest request)
     {
-        return success(phmService.closeAlarm(alarmId, getUsernameSafe(), request));
+        return success(phmAlarmService.closeAlarm(alarmId, getUsernameSafe(), request));
     }
 
     @PreAuthorize("@ss.hasPermi('phm:alarm:query')")
     @GetMapping("/alarms/{alarmId}/timeline")
     public AjaxResult alarmTimeline(@PathVariable Long alarmId)
     {
-        return success(phmService.getAlarmTimeline(alarmId));
+        return success(phmAlarmService.getAlarmTimeline(alarmId));
     }
 
     @PreAuthorize("@ss.hasPermi('phm:config:list')")

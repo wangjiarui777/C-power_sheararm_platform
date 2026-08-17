@@ -11,7 +11,7 @@ import store from './store'
 import router from './router'
 import directive from './directive' // directive
 import plugins from './plugins' // plugins
-import { download } from '@/utils/request'
+import { download, isRuoyiRequestError } from '@/utils/request'
 
 import './assets/icons' // icon
 import './permission' // permission control
@@ -65,7 +65,9 @@ Vue.config.productionTip = false
 // 一个并发请求返回该状态；它不是应用崩溃，不应被 webpack overlay 显示。
 window.addEventListener('unhandledrejection', event => {
   const reason = event && event.reason
-  if (reason && (reason.passwordChangeRequired || reason.message === 'PASSWORD_CHANGE_REQUIRED')) {
+  if (reason && (isRuoyiRequestError(reason)
+    || reason.passwordChangeRequired
+    || reason.message === 'PASSWORD_CHANGE_REQUIRED')) {
     event.preventDefault()
   }
 })

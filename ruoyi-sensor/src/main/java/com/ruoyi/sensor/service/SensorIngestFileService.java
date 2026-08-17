@@ -3,7 +3,7 @@ package com.ruoyi.sensor.service;
 import java.util.List;
 import java.util.Objects;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.ruoyi.common.annotation.DataScope;
+import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.sensor.domain.dto.SensorIngestAssociateRequest;
 import com.ruoyi.sensor.domain.entity.PhmAcquisitionChannelEntity;
@@ -38,10 +38,12 @@ public class SensorIngestFileService
     }
 
     /** Unmapped files are visible to every list-permission user; mapped rows remain data-scoped. */
-    @DataScope(deptAlias = "d")
     public List<SensorIngestFileEntity> list(SensorIngestFileQuery query)
     {
-        return mapper.selectScopedList(query == null ? new SensorIngestFileQuery() : query);
+        SensorIngestFileQuery actual = query == null ? new SensorIngestFileQuery() : query;
+        Long userId = SecurityUtils.getUserId();
+        actual.setScopeUserId(SecurityUtils.isAdmin() ? null : userId == null ? -1L : userId);
+        return mapper.selectScopedList(actual);
     }
 
     @Transactional

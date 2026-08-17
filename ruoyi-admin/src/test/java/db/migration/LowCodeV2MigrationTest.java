@@ -10,6 +10,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers(disabledWithoutDocker = true)
@@ -33,13 +34,17 @@ class LowCodeV2MigrationTest
         Flyway flyway = Flyway.configure().locations(new String[0])
             .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
             .baselineOnMigrate(true).baselineVersion("2026081300")
-            .javaMigrations(new V2026081301__LowCodeV2Platform()).load();
-        assertEquals(1, flyway.migrate().migrationsExecuted);
+            .javaMigrations(new V2026081301__LowCodeV2Platform(), new V2026081703__RemoveLowCodeProjectPermissions()).load();
+        assertEquals(2, flyway.migrate().migrationsExecuted);
         assertEquals(0, flyway.migrate().migrationsExecuted);
         try (Connection connection = connection(); Statement statement = connection.createStatement())
         {
             assertTrue(exists(statement, "SELECT response_json FROM lc_action_log LIMIT 1"));
             try (ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM lc_template")) { result.next(); assertEquals(2, result.getInt(1)); }
+            try (ResultSet result = statement.executeQuery("SELECT metadata_json FROM lc_template"))
+            {
+                while (result.next()) assertFalse(result.getString(1).contains("permissions"));
+            }
             try (ResultSet result = statement.executeQuery("SELECT table_name FROM gen_table WHERE table_id=7")) { result.next(); assertEquals("legacy_asset", result.getString(1)); }
             try (ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM sys_menu WHERE perms='tool:lowcode:publish'")) { result.next(); assertEquals(1, result.getInt(1)); }
         }

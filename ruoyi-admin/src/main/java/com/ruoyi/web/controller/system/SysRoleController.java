@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
-import com.ruoyi.common.core.domain.entity.SysDept;
 import com.ruoyi.common.core.domain.entity.SysRole;
 import com.ruoyi.common.core.domain.entity.SysUser;
 import com.ruoyi.common.core.page.TableDataInfo;
@@ -25,7 +24,6 @@ import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.framework.web.service.SysPermissionService;
 import com.ruoyi.framework.web.service.TokenService;
 import com.ruoyi.system.domain.SysUserRole;
-import com.ruoyi.system.service.ISysDeptService;
 import com.ruoyi.system.service.ISysRoleService;
 import com.ruoyi.system.service.ISysUserService;
 
@@ -49,9 +47,6 @@ public class SysRoleController extends BaseController
 
     @Autowired
     private ISysUserService userService;
-
-    @Autowired
-    private ISysDeptService deptService;
 
     @PreAuthorize("@ss.hasPermi('system:role:list')")
     @GetMapping("/list")
@@ -79,7 +74,6 @@ public class SysRoleController extends BaseController
     @GetMapping(value = "/{roleId}")
     public AjaxResult getInfo(@PathVariable Long roleId)
     {
-        roleService.checkRoleDataScope(roleId);
         return success(roleService.selectRoleById(roleId));
     }
 
@@ -113,7 +107,6 @@ public class SysRoleController extends BaseController
     public AjaxResult edit(@Validated @RequestBody SysRole role)
     {
         roleService.checkRoleAllowed(role);
-        roleService.checkRoleDataScope(role.getRoleId());
         if (!roleService.checkRoleNameUnique(role))
         {
             return error("淇敼瑙掕壊'" + role.getRoleName() + "'澶辫触锛岃鑹插悕绉板凡瀛樺湪");
@@ -133,21 +126,6 @@ public class SysRoleController extends BaseController
     }
 
     /**
-     * 淇敼淇濆瓨鏁版嵁鏉冮檺
-     */
-    @PreAuthorize("@ss.hasPermi('system:role:edit')")
-    @Log(title = "瑙掕壊绠＄悊", businessType = BusinessType.UPDATE)
-    @PutMapping("/dataScope")
-    public AjaxResult dataScope(@RequestBody SysRole role)
-    {
-        roleService.checkRoleAllowed(role);
-        roleService.checkRoleDataScope(role.getRoleId());
-        int rows = roleService.authDataScope(role);
-        if (rows > 0) tokenService.revokeRoleSessions(role.getRoleId());
-        return toAjax(rows);
-    }
-
-    /**
      * 鐘舵€佷慨鏀?
      */
     @PreAuthorize("@ss.hasPermi('system:role:edit')")
@@ -156,7 +134,6 @@ public class SysRoleController extends BaseController
     public AjaxResult changeStatus(@RequestBody SysRole role)
     {
         roleService.checkRoleAllowed(role);
-        roleService.checkRoleDataScope(role.getRoleId());
         role.setUpdateBy(getUsername());
         int rows = roleService.updateRoleStatus(role);
         if (rows > 0) tokenService.revokeRoleSessions(role.getRoleId());
@@ -242,23 +219,10 @@ public class SysRoleController extends BaseController
     @PutMapping("/authUser/selectAll")
     public AjaxResult selectAuthUserAll(Long roleId, Long[] userIds)
     {
-        roleService.checkRoleDataScope(roleId);
         int rows = roleService.insertAuthUsers(roleId, userIds);
         if (rows > 0) tokenService.revokeUserSessions(java.util.Arrays.asList(userIds));
         return toAjax(rows);
     }
 
-    /**
-     * 鑾峰彇瀵瑰簲瑙掕壊閮ㄩ棬鏍戝垪琛?
-     */
-    @PreAuthorize("@ss.hasPermi('system:role:query')")
-    @GetMapping(value = "/deptTree/{roleId}")
-    public AjaxResult deptTree(@PathVariable("roleId") Long roleId)
-    {
-        AjaxResult ajax = AjaxResult.success();
-        ajax.put("checkedKeys", deptService.selectDeptListByRoleId(roleId));
-        ajax.put("depts", deptService.selectDeptTreeList(new SysDept()));
-        return ajax;
-    }
 }
 

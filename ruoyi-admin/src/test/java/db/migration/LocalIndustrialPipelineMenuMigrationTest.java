@@ -60,10 +60,9 @@ class LocalIndustrialPipelineMenuMigrationTest
                   create_time DATETIME, update_by VARCHAR(64), update_time DATETIME, remark VARCHAR(500))
                 """);
             statement.execute("CREATE TABLE sys_role_menu(role_id BIGINT,menu_id BIGINT,UNIQUE KEY(role_id,menu_id))");
-            statement.execute("INSERT INTO sys_menu(menu_id,menu_name,parent_id,order_num,path,menu_type) VALUES(10,'系统工具',0,1,'tool','M')");
+            statement.execute("INSERT INTO sys_menu(menu_id,menu_name,parent_id,order_num,path,menu_type) VALUES(10,'系统工具',0,1,'tool','M'),(12,'监测与数据',0,4,'monitoring-center','M'),(13,'PHM中心',0,6,'phm','M')");
             statement.execute("INSERT INTO sys_menu(menu_id,menu_name,parent_id,order_num,path,component,route_name,menu_type,perms) VALUES(11,'低代码',10,1,'lowcode','tool/lowcode/index','LowCode','C','tool:lowcode:list')");
-            statement.execute("INSERT INTO sys_menu(menu_id,menu_name,parent_id,order_num,path,menu_type) VALUES(20,'数据接入旧项',0,8,'sensor-access','M'),(21,'数据接入重复项',0,9,'sensor-access','M')");
-            statement.execute("INSERT INTO sys_role_menu VALUES(2,11),(2,21)");
+            statement.execute("INSERT INTO sys_role_menu VALUES(2,11)");
         }
 
         Flyway flyway = Flyway.configure().dataSource(DATABASE_URL, USER, PASSWORD)
@@ -74,13 +73,13 @@ class LocalIndustrialPipelineMenuMigrationTest
 
         try (Connection connection = connection(); Statement statement = connection.createStatement())
         {
-            assertEquals(1, count(statement, "SELECT COUNT(*) FROM sys_menu WHERE parent_id=0 AND path='sensor-access' AND menu_type='M'"));
-            assertEquals(1, count(statement, "SELECT COUNT(*) FROM sys_menu WHERE component='sensor/access/points' AND perms='sensor:channel:list'"));
-            assertEquals(1, count(statement, "SELECT COUNT(*) FROM sys_menu WHERE component='sensor/ingest/files' AND perms='sensor:ingest:list'"));
+            assertEquals(0, count(statement, "SELECT COUNT(*) FROM sys_menu WHERE parent_id=0 AND path='sensor-access' AND menu_type='M'"));
+            assertEquals(1, count(statement, "SELECT COUNT(*) FROM sys_menu child JOIN sys_menu parent ON parent.menu_id=child.parent_id WHERE parent.path='phm' AND child.path='points' AND child.component='sensor/access/points' AND child.perms='sensor:channel:list'"));
+            assertEquals(1, count(statement, "SELECT COUNT(*) FROM sys_menu child JOIN sys_menu parent ON parent.menu_id=child.parent_id WHERE parent.path='monitoring-center' AND child.path='files' AND child.component='sensor/ingest/files' AND child.perms='sensor:ingest:list'"));
             assertEquals(1, count(statement, "SELECT COUNT(*) FROM sys_menu WHERE perms='tool:lowcode:test'"));
             assertEquals(1, count(statement, "SELECT COUNT(*) FROM sys_menu WHERE perms='tool:lowcode:activate'"));
             assertEquals(0, count(statement, "SELECT COUNT(*) FROM sys_menu c LEFT JOIN sys_menu p ON p.menu_id=c.parent_id WHERE c.parent_id<>0 AND p.menu_id IS NULL"));
-            assertEquals(2, count(statement, "SELECT COUNT(*) FROM sys_role_menu WHERE role_id=2"));
+            assertEquals(1, count(statement, "SELECT COUNT(*) FROM sys_role_menu WHERE role_id=2"));
             assertEquals(0, count(statement, "SELECT COUNT(*) FROM sys_menu WHERE path='sensor-analysis'"));
         }
     }

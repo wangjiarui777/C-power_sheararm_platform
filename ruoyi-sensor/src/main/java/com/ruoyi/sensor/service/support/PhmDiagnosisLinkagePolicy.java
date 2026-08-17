@@ -9,24 +9,36 @@ public final class PhmDiagnosisLinkagePolicy
     public static boolean isAbnormalDiagnosis(String diagnosisResult, String riskLevel, String alarmLevel)
     {
         String result = diagnosisResult == null ? "" : diagnosisResult;
-        String risk = riskLevel == null ? "" : riskLevel;
-        String level = alarmLevel == null ? "" : alarmLevel;
+        String risk = normalizeRiskLevel(riskLevel);
+        String level = alarmLevel == null ? "" : alarmLevel.trim().toLowerCase();
         return result.contains("故障") || result.contains("异常") || result.contains("失败")
                 || "高".equals(risk) || "中".equals(risk)
-                || level.startsWith("level") || "warning".equalsIgnoreCase(level) || "danger".equalsIgnoreCase(level);
+                || level.startsWith("level") || "warning".equals(level) || "danger".equals(level);
     }
 
     public static int diagnosisAlarmLevel(String riskLevel, String alarmLevel, int healthIndex)
     {
-        if ("高".equals(riskLevel) || "danger".equalsIgnoreCase(alarmLevel) || healthIndex < 40)
+        String risk = normalizeRiskLevel(riskLevel);
+        String level = alarmLevel == null ? "" : alarmLevel.trim().toLowerCase();
+        if ("高".equals(risk) || "danger".equals(level) || healthIndex < 40)
         {
             return 4;
         }
-        if ("中".equals(riskLevel) || "warning".equalsIgnoreCase(alarmLevel) || healthIndex < 70)
+        if ("中".equals(risk) || "warning".equals(level) || healthIndex < 70)
         {
             return 2;
         }
         return 1;
+    }
+
+    /** Normalizes the model's Chinese and English risk labels to one format. */
+    public static String normalizeRiskLevel(String riskLevel)
+    {
+        String value = riskLevel == null ? "" : riskLevel.trim().toLowerCase();
+        if ("高".equals(value) || "high".equals(value)) return "高";
+        if ("中".equals(value) || "medium".equals(value)) return "中";
+        if ("低".equals(value) || "low".equals(value)) return "低";
+        return riskLevel == null ? "" : riskLevel.trim();
     }
 
     public static int normalizeHealthIndex(Integer healthIndex, int fallback)

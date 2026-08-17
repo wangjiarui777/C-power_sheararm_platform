@@ -68,4 +68,11 @@ public class NoopTimeSeriesStore implements TimeSeriesStore
     {
         throw new TimeSeriesStoreUnavailableException("Time-series storage is disabled");
     }
+
+    @Override
+    public List<DiagnosisResultSnapshot> queryDiagnosisHistory(String deviceCode, Long pointId, Date from, Date to,
+                                                               int limit)
+    {
+        throw new TimeSeriesStoreUnavailableException("Time-series storage is disabled");
+    }
 }

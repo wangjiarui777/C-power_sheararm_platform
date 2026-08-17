@@ -19,7 +19,6 @@ import org.springframework.web.multipart.MultipartFile;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
 import com.ruoyi.common.core.domain.AjaxResult;
-import com.ruoyi.common.core.domain.entity.SysDept;
 import com.ruoyi.common.core.domain.entity.SysRole;
 import com.ruoyi.common.core.domain.entity.SysUser;
 import com.ruoyi.common.core.page.TableDataInfo;
@@ -27,8 +26,11 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.common.utils.poi.ExcelUtil;
-import com.ruoyi.system.service.ISysDeptService;
+import com.ruoyi.sensor.domain.entity.PhmDeviceEntity;
+import com.ruoyi.sensor.service.PhmService;
+import com.ruoyi.system.domain.SysUserDeviceAuth;
 import com.ruoyi.system.service.ISysRoleService;
+import com.ruoyi.system.service.ISysUserDeviceService;
 import com.ruoyi.system.service.ISysUserService;
 import com.ruoyi.system.security.PasswordPolicyService;
 import com.ruoyi.framework.web.service.TokenService;
@@ -49,7 +51,10 @@ public class SysUserController extends BaseController
     private ISysRoleService roleService;
 
     @Autowired
-    private ISysDeptService deptService;
+    private ISysUserDeviceService userDeviceService;
+
+    @Autowired
+    private PhmService phmService;
 
     @Autowired
     private PasswordPolicyService passwordPolicyService;
@@ -126,8 +131,6 @@ public class SysUserController extends BaseController
     @PostMapping
     public AjaxResult add(@Validated @RequestBody SysUser user)
     {
-        deptService.checkDeptDataScope(user.getDeptId());
-        roleService.checkRoleDataScope(user.getRoleIds());
         if (!userService.checkUserNameUnique(user))
         {
             return error("鏂板鐢ㄦ埛'" + user.getUserName() + "'澶辫触锛岀櫥褰曡处鍙峰凡瀛樺湪");
@@ -157,8 +160,6 @@ public class SysUserController extends BaseController
     {
         userService.checkUserAllowed(user);
         userService.checkUserDataScope(user.getUserId());
-        deptService.checkDeptDataScope(user.getDeptId());
-        roleService.checkRoleDataScope(user.getRoleIds());
         if (!userService.checkUserNameUnique(user))
         {
             return error("淇敼鐢ㄦ埛'" + user.getUserName() + "'澶辫触锛岀櫥褰曡处鍙峰凡瀛樺湪");
@@ -251,20 +252,62 @@ public class SysUserController extends BaseController
     public AjaxResult insertAuthRole(Long userId, Long[] roleIds)
     {
         userService.checkUserDataScope(userId);
-        roleService.checkRoleDataScope(roleIds);
         userService.insertUserAuth(userId, roleIds);
         tokenService.revokeUserSessions(userId);
         return success();
     }
 
-    /**
-     * 鑾峰彇閮ㄩ棬鏍戝垪琛?
-     */
-    @PreAuthorize("@ss.hasPermi('system:user:list')")
-    @GetMapping("/deptTree")
-    public AjaxResult deptTree(SysDept dept)
+    @PreAuthorize("@ss.hasPermi('system:user:edit')")
+    @GetMapping("/deviceAuth/{userId}")
+    public AjaxResult deviceAuth(@PathVariable("userId") Long userId)
     {
-        return success(deptService.selectDeptTreeList(dept));
+        SysUser targetUser = userService.selectUserById(userId);
+        if (targetUser == null)
+        {
+            return error("用户不存在");
+        }
+        userService.checkUserDataScope(userId);
+        AjaxResult ajax = AjaxResult.success();
+        ajax.put("userId", userId);
+        ajax.put("user", targetUser);
+        List<PhmDeviceEntity> devices = phmService.listDevices(null);
+        ajax.put("deviceIds", targetUser.isAdmin()
+            ? devices.stream().map(PhmDeviceEntity::getId).collect(Collectors.toList())
+            : userDeviceService.selectDeviceIdsByUserId(userId));
+        ajax.put("devices", devices);
+        return ajax;
+    }
+
+    @PreAuthorize("@ss.hasPermi('system:user:edit')")
+    @Log(title = "用户设备权限", businessType = BusinessType.GRANT)
+    @PutMapping("/deviceAuth")
+    public AjaxResult updateDeviceAuth(@RequestBody SysUserDeviceAuth auth)
+    {
+        if (auth == null || auth.getUserId() == null)
+        {
+            return error("用户不能为空");
+        }
+        SysUser targetUser = userService.selectUserById(auth.getUserId());
+        if (targetUser == null)
+        {
+            return error("用户不存在");
+        }
+        userService.checkUserAllowed(targetUser);
+        userService.checkUserDataScope(auth.getUserId());
+        List<PhmDeviceEntity> visibleDevices = phmService.listDevices(null);
+        java.util.Set<Long> visibleDeviceIds = visibleDevices.stream()
+            .map(PhmDeviceEntity::getId).collect(Collectors.toSet());
+        Long[] requestedIds = auth.getDeviceIds() == null ? new Long[0] : auth.getDeviceIds();
+        for (Long deviceId : requestedIds)
+        {
+            if (deviceId == null || !visibleDeviceIds.contains(deviceId))
+            {
+                return error("包含不存在或无权分配的设备");
+            }
+        }
+        userDeviceService.replaceUserDevices(auth.getUserId(), requestedIds, getUsername());
+        tokenService.revokeUserSessions(auth.getUserId());
+        return success();
     }
 }
 

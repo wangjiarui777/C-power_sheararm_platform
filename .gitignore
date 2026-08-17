@@ -50,6 +50,10 @@ venv/
 ######################################################################
 # IDE / Editor
 
+# Local agent state
+.codex-runtime/
+.claude/
+
 ### VS Code ###
 .vscode/
 .history/

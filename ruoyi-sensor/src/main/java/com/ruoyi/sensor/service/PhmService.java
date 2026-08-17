@@ -30,6 +30,8 @@ public interface PhmService
 
     List<PhmAlarmEventEntity> listAlarms(String deviceCode, String status, Integer alarmLevel);
 
+    List<PhmAlarmEventEntity> listAlarms(String deviceCode, String status, Integer alarmLevel, String alarmSource);
+
     Map<String, Object> getAlarm(Long id);
 
     boolean handleAlarm(Long id, String username, PhmAlarmActionRequest request);
@@ -55,6 +57,8 @@ public interface PhmService
     List<EnhancedInferenceRecordEntity> listLatestDiagnosesByPointIds(Collection<Long> pointIds);
 
     List<EnhancedInferenceRecordEntity> listDiagnosisHistory(DateRange range, String deviceCode);
+
+    List<EnhancedInferenceRecordEntity> listDiagnosisHistory(DateRange range, String deviceCode, Long pointId);
 
     record DateRange(java.util.Date startTime, java.util.Date endTime) {}
 

@@ -74,6 +74,7 @@ CALL add_unique_if_clean('phm_measure_point', 'uk_phm_point_device_channel',
   '`device_code`,`channel_id`', 'CONCAT(`device_code`, '':'' , `channel_id`)');
 
 CALL add_column_if_missing('phm_alarm_event', 'condition_status', 'VARCHAR(32) NOT NULL DEFAULT ''ACTIVE'' COMMENT ''ACTIVE/RETURNED_TO_NORMAL'' AFTER `status`');
+CALL add_column_if_missing('phm_alarm_event', 'alarm_source', 'VARCHAR(16) NOT NULL DEFAULT ''BUSINESS'' COMMENT ''BUSINESS/MODEL'' AFTER `alarm_type`');
 CALL add_column_if_missing('phm_alarm_event', 'workflow_status', 'VARCHAR(32) NOT NULL DEFAULT ''NEW'' COMMENT ''NEW/ACKNOWLEDGED/ASSIGNED/CLOSED'' AFTER `condition_status`');
 CALL add_column_if_missing('phm_alarm_event', 'assignee', 'VARCHAR(64) NULL AFTER `workflow_status`');
 CALL add_column_if_missing('phm_alarm_event', 'acknowledged_by', 'VARCHAR(64) NULL AFTER `assignee`');
@@ -88,6 +89,9 @@ CALL add_column_if_missing('phm_alarm_event', 'active_alarm_key',
   'VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN `condition_status` = ''ACTIVE'' THEN CONCAT(`device_code`, '':'', COALESCE(`point_id`, 0), '':'', COALESCE(`feature_code`, '''')) ELSE NULL END) STORED');
 CALL add_index_if_missing('phm_alarm_event', 'idx_phm_alarm_workflow', '`workflow_status`,`condition_status`');
 CALL add_index_if_missing('phm_alarm_event', 'idx_phm_alarm_active_key', '`device_code`,`point_id`,`feature_code`,`condition_status`');
+CALL add_index_if_missing('phm_alarm_event', 'idx_phm_alarm_source_status_time', '`alarm_source`,`status`,`alarm_time`');
+UPDATE phm_alarm_event SET alarm_source = CASE WHEN LOWER(alarm_type) = 'diagnosis' THEN 'MODEL' ELSE 'BUSINESS' END
+WHERE alarm_source IS NULL OR alarm_source NOT IN ('BUSINESS', 'MODEL');
 
 CALL add_column_if_missing('phm_alarm_handle_record', 'assignee', 'VARCHAR(64) NULL AFTER `after_status`');
 

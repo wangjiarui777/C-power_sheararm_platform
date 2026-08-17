@@ -62,6 +62,7 @@
 import { getCodeImg } from "@/api/login"
 import Cookies from "js-cookie"
 import defaultSettings from '@/settings'
+import { getErrorMessage, isRuoyiRequestError } from '@/utils/request'
 
 export default {
   name: "Login",
@@ -146,8 +147,8 @@ export default {
             // 登录接口的业务错误（验证码、账号或密码错误）由响应拦截器
             // 转换成 Error 后返回；这里必须显示出来，否则用户只会看到
             // 验证码刷新，误以为登录按钮没有响应。
-            if (error && error.message && !/Network Error|timeout|PASSWORD_CHANGE_REQUIRED/.test(error.message)) {
-              this.$message.error(error.message)
+            if (!isRuoyiRequestError(error) && error && error.message) {
+              this.$message.error(getErrorMessage(error))
             }
             if (this.captchaEnabled) {
               this.getCode()

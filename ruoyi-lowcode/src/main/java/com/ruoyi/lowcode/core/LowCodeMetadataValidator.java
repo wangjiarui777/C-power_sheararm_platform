@@ -62,7 +62,6 @@ public class LowCodeMetadataValidator
             if (model == null) errors.add(issue("MODEL_REQUIRED", "缺少数据模型", "model"));
             else validateModel(model, errors, warnings);
         }
-        validatePermissions(root.getJSONObject("permissions"), model, errors);
         validateRules(root.getJSONArray("rules"), model, errors);
         validateActions(root.getJSONArray("actions"), errors);
         return result(errors, warnings);
@@ -246,24 +245,6 @@ public class LowCodeMetadataValidator
             }
         }
         catch (Exception ex) { errors.add(issue("CONNECTOR_CHECK_FAILED", "无法校验连接器: " + ex.getMessage(), "actions." + actionCode)); }
-    }
-
-    private void validatePermissions(JSONObject permissions, JSONObject model, List<Map<String, Object>> errors)
-    {
-        if (permissions == null) return;
-        String scope = permissions.getString("dataScope");
-        if (!Set.of("NONE", "DEPT", "DEPT_AND_CHILD", "SELF").contains(scope))
-        {
-            errors.add(issue("DATA_SCOPE_INVALID", "数据范围不受支持", "permissions.dataScope"));
-            return;
-        }
-        Set<String> fields = new HashSet<>();
-        if (model != null && model.getJSONArray("fields") != null)
-            model.getJSONArray("fields").forEach(item -> fields.add(((JSONObject) item).getString("name")));
-        if (("DEPT".equals(scope) || "DEPT_AND_CHILD".equals(scope)) && !fields.contains(permissions.getString("deptField")))
-            errors.add(issue("DEPT_FIELD_REQUIRED", "部门数据范围必须映射已声明字段", "permissions.deptField"));
-        if ("SELF".equals(scope) && !fields.contains(permissions.getString("userField")))
-            errors.add(issue("USER_FIELD_REQUIRED", "本人数据范围必须映射已声明字段", "permissions.userField"));
     }
 
     private boolean databaseIdentifier(String value) { return value != null && value.matches("[A-Za-z][A-Za-z0-9_]{0,63}"); }

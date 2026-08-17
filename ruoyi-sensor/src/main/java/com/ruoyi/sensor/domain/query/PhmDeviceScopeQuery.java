@@ -13,4 +13,6 @@ public class PhmDeviceScopeQuery extends BaseEntity
     private String keyword;
     private String orgName;
     private String status;
+    /** Null means unrestricted access for the administrator. */
+    private Long scopeUserId;
 }

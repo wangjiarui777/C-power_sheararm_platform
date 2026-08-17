@@ -14,6 +14,8 @@ import com.ruoyi.sensor.domain.vo.MonitoringOverviewVo.DevicePointVo;
 import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
 import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 import com.ruoyi.sensor.service.IMonitoringService;
+import com.ruoyi.sensor.service.PhmDataScopeService;
+import com.ruoyi.sensor.domain.entity.PhmDeviceEntity;
 
 @Service
 public class MonitoringServiceImpl implements IMonitoringService
@@ -27,11 +29,22 @@ public class MonitoringServiceImpl implements IMonitoringService
     @Autowired
     private IDeviceTemperatureDataService temperatureDataService;
 
+    @Autowired
+    private PhmDataScopeService dataScopeService;
+
     @Override
     public MonitoringOverviewVo getOverview()
     {
-        List<DeviceVibrationData> vibrationList = vibrationDataService.selectRecentDeviceVibrationDataList();
-        List<DeviceTemperatureData> temperatureList = temperatureDataService.selectRecentDeviceTemperatureDataList();
+        Set<String> accessibleCodes = dataScopeService.listDevices(new com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery()).stream()
+                .map(PhmDeviceEntity::getDeviceCode)
+                .filter(code -> code != null && !code.isBlank())
+                .collect(Collectors.toSet());
+        List<DeviceVibrationData> vibrationList = vibrationDataService.selectRecentDeviceVibrationDataList().stream()
+                .filter(item -> accessibleCodes.contains(item.getDeviceCode()))
+                .collect(Collectors.toList());
+        List<DeviceTemperatureData> temperatureList = temperatureDataService.selectRecentDeviceTemperatureDataList().stream()
+                .filter(item -> accessibleCodes.contains(item.getDeviceCode()))
+                .collect(Collectors.toList());
 
         List<DeviceVibrationData> sortedVibration = vibrationList.stream()
                 .sorted(Comparator.comparing(DeviceVibrationData::getSampleTime).reversed())

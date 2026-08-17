@@ -7,6 +7,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,7 +59,8 @@ public class DeviceVibrationDataController extends BaseController
     public TableDataInfo list(DeviceVibrationData deviceVibrationData)
     {
         startPage();
-        List<DeviceVibrationData> list = deviceVibrationDataService.selectDeviceVibrationDataList(deviceVibrationData);
+        List<DeviceVibrationData> list = scopedRows(
+                deviceVibrationDataService.selectDeviceVibrationDataList(deviceVibrationData));
         return getDataTable(list);
     }
 
@@ -66,7 +68,7 @@ public class DeviceVibrationDataController extends BaseController
     @GetMapping("/recent")
     public AjaxResult recent()
     {
-        return success(deviceVibrationDataService.selectRecentDeviceVibrationDataList());
+        return success(scopedRows(deviceVibrationDataService.selectRecentDeviceVibrationDataList()));
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:monitoring:view')")
@@ -75,9 +77,9 @@ public class DeviceVibrationDataController extends BaseController
                                            @RequestParam(defaultValue = "30") Integer windowMinutes)
     {
         String safeDeviceCode = normalizeDeviceCode(deviceCode);
-        List<DeviceVibrationData> records = loadRecentRecords(safeDeviceCode);
-        Map<Integer, List<DeviceVibrationData>> byChannel = groupByChannel(records);
         PhmDeviceEntity device = findDevice(safeDeviceCode);
+        List<DeviceVibrationData> records = device == null ? new ArrayList<>() : loadRecentRecords(safeDeviceCode);
+        Map<Integer, List<DeviceVibrationData>> byChannel = groupByChannel(records);
         Map<Integer, PhmMeasurePointEntity> points = loadPointMap(device);
         Map<Integer, PhmAlarmRuleEntity> rules = loadRuleMap(device, points);
         Map<Integer, PhmAlarmEventEntity> openAlarms = loadOpenAlarmMap(safeDeviceCode, points);
@@ -118,12 +120,12 @@ public class DeviceVibrationDataController extends BaseController
     {
         int safeChannelId = channelId == null || channelId < 1 || channelId > 8 ? 1 : channelId;
         String safeDeviceCode = normalizeDeviceCode(deviceCode);
-        List<DeviceVibrationData> records = loadRecentRecords(safeDeviceCode).stream()
+        PhmDeviceEntity device = findDevice(safeDeviceCode);
+        List<DeviceVibrationData> records = (device == null ? new ArrayList<DeviceVibrationData>() : loadRecentRecords(safeDeviceCode)).stream()
                 .filter(item -> item.getChannelId() != null && item.getChannelId().intValue() == safeChannelId)
                 .sorted(Comparator.comparing(DeviceVibrationData::getSampleTime))
                 .collect(Collectors.toList());
 
-        PhmDeviceEntity device = findDevice(safeDeviceCode);
         Map<Integer, PhmMeasurePointEntity> points = loadPointMap(device);
         Map<Integer, PhmAlarmRuleEntity> rules = loadRuleMap(device, points);
         Map<Integer, PhmAlarmEventEntity> openAlarms = loadOpenAlarmMap(safeDeviceCode, points);
@@ -145,14 +147,31 @@ public class DeviceVibrationDataController extends BaseController
 
     private String normalizeDeviceCode(String deviceCode)
     {
-        return deviceCode == null || deviceCode.trim().isEmpty() ? defaultDeviceCode : deviceCode.trim();
+        return deviceCode == null || deviceCode.trim().isEmpty()
+                ? (defaultDeviceCode == null ? "" : defaultDeviceCode) : deviceCode.trim();
     }
 
     private List<DeviceVibrationData> loadRecentRecords(String deviceCode)
     {
-        return deviceVibrationDataService.selectRecentDeviceVibrationDataList().stream()
+        return scopedRows(deviceVibrationDataService.selectRecentDeviceVibrationDataList()).stream()
                 .filter(item -> deviceCode.equals(item.getDeviceCode()))
                 .collect(Collectors.toList());
+    }
+
+    private List<DeviceVibrationData> scopedRows(List<DeviceVibrationData> rows)
+    {
+        Set<String> accessibleCodes = accessibleDeviceCodes();
+        return rows == null ? new ArrayList<>() : rows.stream()
+                .filter(item -> item != null && accessibleCodes.contains(item.getDeviceCode()))
+                .collect(Collectors.toList());
+    }
+
+    private Set<String> accessibleDeviceCodes()
+    {
+        return phmService.listDevices(null).stream()
+                .map(PhmDeviceEntity::getDeviceCode)
+                .filter(code -> code != null && !code.isBlank())
+                .collect(Collectors.toSet());
     }
 
     private Map<Integer, List<DeviceVibrationData>> groupByChannel(List<DeviceVibrationData> records)
@@ -448,7 +467,8 @@ public class DeviceVibrationDataController extends BaseController
     @PostMapping("/export")
     public void export(HttpServletResponse response, DeviceVibrationData deviceVibrationData)
     {
-        List<DeviceVibrationData> list = deviceVibrationDataService.selectDeviceVibrationDataList(deviceVibrationData);
+        List<DeviceVibrationData> list = scopedRows(
+                deviceVibrationDataService.selectDeviceVibrationDataList(deviceVibrationData));
         ExcelUtil<DeviceVibrationData> util = new ExcelUtil<DeviceVibrationData>(DeviceVibrationData.class);
         util.exportCsv(response, list, "vibration_data");
     }
@@ -457,7 +477,8 @@ public class DeviceVibrationDataController extends BaseController
     @GetMapping(value = "/{dataId}")
     public AjaxResult getInfo(@PathVariable("dataId") Long dataId)
     {
-        return success(deviceVibrationDataService.selectDeviceVibrationDataById(dataId));
+        DeviceVibrationData data = deviceVibrationDataService.selectDeviceVibrationDataById(dataId);
+        return success(data != null && accessibleDeviceCodes().contains(data.getDeviceCode()) ? data : null);
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:vibration:add')")
@@ -465,6 +486,10 @@ public class DeviceVibrationDataController extends BaseController
     @PostMapping
     public AjaxResult add(@RequestBody DeviceVibrationData deviceVibrationData)
     {
+        if (deviceVibrationData == null || !accessibleDeviceCodes().contains(deviceVibrationData.getDeviceCode()))
+        {
+            return error("设备不存在或无权访问");
+        }
         deviceVibrationData.setCreateBy(getUsername());
         return toAjax(deviceVibrationDataService.insertDeviceVibrationData(deviceVibrationData));
     }
@@ -474,6 +499,16 @@ public class DeviceVibrationDataController extends BaseController
     @PutMapping
     public AjaxResult edit(@RequestBody DeviceVibrationData deviceVibrationData)
     {
+        DeviceVibrationData existing = deviceVibrationData == null || deviceVibrationData.getDataId() == null
+                ? null : deviceVibrationDataService.selectDeviceVibrationDataById(deviceVibrationData.getDataId());
+        String existingCode = existing == null ? null : existing.getDeviceCode();
+        if (deviceVibrationData == null
+                || (existing != null && !accessibleDeviceCodes().contains(existingCode))
+                || (deviceVibrationData.getDeviceCode() != null
+                    && !accessibleDeviceCodes().contains(deviceVibrationData.getDeviceCode())))
+        {
+            return error("设备不存在或无权访问");
+        }
         deviceVibrationData.setUpdateBy(getUsername());
         return toAjax(deviceVibrationDataService.updateDeviceVibrationData(deviceVibrationData));
     }
@@ -483,6 +518,19 @@ public class DeviceVibrationDataController extends BaseController
     @DeleteMapping("/{dataIds}")
     public AjaxResult remove(@PathVariable Long[] dataIds)
     {
+        if (dataIds == null)
+        {
+            return error("数据不能为空");
+        }
+        Set<String> accessibleCodes = accessibleDeviceCodes();
+        for (Long dataId : dataIds)
+        {
+            DeviceVibrationData data = deviceVibrationDataService.selectDeviceVibrationDataById(dataId);
+            if (data == null || !accessibleCodes.contains(data.getDeviceCode()))
+            {
+                return error("包含不存在或无权访问的数据");
+            }
+        }
         return toAjax(deviceVibrationDataService.deleteDeviceVibrationDataByIds(dataIds));
     }
 }

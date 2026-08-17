@@ -21,7 +21,9 @@ $projectRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 $inferenceDir = Join-Path $projectRoot 'ruoyi-sensor\inference'
 $frontendDir = Join-Path $projectRoot 'ruoyi-ui'
 $adminJar = Join-Path $projectRoot 'ruoyi-admin\target\ruoyi-admin.jar'
-$pythonExe = Join-Path $projectRoot '.venv\Scripts\python.exe'
+$venvRoot = Join-Path $projectRoot '.venv'
+$pythonExe = Join-Path $venvRoot 'Scripts\python.exe'
+$pythonRequirements = Join-Path $inferenceDir 'requirements.txt'
 $defaultIotdbHome = 'C:\iotdb\apache-iotdb-2.0.8-all-bin'
 $modelRoot = Join-Path $projectRoot '.local-models'
 $dataRoot = Join-Path $projectRoot '.local-data'
@@ -30,6 +32,9 @@ $uploadRoot = Join-Path $dataRoot 'uploadPath'
 $logRoot = Join-Path $dataRoot 'logs'
 $runRoot = Join-Path $dataRoot 'run'
 $pidFile = Join-Path $runRoot 'service-pids.json'
+$mavenRepoRoot = Join-Path $dataRoot 'm2-repository'
+$mavenSettingsPath = Join-Path $runRoot 'maven-settings.xml'
+$localPythonExe = Join-Path $dataRoot 'python311\python.exe'
 $diagnosisOverviewPath = '/analysis-toolkit/bearing-diagnosis'
 
 if ($projectRoot -match '(?i)\\OneDrive\\') {
@@ -75,6 +80,142 @@ function Assert-Command {
     return $command.Source
 }
 
+function Ensure-PythonEnvironment {
+    param([Parameter(Mandatory = $true)][string]$RequirementsPath)
+
+    $venvUsable = $false
+    if (Test-Path -LiteralPath $pythonExe) {
+        & $pythonExe -c "import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 14) else 1)" 2>$null
+        $venvUsable = $LASTEXITCODE -eq 0
+    }
+
+    if (-not $venvUsable) {
+        $bootstrap = $null
+        $bootstrapIsLauncher = $false
+        $launcherVersion = $null
+        if (-not [string]::IsNullOrWhiteSpace($env:PYTHON_EXE) -and
+            (Test-Path -LiteralPath $env:PYTHON_EXE)) {
+            $bootstrap = Get-Item -LiteralPath $env:PYTHON_EXE
+        } elseif (Test-Path -LiteralPath $localPythonExe) {
+            $bootstrap = Get-Item -LiteralPath $localPythonExe
+        } else {
+            $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
+            if ($launcher) {
+                $launcherPath = if ($launcher.PSObject.Properties.Name -contains 'Source') {
+                    $launcher.Source
+                } else {
+                    $launcher.FullName
+                }
+                & $launcherPath '-3.11' '--version' 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    $bootstrap = $launcher
+                    $bootstrapIsLauncher = $true
+                    $launcherVersion = '-3.11'
+                }
+            } else {
+                $pythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+                if ($pythonCommand) { $bootstrap = $pythonCommand }
+            }
+        }
+
+        if ($null -eq $bootstrap) {
+            throw '未检测到兼容的 Python 3.11。请安装 Python 3.11，或设置 PYTHON_EXE 指向可用的 python.exe。'
+        }
+
+        $environmentAction = if (Test-Path -LiteralPath $venvRoot) { '重建' } else { '创建' }
+        Write-Step "$environmentAction Python 虚拟环境"
+        $venvArguments = if ($bootstrapIsLauncher) {
+            @($launcherVersion, '-m', 'venv')
+        } else {
+            @('-m', 'venv')
+        }
+        if (Test-Path -LiteralPath $venvRoot) { $venvArguments += '--clear' }
+        $venvArguments += $venvRoot
+        $bootstrapPath = if ($bootstrap.PSObject.Properties.Name -contains 'Source') {
+            $bootstrap.Source
+        } else {
+            $bootstrap.FullName
+        }
+        & $bootstrapPath @venvArguments
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $pythonExe)) {
+            throw "无法创建 Python 虚拟环境：$venvRoot。请安装 Python 3.11，或设置 PYTHON_EXE 指向 python.exe。"
+        }
+    }
+
+    & $pythonExe -c "import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 14) else 1)" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "项目需要 Python 3.11：$pythonExe。请安装或指定兼容版本后重试。"
+    }
+
+    if (-not (Test-Path -LiteralPath $RequirementsPath)) {
+        throw "Python 依赖清单不存在：$RequirementsPath"
+    }
+
+    & $pythonExe -c "import fastapi, uvicorn, torch, numpy, scipy" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Step '安装 Python 推理依赖'
+        & $pythonExe -m pip install --disable-pip-version-check -r $RequirementsPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Python 依赖安装失败，请检查网络或手动执行：$pythonExe -m pip install -r $RequirementsPath"
+        }
+    }
+}
+
+function Ensure-FrontendDependencies {
+    $packageLock = Join-Path $frontendDir 'package-lock.json'
+    $cliEntry = Join-Path $frontendDir 'node_modules\@vue\cli-service\bin\vue-cli-service.js'
+    if (-not (Test-Path -LiteralPath $packageLock)) {
+        throw "前端依赖清单不存在：$packageLock"
+    }
+    if (-not (Test-Path -LiteralPath $cliEntry)) {
+        Write-Step '安装前端依赖'
+        Push-Location $frontendDir
+        try {
+            & $npmExe 'ci'
+            if ($LASTEXITCODE -ne 0) {
+                throw 'npm ci 失败，请检查 Node.js/npm 版本和网络连接'
+            }
+        } finally {
+            Pop-Location
+        }
+    }
+}
+
+function Ensure-MavenSettings {
+    param([Parameter(Mandatory = $true)][string]$MavenExecutable)
+
+    New-Item -ItemType Directory -Path $mavenRepoRoot -Force | Out-Null
+    $globalSettings = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $MavenExecutable) '..\conf\settings.xml'))
+    try {
+        if (Test-Path -LiteralPath $globalSettings) {
+            [xml]$settings = Get-Content -LiteralPath $globalSettings -Raw
+            $namespace = New-Object System.Xml.XmlNamespaceManager($settings.NameTable)
+            $namespace.AddNamespace('m', $settings.settings.NamespaceURI)
+            $repositoryNode = $settings.SelectSingleNode('/m:settings/m:localRepository', $namespace)
+            if ($null -eq $repositoryNode) {
+                $repositoryNode = $settings.CreateElement('localRepository', $settings.settings.NamespaceURI)
+                [void]$settings.settings.InsertBefore($repositoryNode, $settings.settings.FirstChild)
+            }
+            $repositoryNode.InnerText = $mavenRepoRoot
+            $settings.Save($mavenSettingsPath)
+        } else {
+            throw "Maven 全局 settings.xml 不存在：$globalSettings"
+        }
+    } catch {
+        $repoXml = [Security.SecurityElement]::Escape($mavenRepoRoot)
+        $fallback = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+  <localRepository>$repoXml</localRepository>
+</settings>
+"@
+        Set-Content -LiteralPath $mavenSettingsPath -Value $fallback -Encoding UTF8
+    }
+    return $mavenSettingsPath
+}
+
 function Test-TcpEndpoint {
     param(
         [Parameter(Mandatory = $true)][string]$HostName,
@@ -104,6 +245,20 @@ function Get-PortProcessId {
 
 function Test-IsProjectProcess {
     param([Parameter(Mandatory = $true)][int]$Id)
+    if (Test-Path -LiteralPath $pidFile) {
+        try {
+            $state = Get-Content -LiteralPath $pidFile -Raw | ConvertFrom-Json
+            foreach ($property in $state.PSObject.Properties) {
+                $recordedPid = 0
+                if ([int]::TryParse([string]$property.Value, [ref]$recordedPid) -and
+                    $recordedPid -eq $Id) {
+                    return $true
+                }
+            }
+        } catch {
+            # Ignore a stale or partially written PID file and inspect the process command line below.
+        }
+    }
     $process = Get-CimInstance Win32_Process -Filter "ProcessId=$Id" -ErrorAction SilentlyContinue
     if ($null -eq $process) { return $false }
     $commandLine = [string]$process.CommandLine
@@ -306,7 +461,9 @@ $mavenExe = Assert-Command -Name 'mvn'
 $javaExe = Assert-Command -Name 'java'
 $npmExe = Assert-Command -Name 'npm.cmd'
 $cmdExe = Assert-Command -Name 'cmd.exe'
-if (-not (Test-Path -LiteralPath $pythonExe)) { throw "缺少项目 Python：$pythonExe" }
+Ensure-PythonEnvironment -RequirementsPath $pythonRequirements
+Ensure-FrontendDependencies
+$mavenSettingsPath = Ensure-MavenSettings -MavenExecutable $mavenExe
 if (-not (Test-Path -LiteralPath $iotdbConfigNodeScript) -or
     -not (Test-Path -LiteralPath $iotdbDataNodeScript)) {
     throw "IoTDB 启动脚本不完整：$iotdbWindowsSbin。请在 .env 中设置正确的 IOTDB_HOME。"
@@ -317,12 +474,6 @@ if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
     $javaBin = Split-Path -Parent $javaExe
     $env:JAVA_HOME = Split-Path -Parent $javaBin
 }
-if (-not (Test-Path -LiteralPath (Join-Path $frontendDir 'node_modules'))) {
-    throw '缺少 ruoyi-ui/node_modules，请先在 ruoyi-ui 目录执行 npm ci'
-}
-& $pythonExe -c "import fastapi, uvicorn, torch, numpy, scipy" 2>$null
-if ($LASTEXITCODE -ne 0) { throw '项目 .venv 缺少推理依赖，请按 requirements.txt 安装' }
-
 $manifestPath = Join-Path $inferenceDir 'models-manifest.json'
 if (-not (Test-Path -LiteralPath $manifestPath)) { throw "模型清单不存在：$manifestPath" }
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
@@ -352,7 +503,26 @@ if (-not [string]::IsNullOrWhiteSpace($env:REDIS_SERVICE_NAME)) {
 }
 Start-DependencyService -DisplayName 'MySQL' -CandidateNames $mysqlServiceCandidates -Port 3306
 $redisPort = if ([string]::IsNullOrWhiteSpace($env:REDIS_PORT)) { 6379 } else { [int]$env:REDIS_PORT }
-Start-DependencyService -DisplayName 'Redis' -CandidateNames $redisServiceCandidates -Port $redisPort
+if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port $redisPort)) {
+    $redisReady = $false
+    $redisServiceError = ''
+    try {
+        Start-DependencyService -DisplayName 'Redis' -CandidateNames $redisServiceCandidates -Port $redisPort
+        $redisReady = $true
+    } catch {
+        $redisServiceError = $_.Exception.Message
+    }
+    if (-not $redisReady) {
+        try {
+            $redisReady = Start-PortableRedis -Port $redisPort
+        } catch {
+            $redisServiceError = "$redisServiceError；便携版 Redis：$($_.Exception.Message)"
+        }
+    }
+    if (-not $redisReady) {
+        throw "Redis 未就绪。服务启动错误：$redisServiceError"
+    }
+}
 Write-Step '停止当前项目的旧监听进程'
 # 5001/9528 是历史架构遗留端口；仅在确认属于本项目时才清理。
 foreach ($legacyPort in @(5001, 9528)) {
@@ -369,7 +539,8 @@ if (-not $SkipBuild) {
     Write-Step '同步构建 Java 多模块工程'
     Push-Location $projectRoot
     try {
-        & $mavenExe '-DskipTests' 'install'
+        # 清理旧 target 后再构建，避免增量编译残留导致启动时加载错误字节码。
+        & $mavenExe '-s' $mavenSettingsPath '-DskipTests' 'clean' 'install'
         if ($LASTEXITCODE -ne 0) { throw "Maven 构建失败，退出码：$LASTEXITCODE" }
     } finally {
         Pop-Location

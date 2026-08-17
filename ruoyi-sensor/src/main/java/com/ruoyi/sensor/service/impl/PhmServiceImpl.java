@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -27,6 +28,7 @@ import org.springframework.util.StringUtils;
 import com.ruoyi.sensor.domain.DeviceTemperatureData;
 import com.ruoyi.sensor.domain.DeviceVibrationData;
 import com.ruoyi.sensor.domain.dto.PhmAlarmActionRequest;
+import com.ruoyi.sensor.domain.constant.PhmAlarmSource;
 import com.ruoyi.sensor.domain.entity.EnhancedInferenceRecordEntity;
 import com.ruoyi.sensor.domain.entity.PhmAlarmEventEntity;
 import com.ruoyi.sensor.domain.entity.PhmAlarmHandleRecordEntity;
@@ -58,6 +60,7 @@ import com.ruoyi.sensor.mapper.ModelReleaseMapper;
 import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
 import com.ruoyi.sensor.service.IDeviceVibrationDataService;
 import com.ruoyi.sensor.service.PhmService;
+import com.ruoyi.sensor.service.IPhmAlarmService;
 import com.ruoyi.sensor.service.PhmDataScopeService;
 import com.ruoyi.sensor.service.DiagnosisIotdbSyncService;
 import com.ruoyi.sensor.service.DiagnosisResultReadService;
@@ -68,7 +71,7 @@ import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 
 @Service
-public class PhmServiceImpl implements PhmService
+public class PhmServiceImpl implements PhmService, IPhmAlarmService
 {
     private static final String STATUS_UNHANDLED = "unhandled";
     private static final String STATUS_HANDLED = "handled";
@@ -82,7 +85,7 @@ public class PhmServiceImpl implements PhmService
     private static final String EVENT_TYPE_DIAGNOSIS = "diagnosis";
     private static final String EVENT_TYPE_ALARM_HANDLE = "alarm_handle";
 
-    @Value("${sensor.diagnosis.auto-alarm-enabled:false}")
+    @Value("${sensor.diagnosis.auto-alarm-enabled:true}")
     private boolean autoAlarmEnabled;
 
     @Autowired
@@ -290,6 +293,17 @@ public class PhmServiceImpl implements PhmService
     @Override
     public List<PhmAlarmEventEntity> listAlarms(String deviceCode, String status, Integer alarmLevel)
     {
+        return listAlarms(deviceCode, status, alarmLevel, null);
+    }
+
+    @Override
+    public List<PhmAlarmEventEntity> listAlarms(String deviceCode, String status, Integer alarmLevel, String alarmSource)
+    {
+        String normalizedSource = PhmAlarmSource.normalize(alarmSource);
+        if (StringUtils.hasText(alarmSource) && normalizedSource == null)
+        {
+            throw new IllegalArgumentException("告警来源仅支持 BUSINESS 或 MODEL");
+        }
         Set<String> accessibleCodes = accessibleDeviceCodes();
         if (StringUtils.hasText(deviceCode) && !accessibleCodes.contains(deviceCode))
         {
@@ -304,6 +318,7 @@ public class PhmServiceImpl implements PhmService
                 .eq(StringUtils.hasText(deviceCode), PhmAlarmEventEntity::getDeviceCode, deviceCode)
                 .eq(StringUtils.hasText(status), PhmAlarmEventEntity::getStatus, status)
                 .eq(alarmLevel != null, PhmAlarmEventEntity::getAlarmLevel, alarmLevel)
+                .eq(normalizedSource != null, PhmAlarmEventEntity::getAlarmSource, normalizedSource)
                 .orderByDesc(PhmAlarmEventEntity::getAlarmTime);
         return alarmEventMapper.selectList(wrapper);
     }
@@ -574,6 +589,7 @@ public class PhmServiceImpl implements PhmService
         event.setFeatureCode(featureCode);
         event.setAlarmScope("point");
         event.setAlarmType(matched.getAlarmType());
+        event.setAlarmSource(PhmAlarmSource.BUSINESS);
         event.setAlarmLevel(matched.getDeviceAlarmLevel());
         event.setPointAlarmLevel(pointAlarmLevel);
         event.setAlarmValue(measured);
@@ -641,7 +657,7 @@ public class PhmServiceImpl implements PhmService
         }
 
         String diagnosisDetail = stringValue(diagnosis.get("diagnosisDetail"), "");
-        String riskLevel = stringValue(diagnosis.get("riskLevel"), "");
+        String riskLevel = PhmDiagnosisLinkagePolicy.normalizeRiskLevel(stringValue(diagnosis.get("riskLevel"), ""));
         String alarmLevelText = stringValue(diagnosis.get("alarmLevel"), "");
         int healthIndex = PhmDiagnosisLinkagePolicy.normalizeHealthIndex(
                 healthIndexValue, healthIndexValue);
@@ -682,7 +698,7 @@ public class PhmServiceImpl implements PhmService
         record.setClosedPrediction(stringValue(diagnosis.get("closedPrediction"), null));
         record.setConfidence(toBigDecimal(diagnosis.get("confidence")));
         record.setHealthIndex(toInteger(diagnosis.get("healthIndex"), null));
-        record.setRiskLevel(stringValue(diagnosis.get("riskLevel"), null));
+        record.setRiskLevel(PhmDiagnosisLinkagePolicy.normalizeRiskLevel(stringValue(diagnosis.get("riskLevel"), null)));
         record.setAlarmLevel(stringValue(diagnosis.get("alarmLevel"), null));
         record.setDiagnosisDetail(stringValue(diagnosis.get("diagnosisDetail"), ""));
         record.setDecisionReason(stringValue(diagnosis.get("decisionReason"), stringValue(diagnosis.get("diagnosisDetail"), "")));
@@ -887,6 +903,7 @@ public class PhmServiceImpl implements PhmService
         event.setFeatureCode("diagnosis");
         event.setAlarmScope(point == null ? "device" : "point");
         event.setAlarmType("diagnosis");
+        event.setAlarmSource(PhmAlarmSource.MODEL);
         event.setAlarmLevel(alarmLevel);
         event.setPointAlarmLevel(riskLevel);
         event.setAlarmValue(BigDecimal.valueOf(Optional.ofNullable(device.getHealthIndex()).orElse(0)));
@@ -1811,6 +1828,10 @@ public class PhmServiceImpl implements PhmService
     @Override
     public EnhancedInferenceRecordEntity getLatestDiagnosis(String deviceCode)
     {
+        if (scopedDeviceByCode(deviceCode) == null)
+        {
+            return null;
+        }
         return latestDiagnosis(deviceCode);
     }
 
@@ -1821,16 +1842,41 @@ public class PhmServiceImpl implements PhmService
         {
             return new ArrayList<>();
         }
-        return enhancedInferenceRecordMapper.selectLatestByPointIds(pointIds);
+        Set<Long> accessiblePointIds = listMeasurePoints(null).stream()
+            .map(PhmMeasurePointEntity::getId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+        List<Long> scopedPointIds = pointIds.stream()
+            .filter(accessiblePointIds::contains)
+            .collect(Collectors.toList());
+        return scopedPointIds.isEmpty() ? new ArrayList<>()
+            : enhancedInferenceRecordMapper.selectLatestByPointIds(scopedPointIds);
     }
 
     @Override
     public List<EnhancedInferenceRecordEntity> listDiagnosisHistory(PhmService.DateRange range, String deviceCode)
     {
-        return diagnosisResultReadService.history(
-            StringUtils.hasText(deviceCode) ? deviceCode.trim() : null,
-            range == null ? null : range.startTime(),
-            range == null ? null : range.endTime(), 5000);
+        return listDiagnosisHistory(range, deviceCode, null);
+    }
+
+    @Override
+    public List<EnhancedInferenceRecordEntity> listDiagnosisHistory(PhmService.DateRange range, String deviceCode,
+        Long pointId)
+    {
+        Date start = range == null ? null : range.startTime();
+        Date end = range == null ? null : range.endTime();
+        if (StringUtils.hasText(deviceCode))
+        {
+            String normalizedCode = deviceCode.trim();
+            return scopedDeviceByCode(normalizedCode) == null ? new ArrayList<>()
+                : diagnosisResultReadService.history(normalizedCode, pointId, start, end, 5000);
+        }
+        List<EnhancedInferenceRecordEntity> result = new ArrayList<>();
+        for (String accessibleCode : accessibleDeviceCodes())
+        {
+            result.addAll(diagnosisResultReadService.history(accessibleCode, pointId, start, end, 5000));
+        }
+        return result;
     }
 
     private String buildAlarmNo(String prefix, Date time)

@@ -22,6 +22,7 @@ public class PhmAlarmEventEntity
     private String featureCode;
     private String alarmScope;
     private String alarmType;
+    private String alarmSource;
     private Integer alarmLevel;
     private String pointAlarmLevel;
     private BigDecimal alarmValue;

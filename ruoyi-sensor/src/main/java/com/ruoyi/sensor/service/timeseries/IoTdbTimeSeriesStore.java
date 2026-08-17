@@ -485,6 +485,13 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
     @Override
     public List<DiagnosisResultSnapshot> queryDiagnosisHistory(String deviceCode, Date from, Date to, int limit)
     {
+        return queryDiagnosisHistory(deviceCode, null, from, to, limit);
+    }
+
+    @Override
+    public List<DiagnosisResultSnapshot> queryDiagnosisHistory(String deviceCode, Long pointId, Date from, Date to,
+                                                                int limit)
+    {
         ITableSessionPool pool = requireAvailablePool();
         String sql = "SELECT record_id,batch_id,task_id,point_id,channel_id,model_release_id,source_file,"
             + "sample_rate,diagnosis_result,closed_prediction,confidence,health_index,risk_level,alarm_level,"
@@ -493,6 +500,7 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
             + "device_code,analysis_mode,model_version FROM " + DIAGNOSIS_TABLE
             + " WHERE 1=1"
             + (deviceCode == null || deviceCode.isBlank() ? "" : " AND device_code='" + literal(deviceCode) + "'")
+            + (pointId == null ? "" : " AND point_id=" + pointId)
             + (from == null ? "" : " AND time >= " + toStoreTimestamp(from))
             + (to == null ? "" : " AND time <= " + toStoreTimestamp(to))
             + " ORDER BY time DESC LIMIT " + Math.max(1, Math.min(5000, limit));

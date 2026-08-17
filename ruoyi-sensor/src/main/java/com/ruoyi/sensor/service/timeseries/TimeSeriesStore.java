@@ -26,4 +26,7 @@ public interface TimeSeriesStore
     DiagnosisResultSnapshot loadLatestDiagnosis(String deviceCode);
 
     List<DiagnosisResultSnapshot> queryDiagnosisHistory(String deviceCode, Date from, Date to, int limit);
+
+    List<DiagnosisResultSnapshot> queryDiagnosisHistory(String deviceCode, Long pointId, Date from, Date to,
+                                                        int limit);
 }

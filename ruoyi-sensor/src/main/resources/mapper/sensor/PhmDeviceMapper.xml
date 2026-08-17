@@ -26,7 +26,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <if test="status != null and status != ''">
             AND d.status = #{status}
         </if>
-        ${params.dataScope}
+        <if test="scopeUserId != null">
+            AND EXISTS (
+                SELECT 1 FROM sys_user_device ud
+                WHERE ud.user_id = #{scopeUserId} AND ud.device_id = d.id
+            )
+        </if>
         ORDER BY d.device_code ASC
     </select>
 </mapper>

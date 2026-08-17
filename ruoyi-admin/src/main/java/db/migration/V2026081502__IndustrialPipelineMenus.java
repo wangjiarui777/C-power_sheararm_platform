@@ -8,7 +8,8 @@ import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
 
 /**
- * Adds the data-intake navigation and its RuoYi function permissions.
+ * Adds the industrial intake pages to their business-owned navigation roots
+ * and creates their RuoYi function permissions.
  * Existing role grants are intentionally left untouched: new capabilities must
  * be selected explicitly from the role menu tree.
  */
@@ -18,17 +19,19 @@ public class V2026081502__IndustrialPipelineMenus extends BaseJavaMigration
     public void migrate(Context context) throws Exception
     {
         Connection connection = context.getConnection();
-        long accessRoot = ensureMenu(connection, 0L, "数据接入", 20, "sensor-access", "",
-            "SensorAccess", "M", "", "build", "工业数据接入");
+        long monitoringRoot = ensureMenu(connection, 0L, "监测与数据", 4, "monitoring-center", null,
+            "MonitoringCenter", "M", "", "chart", "工业监测动态菜单");
+        long phmRoot = ensureMenu(connection, 0L, "PHM中心", 6, "phm", null,
+            "PhmCenter", "M", "", "monitor", "PHM动态菜单");
 
-        long channelMenu = ensureMenu(connection, accessRoot, "测点接入", 1, "points",
+        long channelMenu = ensureMenu(connection, phmRoot, "测点接入", 2, "points",
             "sensor/access/points", "SensorAccessPoints", "C", "sensor:channel:list",
             "tree", "设备测点与采集通道绑定");
         ensurePermission(connection, channelMenu, 1, "通道新增", "sensor:channel:add");
         ensurePermission(connection, channelMenu, 2, "通道修改", "sensor:channel:edit");
         ensurePermission(connection, channelMenu, 3, "通道删除", "sensor:channel:remove");
 
-        long ingestMenu = ensureMenu(connection, accessRoot, "振动文件接收", 2, "files",
+        long ingestMenu = ensureMenu(connection, monitoringRoot, "振动文件接收", 6, "files",
             "sensor/ingest/files", "SensorIngestFiles", "C", "sensor:ingest:list",
             "upload", "统一振动文件接收台账");
         ensurePermission(connection, ingestMenu, 1, "文件关联", "sensor:ingest:associate");

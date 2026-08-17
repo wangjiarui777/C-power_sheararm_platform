@@ -10,4 +10,5 @@ public class PhmAcquisitionChannelQuery extends BaseEntity
 {
     private Long deviceId;
     private Long pointId;
+    private Long scopeUserId;
 }

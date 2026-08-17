@@ -162,6 +162,7 @@
 import echarts from '@/utils/echarts'
 import { getDeviceBrain, listPhmDevices, saveDeviceEvent } from '@/api/phm'
 import { industrialChartTheme } from '@/utils/industrialTheme'
+import { getErrorMessage } from '@/utils/request'
 
 export default {
   name: 'PhmBrain',
@@ -226,7 +227,7 @@ export default {
         this.selectedDeviceId = matched ? String(matched.id) : String(this.devices[0].id)
         await this.loadBrain()
       } catch (error) {
-        this.$message.error(`机器大脑加载失败：${error.message || error}`)
+        this.$message.error(`机器大脑加载失败：${getErrorMessage(error)}`)
         this.resetBrainData()
       } finally {
         this.loading = false

@@ -1,6 +1,8 @@
 package com.ruoyi.sensor.web;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,6 +22,7 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.sensor.domain.DeviceTemperatureData;
 import com.ruoyi.sensor.service.IDeviceTemperatureDataService;
+import com.ruoyi.sensor.service.PhmService;
 
 @RestController
 @RequestMapping({"/sensor/temperature-data", "/system/temperature"})
@@ -28,12 +31,16 @@ public class DeviceTemperatureDataController extends BaseController
     @Autowired
     private IDeviceTemperatureDataService deviceTemperatureDataService;
 
+    @Autowired
+    private PhmService phmService;
+
     @PreAuthorize("@ss.hasPermi('sensor:temperature:list')")
     @GetMapping("/list")
     public TableDataInfo list(DeviceTemperatureData deviceTemperatureData)
     {
         startPage();
-        List<DeviceTemperatureData> list = deviceTemperatureDataService.selectDeviceTemperatureDataList(deviceTemperatureData);
+        List<DeviceTemperatureData> list = scopedRows(
+                deviceTemperatureDataService.selectDeviceTemperatureDataList(deviceTemperatureData));
         return getDataTable(list);
     }
 
@@ -41,7 +48,7 @@ public class DeviceTemperatureDataController extends BaseController
     @GetMapping("/recent")
     public AjaxResult recent()
     {
-        return success(deviceTemperatureDataService.selectRecentDeviceTemperatureDataList());
+        return success(scopedRows(deviceTemperatureDataService.selectRecentDeviceTemperatureDataList()));
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:temperature:export')")
@@ -49,7 +56,8 @@ public class DeviceTemperatureDataController extends BaseController
     @PostMapping("/export")
     public void export(HttpServletResponse response, DeviceTemperatureData deviceTemperatureData)
     {
-        List<DeviceTemperatureData> list = deviceTemperatureDataService.selectDeviceTemperatureDataList(deviceTemperatureData);
+        List<DeviceTemperatureData> list = scopedRows(
+                deviceTemperatureDataService.selectDeviceTemperatureDataList(deviceTemperatureData));
         ExcelUtil<DeviceTemperatureData> util = new ExcelUtil<DeviceTemperatureData>(DeviceTemperatureData.class);
         util.exportCsv(response, list, "temperature_data");
     }
@@ -58,7 +66,8 @@ public class DeviceTemperatureDataController extends BaseController
     @GetMapping(value = "/{dataId}")
     public AjaxResult getInfo(@PathVariable("dataId") Long dataId)
     {
-        return success(deviceTemperatureDataService.selectDeviceTemperatureDataById(dataId));
+        DeviceTemperatureData data = deviceTemperatureDataService.selectDeviceTemperatureDataById(dataId);
+        return success(data != null && accessibleDeviceCodes().contains(data.getDeviceCode()) ? data : null);
     }
 
     @PreAuthorize("@ss.hasPermi('sensor:temperature:add')")
@@ -66,6 +75,10 @@ public class DeviceTemperatureDataController extends BaseController
     @PostMapping
     public AjaxResult add(@RequestBody DeviceTemperatureData deviceTemperatureData)
     {
+        if (deviceTemperatureData == null || !accessibleDeviceCodes().contains(deviceTemperatureData.getDeviceCode()))
+        {
+            return error("设备不存在或无权访问");
+        }
         deviceTemperatureData.setCreateBy(getUsername());
         return toAjax(deviceTemperatureDataService.insertDeviceTemperatureData(deviceTemperatureData));
     }
@@ -75,6 +88,15 @@ public class DeviceTemperatureDataController extends BaseController
     @PutMapping
     public AjaxResult edit(@RequestBody DeviceTemperatureData deviceTemperatureData)
     {
+        DeviceTemperatureData existing = deviceTemperatureData == null || deviceTemperatureData.getDataId() == null
+                ? null : deviceTemperatureDataService.selectDeviceTemperatureDataById(deviceTemperatureData.getDataId());
+        if (deviceTemperatureData == null
+                || (existing != null && !accessibleDeviceCodes().contains(existing.getDeviceCode()))
+                || (deviceTemperatureData.getDeviceCode() != null
+                    && !accessibleDeviceCodes().contains(deviceTemperatureData.getDeviceCode())))
+        {
+            return error("设备不存在或无权访问");
+        }
         deviceTemperatureData.setUpdateBy(getUsername());
         return toAjax(deviceTemperatureDataService.updateDeviceTemperatureData(deviceTemperatureData));
     }
@@ -84,7 +106,36 @@ public class DeviceTemperatureDataController extends BaseController
     @DeleteMapping("/{dataIds}")
     public AjaxResult remove(@PathVariable Long[] dataIds)
     {
+        Set<String> accessibleCodes = accessibleDeviceCodes();
+        if (dataIds == null)
+        {
+            return error("数据不能为空");
+        }
+        for (Long dataId : dataIds)
+        {
+            DeviceTemperatureData data = deviceTemperatureDataService.selectDeviceTemperatureDataById(dataId);
+            if (data == null || !accessibleCodes.contains(data.getDeviceCode()))
+            {
+                return error("包含不存在或无权访问的数据");
+            }
+        }
         return toAjax(deviceTemperatureDataService.deleteDeviceTemperatureDataByIds(dataIds));
+    }
+
+    private List<DeviceTemperatureData> scopedRows(List<DeviceTemperatureData> rows)
+    {
+        Set<String> accessibleCodes = accessibleDeviceCodes();
+        return rows == null ? List.of() : rows.stream()
+                .filter(item -> item != null && accessibleCodes.contains(item.getDeviceCode()))
+                .collect(Collectors.toList());
+    }
+
+    private Set<String> accessibleDeviceCodes()
+    {
+        return phmService.listDevices(null).stream()
+                .map(item -> item.getDeviceCode())
+                .filter(code -> code != null && !code.isBlank())
+                .collect(Collectors.toSet());
     }
 }
 

@@ -1,7 +1,5 @@
 <template>
-  <div class="app-container tree-sidebar-manage-wrap">
-    <tree-panel title="组织机构" :tree-data="deptOptions" search-placeholder="请输入部门名称" storage-key="dept-sidebar-width" :defaultExpandAll="true" @node-click="handleNodeClick" @refresh="getDeptTree" ref="deptTreeRef" />
-    <div class="tree-sidebar-content">
+  <div class="app-container">
       <div class="content-inner">
         <el-form :model="queryParams" ref="queryForm" size="small" :inline="true" v-show="showSearch" label-width="68px">
           <el-form-item label="用户名称" prop="userName">
@@ -52,7 +50,6 @@
             </template>
           </el-table-column>
           <el-table-column label="用户昵称" align="center" key="nickName" prop="nickName" v-if="columns.nickName.visible" :show-overflow-tooltip="true" />
-          <el-table-column label="部门" align="center" key="deptName" prop="dept.deptName" v-if="columns.deptName.visible" :show-overflow-tooltip="true" />
           <el-table-column label="手机号码" align="center" key="phonenumber" prop="phonenumber" v-if="columns.phonenumber.visible" width="120" />
           <el-table-column label="状态" align="center" key="status" v-if="columns.status.visible">
             <template slot-scope="scope">
@@ -73,13 +70,13 @@
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item command="handleResetPwd" icon="el-icon-key" v-hasPermi="['system:user:resetPwd']">重置密码</el-dropdown-item>
                   <el-dropdown-item command="handleAuthRole" icon="el-icon-circle-check" v-hasPermi="['system:user:edit']">分配角色</el-dropdown-item>
+                  <el-dropdown-item command="handleDeviceAuth" icon="el-icon-monitor" v-hasPermi="['system:user:edit']">设备权限</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
             </template>
           </el-table-column>
         </el-table>
         <pagination v-show="total > 0" :total="total" :page.sync="queryParams.pageNum" :limit.sync="queryParams.pageSize" @pagination="getList" />
-      </div>
     </div>
 
     <!-- 添加或修改用户配置对话框 -->
@@ -89,11 +86,6 @@
           <el-col :span="12">
             <el-form-item label="用户昵称" prop="nickName">
               <el-input v-model="form.nickName" placeholder="请输入用户昵称" maxlength="30" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="归属部门" prop="deptId">
-              <treeselect v-model="form.deptId" :options="enabledDeptOptions" :show-count="true" placeholder="请选择归属部门" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -168,10 +160,7 @@
 </template>
 
 <script>
-import { listUser, getUser, delUser, addUser, updateUser, resetUserPwd, changeUserStatus, deptTreeSelect } from "@/api/system/user"
-import Treeselect from "@riophae/vue-treeselect"
-import "@riophae/vue-treeselect/dist/vue-treeselect.css"
-import TreePanel from "@/components/TreePanel"
+import { listUser, getUser, delUser, addUser, updateUser, resetUserPwd, changeUserStatus } from "@/api/system/user"
 import ExcelImportDialog from "@/components/ExcelImportDialog"
 import UserViewDrawer from "./view"
 import passwordRule from "@/utils/passwordRule"
@@ -180,7 +169,7 @@ export default {
   name: "User",
   mixins: [passwordRule],
   dicts: ['sys_normal_disable', 'sys_user_sex'],
-  components: { Treeselect, TreePanel, ExcelImportDialog, UserViewDrawer },
+  components: { ExcelImportDialog, UserViewDrawer },
   data() {
     return {
       // 遮罩层
@@ -199,10 +188,6 @@ export default {
       userList: null,
       // 弹出层标题
       title: "",
-      // 所有部门树选项
-      deptOptions: undefined,
-      // 过滤掉已禁用部门树选项
-      enabledDeptOptions: undefined,
       // 是否显示弹出层
       open: false,
       // 默认密码
@@ -220,14 +205,12 @@ export default {
         userName: undefined,
         phonenumber: undefined,
         status: undefined,
-        deptId: undefined
       },
       // 列信息
       columns: {
         userId: { label: '用户编号', visible: true },
         userName: { label: '用户名称', visible: true },
         nickName: { label: '用户昵称', visible: true },
-        deptName: { label: '部门', visible: true },
         phonenumber: { label: '手机号码', visible: true },
         status: { label: '状态', visible: true },
         createTime: { label: '创建时间', visible: true }
@@ -260,7 +243,6 @@ export default {
   },
   created() {
     this.getList()
-    this.getDeptTree()
     this.getConfigKey("sys.user.initPassword").then(response => {
       this.initPassword = response.msg
     })
@@ -274,30 +256,6 @@ export default {
         this.total = response.total
         this.loading = false
       })
-    },
-    /** 查询部门下拉树结构 */
-    getDeptTree() {
-      deptTreeSelect().then(response => {
-        this.deptOptions = response.data
-        this.enabledDeptOptions = this.filterDisabledDept(JSON.parse(JSON.stringify(response.data)))
-      })
-    },
-    // 过滤禁用的部门
-    filterDisabledDept(deptList) {
-      return deptList.filter(dept => {
-        if (dept.disabled) {
-          return false
-        }
-        if (dept.children && dept.children.length) {
-          dept.children = this.filterDisabledDept(dept.children)
-        }
-        return true
-      })
-    },
-    // 节点单击事件
-    handleNodeClick(data) {
-      this.queryParams.deptId = data.id
-      this.handleQuery()
     },
     // 用户状态修改
     handleStatusChange(row) {
@@ -319,7 +277,6 @@ export default {
     reset() {
       this.form = {
         userId: undefined,
-        deptId: undefined,
         userName: undefined,
         nickName: undefined,
         password: undefined,
@@ -341,8 +298,6 @@ export default {
     resetQuery() {
       this.dateRange = []
       this.resetForm("queryForm")
-      this.queryParams.deptId = undefined
-      this.$refs.deptTreeRef.setCurrentKey(null)
       this.handleQuery()
     },
     // 多选框选中数据
@@ -359,6 +314,9 @@ export default {
           break
         case "handleAuthRole":
           this.handleAuthRole(row)
+          break
+        case "handleDeviceAuth":
+          this.handleDeviceAuth(row)
           break
         default:
           break
@@ -404,6 +362,10 @@ export default {
     handleAuthRole(row) {
       const userId = row.userId
       this.$router.push("/system/user-auth/role/" + userId)
+    },
+    /** 分配设备权限操作 */
+    handleDeviceAuth(row) {
+      this.$router.push("/system/user-auth/device/" + row.userId)
     },
     /** 提交按钮 */
     submitForm() {

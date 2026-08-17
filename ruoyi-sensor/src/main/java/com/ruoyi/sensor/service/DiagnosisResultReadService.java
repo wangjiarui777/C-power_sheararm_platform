@@ -44,18 +44,23 @@ public class DiagnosisResultReadService
 
     public List<EnhancedInferenceRecordEntity> history(String deviceCode, Date from, Date to, int requestedLimit)
     {
+        return history(deviceCode, null, from, to, requestedLimit);
+    }
+
+    public List<EnhancedInferenceRecordEntity> history(String deviceCode, Long pointId, Date from, Date to,
+        int requestedLimit)
+    {
         int limit = Math.max(1, Math.min(5000, requestedLimit));
         if (!"iotdb-primary".equalsIgnoreCase(readMode))
         {
-            return recordMapper.selectManagedHistory(deviceCode, from, to, false, limit);
+            return managedHistory(deviceCode, pointId, from, to, false, limit);
         }
 
         List<EnhancedInferenceRecordEntity> primary = new ArrayList<>();
         boolean iotdbAvailable = true;
         try
         {
-            for (DiagnosisResultSnapshot snapshot :
-                timeSeriesStore.queryDiagnosisHistory(deviceCode, from, to, limit))
+            for (DiagnosisResultSnapshot snapshot : queryDiagnosisHistory(deviceCode, pointId, from, to, limit))
             {
                 primary.add(DiagnosisResultSnapshots.toEntity(snapshot));
             }
@@ -66,8 +71,8 @@ public class DiagnosisResultReadService
             log.warn("Diagnosis reads are falling back to the MySQL synchronization ledger: {}", ex.getMessage());
         }
 
-        List<EnhancedInferenceRecordEntity> mysqlRows = recordMapper.selectManagedHistory(
-            deviceCode, from, to, iotdbAvailable, limit);
+        List<EnhancedInferenceRecordEntity> mysqlRows = managedHistory(
+            deviceCode, pointId, from, to, iotdbAvailable, limit);
         Map<Long, EnhancedInferenceRecordEntity> merged = new LinkedHashMap<>();
         for (EnhancedInferenceRecordEntity row : primary)
         {
@@ -81,5 +86,21 @@ public class DiagnosisResultReadService
         result.sort(Comparator.comparing(EnhancedInferenceRecordEntity::getCreateTime,
             Comparator.nullsLast(Comparator.reverseOrder())));
         return result.size() <= limit ? result : new ArrayList<>(result.subList(0, limit));
+    }
+
+    private List<DiagnosisResultSnapshot> queryDiagnosisHistory(String deviceCode, Long pointId, Date from, Date to,
+        int limit)
+    {
+        return pointId == null
+            ? timeSeriesStore.queryDiagnosisHistory(deviceCode, from, to, limit)
+            : timeSeriesStore.queryDiagnosisHistory(deviceCode, pointId, from, to, limit);
+    }
+
+    private List<EnhancedInferenceRecordEntity> managedHistory(String deviceCode, Long pointId, Date from, Date to,
+        boolean unsyncedOnly, int limit)
+    {
+        return pointId == null
+            ? recordMapper.selectManagedHistory(deviceCode, from, to, unsyncedOnly, limit)
+            : recordMapper.selectManagedHistoryByPoint(deviceCode, pointId, from, to, unsyncedOnly, limit);
     }
 }

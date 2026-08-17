@@ -5,6 +5,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
@@ -144,12 +147,10 @@ public class V2026081602__MatOnlyIngressCleanup extends BaseJavaMigration
         boolean added;
         do
         {
-            try (Statement statement = connection.createStatement())
-            {
-                added = statement.executeUpdate("INSERT IGNORE INTO tmp_mat_cleanup_menu(menu_id) "
-                    + "SELECT menu_id FROM sys_menu WHERE parent_id IN "
-                    + "(SELECT menu_id FROM tmp_mat_cleanup_menu)") > 0;
-            }
+            // MySQL cannot reopen a temporary table when it is both the INSERT
+            // target and the source of a subquery. Resolve descendants in Java
+            // and insert them in a separate statement instead.
+            added = addDescendantMenuIds(connection);
         }
         while (added);
         if (tableExists(connection, "sys_role_menu"))
@@ -160,6 +161,50 @@ public class V2026081602__MatOnlyIngressCleanup extends BaseJavaMigration
         execute(connection, "DELETE FROM sys_menu WHERE menu_id IN "
             + "(SELECT menu_id FROM tmp_mat_cleanup_menu)");
         execute(connection, "DROP TEMPORARY TABLE IF EXISTS tmp_mat_cleanup_menu");
+    }
+
+    private boolean addDescendantMenuIds(Connection connection) throws SQLException
+    {
+        List<Long> parentIds = new ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("SELECT menu_id FROM tmp_mat_cleanup_menu"))
+        {
+            while (result.next())
+            {
+                parentIds.add(result.getLong(1));
+            }
+        }
+        if (parentIds.isEmpty()) return false;
+
+        String placeholders = String.join(",", Collections.nCopies(parentIds.size(), "?"));
+        List<Long> childIds = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(
+            "SELECT menu_id FROM sys_menu WHERE parent_id IN (" + placeholders + ")"))
+        {
+            for (int i = 0; i < parentIds.size(); i++)
+            {
+                statement.setLong(i + 1, parentIds.get(i));
+            }
+            try (ResultSet result = statement.executeQuery())
+            {
+                while (result.next())
+                {
+                    childIds.add(result.getLong(1));
+                }
+            }
+        }
+
+        boolean added = false;
+        try (PreparedStatement statement = connection.prepareStatement(
+            "INSERT IGNORE INTO tmp_mat_cleanup_menu(menu_id) VALUES (?)"))
+        {
+            for (Long childId : childIds)
+            {
+                statement.setLong(1, childId);
+                added |= statement.executeUpdate() > 0;
+            }
+        }
+        return added;
     }
 
     private void dropTable(Connection connection, String table) throws SQLException
