@@ -30,7 +30,7 @@
           <i class="context-state-dot" />{{ optionsLoading ? '正在装载选项' : (contextComplete ? '上下文就绪' : '等待完整选择') }}
         </span>
       </div>
-      <div class="context-field">
+      <div v-if="!isPointBindingBatch" class="context-field">
         <label for="diagnosis-device">01 / 设备</label>
         <el-select id="diagnosis-device" v-model="selectedDeviceCode" filterable clearable placeholder="选择设备" popper-class="dark-select-dropdown" :loading="optionsLoading" :disabled="optionsLoading || uploading" @change="handleDeviceChange">
           <el-option v-for="item in deviceOptions" :key="item.deviceCode" :label="`${item.deviceName || '未命名设备'} · ${item.deviceCode}`" :value="item.deviceCode" />
@@ -50,14 +50,18 @@
           <el-option v-for="item in modelTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </div>
-      <div class="context-link" aria-hidden="true">›</div>
-      <div class="context-field context-field-version">
+      <div v-if="!isPointBindingBatch" class="context-link" aria-hidden="true">›</div>
+      <div v-if="!isPointBindingBatch" class="context-field context-field-version">
         <label for="diagnosis-version">04 / 模型版本</label>
         <el-select id="diagnosis-version" v-model="selectedModelVersion" filterable clearable placeholder="选择可执行版本" popper-class="dark-select-dropdown" :disabled="!selectedModelType || optionsLoading || uploading" @change="handleVersionChange">
           <el-option v-for="item in availableModelVersions" :key="`${item.modelType}-${item.semanticVersion}`" :label="versionOptionLabel(item)" :value="item.semanticVersion" :disabled="!item.available">
             <span>{{ item.semanticVersion }}</span><span class="version-option-status" :class="`status-${String(item.status).toLowerCase()}`">{{ modelStatusText(item.status) }}{{ item.available ? '' : ' · 不可用' }}</span>
           </el-option>
         </el-select>
+      </div>
+      <div v-else class="context-field context-field-version">
+        <label>03 / 模型策略</label>
+        <div class="context-bound-model">按测点绑定模型</div>
       </div>
       <div v-if="contextNotice || retiredVersionSelected" class="context-notice" :class="{ 'is-warning': retiredVersionSelected, 'is-error': contextError }" role="status">
         <i :class="retiredVersionSelected ? 'el-icon-warning-outline' : (contextError ? 'el-icon-circle-close' : 'el-icon-info')" />
@@ -85,6 +89,7 @@
         >
           <span class="point-cell-code">CH {{ item.channelId == null ? '--' : item.channelId }}</span>
           <strong>{{ item.pointName || item.pointCode || `测点 ${item.pointId}` }}</strong>
+          <span class="point-cell-model">{{ item.modelType || '--' }} / {{ item.modelVersion || '--' }}</span>
           <span class="point-cell-status">{{ batchItemStatusText(item.status) }}</span>
           <span v-if="item.result" class="point-cell-metric">健康 {{ item.result.healthIndex == null ? '--' : item.result.healthIndex }} · 风险 {{ riskLevelText(item.result.riskLevel) }}</span>
           <span v-else-if="item.errorMessage" class="point-cell-error" :title="item.errorMessage">{{ item.errorMessage }}</span>
@@ -310,10 +315,13 @@
     <el-dialog title="多测点文件映射" :visible.sync="uploadDialogVisible" width="920px" append-to-body custom-class="dark-dialog mapping-dialog" @open="handleUploadDialogOpen" @closed="handleUploadDialogClosed">
       <div class="upload-dialog-body">
         <el-alert title="每个测点需要一个 .mat 或 .npy 文件；本机文件将在开始诊断时上传" type="info" show-icon :closable="false" class="upload-tip" />
-        <div class="upload-context-summary">{{ selectedDeviceCode }} / {{ selectedPointLabel }} / {{ selectedModelLabel }} / {{ selectedModelVersion }}</div>
+        <div class="upload-context-summary">{{ selectedDeviceCode }} / {{ selectedPointLabel }} / {{ isPointBindingBatch ? '按测点绑定模型' : `${selectedModelLabel} / ${selectedModelVersion}` }}</div>
         <el-table :data="mappingRows" size="mini" class="mapping-table" highlight-current-row @row-click="row => selectMappingPoint(row.id)">
           <el-table-column label="测点" min-width="180">
             <template slot-scope="scope"><strong>{{ scope.row.pointName || scope.row.pointCode }}</strong><small>CH {{ scope.row.channelId }}</small></template>
+          </el-table-column>
+          <el-table-column label="绑定模型" min-width="145">
+            <template slot-scope="scope">{{ isPointBindingBatch ? boundModelLabel(scope.row) : `${selectedModelType} / ${selectedModelVersion}` }}</template>
           </el-table-column>
           <el-table-column label="已映射文件" min-width="260" show-overflow-tooltip>
             <template slot-scope="scope">{{ scope.row.attachmentName || '尚未配置' }}</template>

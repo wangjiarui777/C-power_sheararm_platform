@@ -22,9 +22,11 @@ import com.ruoyi.sensor.domain.entity.InferenceTaskEntity;
 import com.ruoyi.sensor.domain.entity.ModelReleaseEntity;
 import com.ruoyi.sensor.domain.entity.PhmAttachmentEntity;
 import com.ruoyi.sensor.domain.entity.PhmDeviceEntity;
+import com.ruoyi.sensor.domain.entity.PhmDiagnosisBindingEntity;
 import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
 import com.ruoyi.sensor.mapper.InferenceTaskMapper;
 import com.ruoyi.sensor.mapper.ModelReleaseMapper;
+import com.ruoyi.sensor.mapper.PhmDiagnosisBindingMapper;
 import com.ruoyi.sensor.domain.query.PhmDeviceScopeQuery;
 import com.ruoyi.sensor.service.PhmDataScopeService;
 import com.ruoyi.sensor.service.PhmAttachmentStorageService;
@@ -96,6 +98,9 @@ public class VibrationDiagnosisController
 
     @Autowired
     private ModelReleaseMapper modelReleaseMapper;
+
+    @Autowired
+    private PhmDiagnosisBindingMapper diagnosisBindingMapper;
 
     public VibrationDiagnosisController(TimeSeriesAnalysisService timeSeriesAnalysisService,
         VibrationAnalysisBatchService batchService,
@@ -177,10 +182,19 @@ public class VibrationDiagnosisController
             .collect(java.util.stream.Collectors.toMap(PhmDeviceEntity::getId, device -> device,
                 (left, right) -> left, LinkedHashMap::new));
 
-        List<Map<String, Object>> pointOptions = phmService.listMeasurePoints(null).stream()
+        List<PhmMeasurePointEntity> availablePoints = phmService.listMeasurePoints(null).stream()
             .filter(point -> accessibleDevicesById.containsKey(point.getDeviceId()))
             .filter(point -> !Boolean.FALSE.equals(point.getEnabled()))
             .filter(point -> "vibration".equalsIgnoreCase(String.valueOf(point.getSignalType()).trim()))
+            .collect(java.util.stream.Collectors.toList());
+        Map<Long, List<PhmDiagnosisBindingEntity>> bindingsByPoint = availablePoints.isEmpty() ? Map.of()
+            : diagnosisBindingMapper.selectList(new LambdaQueryWrapper<PhmDiagnosisBindingEntity>()
+                .in(PhmDiagnosisBindingEntity::getPointId,
+                    availablePoints.stream().map(PhmMeasurePointEntity::getId).toList())
+                .eq(PhmDiagnosisBindingEntity::getEnabled, true))
+                .stream().collect(java.util.stream.Collectors.groupingBy(PhmDiagnosisBindingEntity::getPointId));
+
+        List<Map<String, Object>> pointOptions = availablePoints.stream()
             .map(point -> {
                 PhmDeviceEntity owner = accessibleDevicesById.get(point.getDeviceId());
                 Map<String, Object> option = new LinkedHashMap<>();
@@ -193,6 +207,10 @@ public class VibrationDiagnosisController
                 option.put("channelId", point.getChannelId());
                 option.put("signalType", point.getSignalType());
                 option.put("enabled", point.getEnabled());
+                PointBindingStatus binding = pointBindingStatus(owner, point, bindingsByPoint.get(point.getId()));
+                option.put("boundModelType", binding.modelType);
+                option.put("boundModelVersion", binding.modelVersion);
+                option.put("bindingStatus", binding.status);
                 return option;
             }).collect(java.util.stream.Collectors.toList());
 
@@ -493,6 +511,7 @@ public class VibrationDiagnosisController
         trustedPayload.put("deviceCode", device.getDeviceCode());
         trustedPayload.put("modelType", modelType);
         trustedPayload.put("modelVersion", resolvedModel.modelVersion);
+        trustedPayload.put("sourceType", "MANUAL");
         if (point != null)
         {
             trustedPayload.put("pointId", point.getId());
@@ -502,7 +521,7 @@ public class VibrationDiagnosisController
         task.setRequestId(UUID.randomUUID().toString());
         task.setIdempotencyKey(idempotencyKey);
         task.setAttemptNo(1);
-        task.setDeviceCode(String.valueOf(payload.get("deviceCode")).trim());
+        task.setDeviceCode(device.getDeviceCode());
         task.setPointId(point == null ? null : point.getId());
         task.setChannelId(point == null ? null : point.getChannelId());
         task.setModelType(modelType);
@@ -510,6 +529,7 @@ public class VibrationDiagnosisController
         task.setInputType("ATTACHMENT");
         task.setInputRef(String.valueOf(attachmentId));
         task.setInputSha256(attachment.getSha256());
+        task.setSourceType("MANUAL");
         task.setStatus("PENDING");
         task.setInputJson(JSON.toJSONString(trustedPayload));
         task.setCreatedBy(SecurityUtils.getUsername());
@@ -544,13 +564,11 @@ public class VibrationDiagnosisController
             {
                 return AjaxResult.error("无权访问指定设备");
             }
-            String modelType = stringValue(payload.get("modelType"), defaultModelType);
-            ResolvedModel model = resolveModel(modelType, stringValue(payload.get("modelVersion"), null));
             List<Map<String, Object>> items = ((List<?>) payload.get("items")).stream()
                 .filter(Map.class::isInstance).map(item -> (Map<String, Object>) item).toList();
             DiagnosisBatchService.BatchCreation creation = diagnosisBatchService.create(
-                device, modelType, model.modelVersion,
-                stringValue(payload.get("clientRequestId"), null), items, SecurityUtils.getUsername());
+                device, stringValue(payload.get("clientRequestId"), null), items,
+                resolvePointBoundModels(device, items), SecurityUtils.getUsername());
             if (!creation.isDuplicate())
             {
                 creation.getTasks().forEach(task -> diagnosisExecutor.execute(() -> executeTask(task.getId())));
@@ -770,6 +788,70 @@ public class VibrationDiagnosisController
         return point;
     }
 
+    private Map<Long, DiagnosisBatchService.PointModel> resolvePointBoundModels(PhmDeviceEntity device,
+        List<Map<String, Object>> items)
+    {
+        Map<Long, DiagnosisBatchService.PointModel> models = new LinkedHashMap<>();
+        if (items == null)
+        {
+            return models;
+        }
+        for (Map<String, Object> item : items)
+        {
+            Long pointId = toLong(item == null ? null : item.get("pointId"), null);
+            if (pointId == null)
+            {
+                throw new IllegalArgumentException("每个测点都必须指定 pointId");
+            }
+            PhmMeasurePointEntity point = resolveDiagnosisPoint(device, pointId);
+            List<PhmDiagnosisBindingEntity> bindings = diagnosisBindingMapper.selectList(
+                new LambdaQueryWrapper<PhmDiagnosisBindingEntity>()
+                    .eq(PhmDiagnosisBindingEntity::getPointId, pointId)
+                    .eq(PhmDiagnosisBindingEntity::getEnabled, true));
+            PointBindingStatus binding = pointBindingStatus(device, point, bindings);
+            if (!"READY".equals(binding.status))
+            {
+                throw new IllegalArgumentException("测点 " + point.getPointCode() + " 的模型绑定不可用: "
+                    + binding.status);
+            }
+            models.put(pointId, new DiagnosisBatchService.PointModel(binding.modelType, binding.modelVersion));
+        }
+        return models;
+    }
+
+    private PointBindingStatus pointBindingStatus(PhmDeviceEntity device, PhmMeasurePointEntity point,
+        List<PhmDiagnosisBindingEntity> bindings)
+    {
+        if (bindings == null || bindings.isEmpty())
+        {
+            return new PointBindingStatus(null, null, "UNBOUND");
+        }
+        if (bindings.size() != 1)
+        {
+            return new PointBindingStatus(null, null, "CONFLICT");
+        }
+        PhmDiagnosisBindingEntity binding = bindings.get(0);
+        if (device == null || point == null || !device.getId().equals(binding.getDeviceId())
+            || !device.getDeviceCode().equals(binding.getDeviceCode()) || point.getChannelId() == null
+            || !Long.valueOf(point.getChannelId()).equals(binding.getChannelId()))
+        {
+            return new PointBindingStatus(binding.getModelType(), binding.getModelVersion(), "MISMATCH");
+        }
+        if (!SUPPORTED_MODEL_TYPES.contains(binding.getModelType()))
+        {
+            return new PointBindingStatus(binding.getModelType(), binding.getModelVersion(), "INVALID_MODEL");
+        }
+        try
+        {
+            ResolvedModel resolved = resolveModel(binding.getModelType(), binding.getModelVersion());
+            return new PointBindingStatus(binding.getModelType(), resolved.modelVersion, "READY");
+        }
+        catch (IllegalArgumentException ex)
+        {
+            return new PointBindingStatus(binding.getModelType(), binding.getModelVersion(), "MODEL_UNAVAILABLE");
+        }
+    }
+
     private ResolvedModel resolveModel(String modelType, String requestedVersion)
     {
         if (!SUPPORTED_MODEL_TYPES.contains(modelType))
@@ -887,6 +969,20 @@ public class VibrationDiagnosisController
         {
             this.modelVersion = modelVersion;
             this.release = release;
+        }
+    }
+
+    private static final class PointBindingStatus
+    {
+        private final String modelType;
+        private final String modelVersion;
+        private final String status;
+
+        private PointBindingStatus(String modelType, String modelVersion, String status)
+        {
+            this.modelType = modelType;
+            this.modelVersion = modelVersion;
+            this.status = status;
         }
     }
 
@@ -1350,10 +1446,13 @@ public class VibrationDiagnosisController
 
         Map<String, Object> latest = new LinkedHashMap<>();
         latest.put("deviceCode", deviceCode);
-        latest.put("taskId", nested.get("taskId"));
-        latest.put("requestId", nested.get("requestId"));
+        // Task/device/point/channel are established by the trusted Java-side task.  Python may
+        // echo them for traceability but must never be allowed to redirect a diagnosis record.
+        latest.put("taskId", payload == null ? null : payload.get("taskId"));
+        latest.put("requestId", payload == null ? null : payload.get("requestId"));
         latest.put("pointId", payload == null ? null : payload.get("pointId"));
         latest.put("channelId", payload == null ? null : payload.get("channelId"));
+        latest.put("sourceType", payload == null ? "MANUAL" : stringValue(payload.get("sourceType"), "MANUAL"));
         latest.put("sampleTime", nested.get("sampleTime"));
         latest.put("modelVersion", modelVersion);
         latest.put("modelType", modelType);

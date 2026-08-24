@@ -260,6 +260,7 @@ public class MatFileReceiverService implements SmartLifecycle
 
                     PhmAttachmentEntity attachment = attachmentStorage.importDiagnosisFile(temp,
                         mapping.device.getId(), mapping.point.getId(), header.getChannelId(), "mat-tcp");
+                    applyMapping(ingest, mapping.device, mapping.point, header.getChannelId());
                     Map<String, Object> task = diagnosisController.submitInternalMatTask(
                         mapping.device.getDeviceCode(), mapping.point.getId(), header.getChannelId(),
                         attachment, mapping.binding.getModelType(), mapping.binding.getModelVersion(),
@@ -314,6 +315,9 @@ public class MatFileReceiverService implements SmartLifecycle
         SensorIngestFileEntity entity = new SensorIngestFileEntity();
         entity.setSourceType("MAT_TCP");
         entity.setSourceRef(String.valueOf(socket.getRemoteSocketAddress()));
+        entity.setDeviceCode(header.getDeviceCode());
+        entity.setPointCode(header.getPointCode());
+        entity.setChannelId(header.getChannelId());
         entity.setFileName(header.getFilename());
         entity.setFileExt("mat");
         entity.setFileSize(header.getFilesize());
@@ -328,6 +332,16 @@ public class MatFileReceiverService implements SmartLifecycle
         ingestMapper.insert(entity);
         receivedCount.incrementAndGet();
         return entity;
+    }
+
+    private void applyMapping(SensorIngestFileEntity ingest, PhmDeviceEntity device,
+        PhmMeasurePointEntity point, Integer channelId)
+    {
+        ingest.setDeviceId(device.getId());
+        ingest.setDeviceCode(device.getDeviceCode());
+        ingest.setPointId(point.getId());
+        ingest.setPointCode(point.getPointCode());
+        ingest.setChannelId(channelId);
     }
 
     private Mapping resolveMapping(MatFileProtocolHeader header)
@@ -357,7 +371,15 @@ public class MatFileReceiverService implements SmartLifecycle
             .eq(PhmDiagnosisBindingEntity::getPointId, point.getId())
             .eq(PhmDiagnosisBindingEntity::getEnabled, true));
         if (bindings.size() > 1) throw new IllegalArgumentException("测点存在多个启用的主诊断模型");
-        return new Mapping(device, point, bindings.isEmpty() ? null : bindings.get(0));
+        if (bindings.isEmpty()) throw new IllegalArgumentException("测点未绑定启用的诊断模型");
+        PhmDiagnosisBindingEntity binding = bindings.get(0);
+        if (!device.getId().equals(binding.getDeviceId())
+            || !device.getDeviceCode().equals(binding.getDeviceCode())
+            || !header.getChannelId().equals(binding.getChannelId()))
+        {
+            throw new IllegalArgumentException("诊断模型绑定与设备、测点或物理通道不一致");
+        }
+        return new Mapping(device, point, binding);
     }
 
     private void receiveBody(DataInputStream input, Path target, long expectedSize, String expectedSha) throws Exception
@@ -448,6 +470,7 @@ public class MatFileReceiverService implements SmartLifecycle
         }
         PhmAttachmentEntity attachment = attachmentStorage.importDiagnosisFile(source, deviceId, pointId,
             channelNo, "mat-tcp");
+        applyMapping(ingest, device, point, channelNo);
         Map<String, Object> task = diagnosisController.submitInternalMatTask(device.getDeviceCode(), pointId,
             channelNo, attachment, bindings.get(0).getModelType(), bindings.get(0).getModelVersion(),
             ingest.getAcquisitionTime() == null

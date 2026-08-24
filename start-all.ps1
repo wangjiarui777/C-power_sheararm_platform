@@ -371,6 +371,40 @@ function Start-PortableRedis {
     return $true
 }
 
+function Test-IsAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Invoke-ElevatedServiceStart {
+    param(
+        [Parameter(Mandatory = $true)][string]$DisplayName,
+        [Parameter(Mandatory = $true)][string]$ServiceName
+    )
+
+    $shellPath = (Get-Process -Id $PID -ErrorAction Stop).Path
+    $escapedServiceName = $ServiceName.Replace("'", "''")
+    $command = @"
+`$ErrorActionPreference = 'Stop'
+Start-Service -Name '$escapedServiceName' -ErrorAction Stop
+"@
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+
+    Write-Host "[UAC] $DisplayName 服务 $ServiceName 需要管理员权限，正在请求授权" -ForegroundColor Yellow
+    try {
+        $elevatedProcess = Start-Process -FilePath $shellPath -Verb RunAs -ArgumentList @(
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $encodedCommand
+        ) -Wait -PassThru -ErrorAction Stop
+    } catch {
+        throw "未能获取管理员权限来启动 $DisplayName 服务 $ServiceName。请接受 UAC 提示，或先在管理员 PowerShell 中执行 Start-Service -Name '$ServiceName'；原始错误：$($_.Exception.Message)"
+    }
+
+    if ($elevatedProcess.ExitCode -ne 0) {
+        throw "管理员启动命令未能启动 $DisplayName 服务 $ServiceName（退出码：$($elevatedProcess.ExitCode)）。这通常是服务自身配置或数据文件错误；请检查 Windows 事件查看器和该服务的错误日志。"
+    }
+}
+
 Import-LocalEnvironment -Path (Join-Path $projectRoot '.env')
 
 $iotdbHomeCandidate = if ([string]::IsNullOrWhiteSpace($env:IOTDB_HOME)) {
@@ -401,16 +435,42 @@ function Start-DependencyService {
         $names = ($CandidateNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ', '
         throw "未找到 $DisplayName Windows 服务（尝试过：$names）。请安装服务或在 .env 中设置对应服务名。"
     }
+    $resolvedServiceName = $service.Name
 
-    if ($service.Status -ne 'Running') {
+    if ($service.Status -eq 'StopPending') {
+        Write-Host "[WAIT] $DisplayName service=$($service.Name) 正在停止，等待状态稳定" -ForegroundColor DarkGray
+        $stopDeadline = (Get-Date).AddSeconds($TimeoutSeconds)
+        while ($service.Status -eq 'StopPending' -and (Get-Date) -lt $stopDeadline) {
+            Start-Sleep -Milliseconds 500
+            $service.Refresh()
+        }
+        if ($service.Status -eq 'StopPending') {
+            throw "$DisplayName 服务 $($service.Name) 在 ${TimeoutSeconds}s 内未能停止，请稍后重试。"
+        }
+    }
+
+    if ($service.Status -in @('StartPending', 'ContinuePending', 'Running')) {
+        Write-Host "[WAIT] $DisplayName service=$($service.Name) 状态为 $($service.Status)，等待端口就绪" -ForegroundColor DarkGray
+    } elseif ($service.Status -eq 'Stopped') {
+        if ($service.StartType -eq 'Disabled') {
+            throw "$DisplayName 服务 $($service.Name) 已被禁用。请先由管理员启用该服务；脚本不会自动修改服务启动类型。"
+        }
         Write-Host "[START] $DisplayName service=$($service.Name)" -ForegroundColor DarkCyan
         try {
             Start-Service -Name $service.Name -ErrorAction Stop
         } catch {
-            throw "无法启动 $DisplayName 服务 $($service.Name)。请以管理员身份运行 PowerShell；原始错误：$($_.Exception.Message)"
+            $directStartError = $_.Exception.Message
+            $service = Get-Service -Name $resolvedServiceName -ErrorAction SilentlyContinue
+            if ($service -and $service.Status -in @('StartPending', 'ContinuePending', 'Running')) {
+                Write-Host "[WAIT] $DisplayName service=$($service.Name) 已由其他进程启动，等待端口就绪" -ForegroundColor DarkGray
+            } elseif (Test-IsAdministrator) {
+                throw "已使用管理员权限，但无法启动 $DisplayName 服务 $resolvedServiceName。请检查 Windows 事件查看器和该服务的错误日志；原始错误：$directStartError"
+            } else {
+                Invoke-ElevatedServiceStart -DisplayName $DisplayName -ServiceName $resolvedServiceName
+            }
         }
     } else {
-        Write-Host "[WAIT] $DisplayName service=$($service.Name) 已运行，等待端口就绪" -ForegroundColor DarkGray
+        throw "$DisplayName 服务 $($service.Name) 当前状态为 $($service.Status)，无法自动启动。请先将服务恢复为 Running 或 Stopped 后重试。"
     }
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -418,7 +478,9 @@ function Start-DependencyService {
         Start-Sleep -Seconds 1
     }
     if (-not (Test-TcpEndpoint -HostName '127.0.0.1' -Port $Port)) {
-        throw "$DisplayName 服务 $($service.Name) 已启动，但 127.0.0.1:$Port 在 ${TimeoutSeconds}s 内未就绪"
+        $latestService = Get-Service -Name $resolvedServiceName -ErrorAction SilentlyContinue
+        $latestStatus = if ($latestService) { [string]$latestService.Status } else { 'Unknown' }
+        throw "$DisplayName 服务 $resolvedServiceName 启动后，127.0.0.1:$Port 在 ${TimeoutSeconds}s 内未就绪（当前服务状态：$latestStatus）。请检查 Windows 事件查看器和该服务的错误日志。"
     }
     Write-Host "[READY] $DisplayName -> 127.0.0.1:$Port" -ForegroundColor Green
 }

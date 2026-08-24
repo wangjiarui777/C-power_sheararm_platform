@@ -1,56 +1,73 @@
 <template>
   <div class="login">
-    <el-form ref="loginForm" :model="loginForm" :rules="loginRules" class="login-form">
-      <h3 class="title">{{ title }}</h3>
-      <el-form-item prop="username">
-        <el-input
-          v-model="loginForm.username"
-          type="text"
-          auto-complete="off"
-          placeholder="账号"
-        >
-          <svg-icon slot="prefix" icon-class="user" class="el-input__icon input-icon" />
-        </el-input>
-      </el-form-item>
-      <el-form-item prop="password">
-        <el-input
-          v-model="loginForm.password"
-          type="password"
-          auto-complete="off"
-          placeholder="密码"
-          @keyup.enter.native="handleLogin"
-        >
-          <svg-icon slot="prefix" icon-class="password" class="el-input__icon input-icon" />
-        </el-input>
-      </el-form-item>
-      <el-form-item prop="code" v-if="captchaEnabled">
-        <el-input
-          v-model="loginForm.code"
-          auto-complete="off"
-          placeholder="验证码"
-          style="width: 63%"
-          @keyup.enter.native="handleLogin"
-        >
-          <svg-icon slot="prefix" icon-class="validCode" class="el-input__icon input-icon" />
-        </el-input>
-        <div class="login-code">
-          <img :src="codeUrl" @click="getCode" class="login-code-img"/>
+    <div class="login-stage">
+      <!-- 品牌区：平台身份 + 振动信号母题 -->
+      <section class="brand-panel">
+        <div class="brand-head">
+          <span class="brand-eyebrow">PHM / CONDITION MONITORING</span>
+          <h1 class="brand-title">{{ title }}</h1>
+          <p class="brand-subtitle">振动监测、模型诊断与告警处置。</p>
         </div>
-      </el-form-item>
-      <el-checkbox v-model="loginForm.rememberMe" style="margin:0px 0px 25px 0px;">记住账号</el-checkbox>
-      <el-form-item style="width:100%;">
-        <el-button
-          :loading="loading"
-          size="medium"
-          type="primary"
-          style="width:100%;"
-          @click.native.prevent="handleLogin"
-        >
-          <span v-if="!loading">登 录</span>
-          <span v-else>登 录 中...</span>
-        </el-button>
-      </el-form-item>
-    </el-form>
+      </section>
+
+      <!-- 登录表单区 -->
+      <section class="form-panel">
+        <el-form ref="loginForm" :model="loginForm" :rules="loginRules" class="auth-form">
+          <h3 class="title">账号登录</h3>
+          <p class="form-hint">使用平台账号进入控制台</p>
+          <el-form-item prop="username">
+            <el-input
+              v-model="loginForm.username"
+              type="text"
+              auto-complete="off"
+              placeholder="账号"
+            >
+              <svg-icon slot="prefix" icon-class="user" class="el-input__icon input-icon" />
+            </el-input>
+          </el-form-item>
+          <el-form-item prop="password">
+            <el-input
+              v-model="loginForm.password"
+              type="password"
+              auto-complete="off"
+              placeholder="密码"
+              @keyup.enter.native="handleLogin"
+            >
+              <svg-icon slot="prefix" icon-class="password" class="el-input__icon input-icon" />
+            </el-input>
+          </el-form-item>
+          <el-form-item prop="code" v-if="captchaEnabled">
+            <div class="code-row">
+              <el-input
+                v-model="loginForm.code"
+                auto-complete="off"
+                placeholder="验证码"
+                @keyup.enter.native="handleLogin"
+              >
+                <svg-icon slot="prefix" icon-class="validCode" class="el-input__icon input-icon" />
+              </el-input>
+              <div class="login-code">
+                <img :src="codeUrl" @click="getCode" class="login-code-img" title="点击刷新验证码" />
+              </div>
+            </div>
+          </el-form-item>
+          <el-checkbox v-model="loginForm.rememberMe" style="margin:0px 0px 25px 0px;">记住账号</el-checkbox>
+          <el-form-item style="width:100%;">
+            <el-button
+              :loading="loading"
+              size="medium"
+              type="primary"
+              style="width:100%;"
+              @click.native.prevent="handleLogin"
+            >
+              <span v-if="!loading">登 录</span>
+              <span v-else>登 录 中...</span>
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </section>
+    </div>
+
     <!--  底部  -->
     <div class="el-login-footer">
       <span>{{ footerContent }}</span>
@@ -166,61 +183,168 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100%;
-  background-image: url("../assets/images/login-background.jpg");
-  background-size: cover;
-}
-.title {
-  margin: 0px auto 30px auto;
-  text-align: center;
-  color: #ffffff;
+  min-height: 100%;
+  padding: 48px 24px;
 }
 
-.login-form {
-  border-radius: 6px;
-  background: #1a1a1a;
-  width: 400px;
-  padding: 25px 25px 5px 25px;
-  z-index: 1;
+/* 双栏舞台：品牌区 + 表单区 */
+.login-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  width: min(860px, 100%);
+  min-height: 460px;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+}
+
+/* ---- 品牌区 ---- */
+.brand-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+}
+
+.brand-eyebrow {
+  color: var(--color-accent);
+  font-family: var(--font-data);
+  font-size: 12px;
+  letter-spacing: 0.24em;
+}
+
+.brand-title {
+  margin: 12px 0 10px;
+  color: var(--color-heading);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+
+.brand-subtitle {
+  margin: 0;
+  max-width: 28ch;
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ---- 表单区 ---- */
+.form-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 40px;
+  background: var(--color-surface-soft);
+}
+
+.auth-form {
+  width: 100%;
+
   .el-input {
-    height: 38px;
+    height: 40px;
+
     input {
-      height: 38px;
+      height: 40px;
     }
   }
+
   .input-icon {
     height: 39px;
     width: 14px;
     margin-left: 2px;
   }
 }
-.login-tip {
-  font-size: 13px;
-  text-align: center;
-  color: #ffffff;
+
+.title {
+  margin: 0 0 8px;
+  color: var(--color-heading);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
+
+.form-hint {
+  margin: 0 0 26px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.code-row {
+  display: flex;
+  gap: 10px;
+
+  .el-input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .login-code {
-  width: 33%;
-  height: 38px;
-  float: right;
+  flex: none;
+  width: 108px;
+  height: 40px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+
   img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
     cursor: pointer;
     vertical-align: middle;
   }
 }
-.el-login-footer {
+
+.login-code-img {
   height: 40px;
-  line-height: 40px;
+}
+
+.el-login-footer {
   position: fixed;
   bottom: 0;
   width: 100%;
+  height: 40px;
+  line-height: 40px;
   text-align: center;
-  color: #ffffff;
-  font-family: Arial;
+  color: var(--color-muted);
+  font-family: Arial, sans-serif;
   font-size: 12px;
   letter-spacing: 1px;
 }
-.login-code-img {
-  height: 38px;
+
+/* 小屏：折叠品牌区，聚焦登录任务 */
+@media (max-width: 900px) {
+  .login {
+    padding: 28px 16px;
+  }
+
+  .login-stage {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .brand-panel {
+    gap: 14px;
+    padding: 28px 26px 22px;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .brand-title {
+    font-size: 24px;
+  }
+
+  .form-panel {
+    padding: 30px 26px 26px;
+  }
 }
+
 </style>

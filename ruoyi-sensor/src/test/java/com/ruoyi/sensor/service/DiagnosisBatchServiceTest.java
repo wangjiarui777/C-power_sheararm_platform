@@ -64,10 +64,11 @@ class DiagnosisBatchServiceTest
             return 1;
         });
 
-        DiagnosisBatchService.BatchCreation created = service.create(device, "bearing",
-            "v1", "client-1", List.of(
+        DiagnosisBatchService.BatchCreation created = service.create(device, "client-1", List.of(
                 Map.of("pointId", 101L, "attachmentId", 201L),
-                Map.of("pointId", 102L, "attachmentId", 202L)), "tester");
+                Map.of("pointId", 102L, "attachmentId", 202L)), Map.of(
+                    101L, new DiagnosisBatchService.PointModel("gear", "gear-v1"),
+                    102L, new DiagnosisBatchService.PointModel("bearing", "bearing-v2")), "tester");
 
         assertEquals(301L, created.getBatch().getId());
         assertEquals("PENDING", created.getBatch().getStatus());
@@ -75,6 +76,10 @@ class DiagnosisBatchServiceTest
         assertTrue(created.getTasks().stream().allMatch(task -> task.getBatchId().equals(301L)));
         assertEquals(List.of(101L, 102L), created.getTasks().stream()
             .map(InferenceTaskEntity::getPointId).toList());
+        assertEquals(List.of("gear", "bearing"), created.getTasks().stream()
+            .map(InferenceTaskEntity::getModelType).toList());
+        assertEquals(List.of("gear-v1", "bearing-v2"), created.getTasks().stream()
+            .map(InferenceTaskEntity::getRequestedModelVersion).toList());
         verify(taskMapper, org.mockito.Mockito.times(2)).insert(any(InferenceTaskEntity.class));
     }
 
@@ -87,8 +92,8 @@ class DiagnosisBatchServiceTest
             .thenReturn(attachment(201L, 10L, 999L, 1));
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-            () -> service.create(device, "bearing", "v1", "client-2",
-                List.of(Map.of("pointId", 101L, "attachmentId", 201L)), "tester"));
+            () -> service.create(device, "client-2", List.of(Map.of("pointId", 101L, "attachmentId", 201L)),
+                Map.of(101L, new DiagnosisBatchService.PointModel("bearing", "v1")), "tester"));
 
         assertTrue(error.getMessage().contains("未绑定所选测点"));
         verify(batchMapper, never()).insert(any(DiagnosisBatchEntity.class));

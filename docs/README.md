@@ -166,6 +166,8 @@ npm ci
 .\start-all.ps1
 ```
 
+如果 MySQL/Redis Windows 服务尚未运行，脚本会仅针对服务启动操作弹出 UAC 授权提示；无需以管理员身份运行整个开发环境。若取消授权，需先在管理员 PowerShell 中启动对应服务后重试。
+
 脚本按依赖顺序完成：环境/模型/SHA 校验 → MySQL/Redis 检查（含 Streams 能力）→ 旧进程清理 → Maven 构建 → 启动 IoTDB、统一 FastAPI（5000）、Spring Boot（8080，dev profile）、Vue（80）→ 就绪检查 → 写日志与 PID。
 
 常用参数：

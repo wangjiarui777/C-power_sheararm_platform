@@ -53,64 +53,49 @@ export default {
 
 <style scoped>
 .oil-metric-card {
-  position: relative;
   min-width: 0;
   padding: 16px;
-  overflow: hidden;
-  border: 1px solid var(--chart-border, #263645);
-  border-top: 3px solid var(--oil-card-accent, #f0b44d);
-  border-radius: 14px;
-  background: var(--chart-panel, #17212b);
-  color: var(--chart-text, #e6edf3);
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--oil-card-accent, var(--color-accent));
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
-.oil-metric-card::after {
-  content: "";
-  position: absolute;
-  top: -54px;
-  right: -42px;
-  width: 112px;
-  height: 112px;
-  border-radius: 50%;
-  background: var(--oil-card-glow, rgba(240, 180, 77, 0.08));
-  pointer-events: none;
-}
-.tone-oil { --oil-card-accent: #f0b44d; --oil-card-glow: rgba(240, 180, 77, 0.10); }
-.tone-water { --oil-card-accent: #38bdf8; --oil-card-glow: rgba(56, 189, 248, 0.09); }
-.tone-state { --oil-card-accent: #10b981; --oil-card-glow: rgba(16, 185, 129, 0.09); }
+.tone-oil { --oil-card-accent: #d6a14a; }
+.tone-water { --oil-card-accent: var(--color-info); }
+.tone-state { --oil-card-accent: var(--color-success); }
 .state-warning { --oil-card-accent: #f59e0b; }
 .state-alarm,
 .state-bad { --oil-card-accent: #ef4444; }
 .state-offline,
 .state-unknown { --oil-card-accent: #64748b; }
 .metric-card-head {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 13px;
-  border-bottom: 1px solid var(--chart-border, #263645);
+  border-bottom: 1px solid var(--color-border);
 }
 .metric-eyebrow {
   display: block;
   margin-bottom: 4px;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 11px;
   letter-spacing: .12em;
 }
 h3 {
   margin: 0;
-  color: var(--chart-text, #e6edf3);
+  color: var(--color-heading);
   font-size: 16px;
   line-height: 1.2;
 }
 .metric-status {
   flex: none;
   padding: 4px 8px;
-  border: 1px solid var(--chart-border, #263645);
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 11px;
 }
 .state-normal .metric-status,
@@ -132,7 +117,7 @@ h3 {
 .metric-reading > span {
   display: block;
   overflow: hidden;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -146,8 +131,8 @@ h3 {
 }
 .metric-number strong {
   overflow: hidden;
-  color: var(--chart-text, #e6edf3);
-  font-family: "Bahnschrift SemiBold", "DIN Alternate", Consolas, monospace;
+  color: var(--color-text);
+  font-family: var(--font-data);
   font-size: 24px;
   font-weight: 600;
   line-height: 1;
@@ -155,7 +140,7 @@ h3 {
 }
 .metric-number small {
   flex: none;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 11px;
 }
 @media (max-width: 900px) {

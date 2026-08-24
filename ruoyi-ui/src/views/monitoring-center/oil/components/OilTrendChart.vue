@@ -151,9 +151,9 @@ export default {
 .oil-trend-card {
   min-width: 0;
   padding: 16px;
-  border: 1px solid var(--chart-border, #263645);
-  border-radius: 14px;
-  background: var(--chart-panel, #17212b);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 .trend-head {
   display: flex;
@@ -161,16 +161,16 @@ export default {
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--chart-border, #263645);
+  border-bottom: 1px solid var(--color-border);
 }
 .trend-head span,
 .trend-meta {
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 12px;
 }
 h3 {
   margin: 4px 0 0;
-  color: var(--chart-text, #e6edf3);
+  color: var(--color-heading);
   font-size: 16px;
 }
 .trend-stage { position: relative; }
@@ -181,11 +181,11 @@ h3 {
   display: grid;
   justify-items: center;
   gap: 7px;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   pointer-events: none;
 }
-.trend-empty i { color: #f0b44d; font-size: 28px; }
-.trend-empty strong { color: var(--chart-text, #e6edf3); font-size: 14px; }
+.trend-empty i { color: #d6a14a; font-size: 28px; }
+.trend-empty strong { color: var(--color-text); font-size: 14px; }
 .trend-empty span { font-size: 12px; }
 @media (max-width: 900px) {
   .oil-trend-chart { height: 350px; }

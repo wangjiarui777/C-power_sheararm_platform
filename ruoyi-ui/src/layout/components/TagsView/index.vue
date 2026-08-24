@@ -461,16 +461,7 @@ $tags-bar-height: 34px;
     background-color: #42b983;
     color: #ffffff;
     border-color: #42b983;
-    &::before {
-      content: '';
-      background: #1a1a1a;
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      position: relative;
-      margin-right: 2px;
-    }
+    &::before { content: none; }
   }
 
   &:not(.tags-view-container--chrome) .tags-view-wrapper .tags-view-item.active.has-icon::before {

@@ -1,6 +1,8 @@
 package com.ruoyi.sensor.domain.vo;
 
 import java.util.List;
+import java.util.Map;
+import com.ruoyi.sensor.domain.entity.PhmAlarmEventEntity;
 
 public class MonitoringOverviewVo
 {
@@ -13,6 +15,10 @@ public class MonitoringOverviewVo
     private List<DevicePointVo> devicePoints;
     private Double vibrationThreshold;
     private Double temperatureThreshold;
+    /** Multi-device homepage read model. Existing fields above remain for legacy consumers. */
+    private Map<String, Object> summary;
+    private List<Map<String, Object>> devices;
+    private List<PhmAlarmEventEntity> alarms;
 
     public Integer getDeviceCount() { return deviceCount; }
     public void setDeviceCount(Integer deviceCount) { this.deviceCount = deviceCount; }
@@ -32,6 +38,12 @@ public class MonitoringOverviewVo
     public void setVibrationThreshold(Double vibrationThreshold) { this.vibrationThreshold = vibrationThreshold; }
     public Double getTemperatureThreshold() { return temperatureThreshold; }
     public void setTemperatureThreshold(Double temperatureThreshold) { this.temperatureThreshold = temperatureThreshold; }
+    public Map<String, Object> getSummary() { return summary; }
+    public void setSummary(Map<String, Object> summary) { this.summary = summary; }
+    public List<Map<String, Object>> getDevices() { return devices; }
+    public void setDevices(List<Map<String, Object>> devices) { this.devices = devices; }
+    public List<PhmAlarmEventEntity> getAlarms() { return alarms; }
+    public void setAlarms(List<PhmAlarmEventEntity> alarms) { this.alarms = alarms; }
 
     public static class TrendVo
     {

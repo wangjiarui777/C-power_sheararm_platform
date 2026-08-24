@@ -8,20 +8,20 @@ html[data-theme='industrial'] {
   color-scheme: dark;
 
   /* Core palette */
-  --color-canvas: #08111d;
-  --color-canvas-deep: #060d18;
-  --color-surface: #111c30;
-  --color-surface-raised: #16243a;
-  --color-surface-soft: #0f172a;
-  --color-border: #263645;
-  --color-border-strong: #365269;
-  --color-heading: #f5fbff;
-  --color-text: #e6edf3;
-  --color-muted: #8ea0b5;
-  --color-accent: #22d3ee;
-  --color-on-accent: #06121f;
-  --color-accent-soft: rgba(34, 211, 238, 0.1);
-  --color-accent-strong: rgba(34, 211, 238, 0.42);
+  --color-canvas: #0b1220;
+  --color-canvas-deep: #080f1b;
+  --color-surface: #121d2c;
+  --color-surface-raised: #182638;
+  --color-surface-soft: #0e1826;
+  --color-border: #26384a;
+  --color-border-strong: #3a5268;
+  --color-heading: #f4f7fb;
+  --color-text: #d9e2ec;
+  --color-muted: #8fa1b5;
+  --color-accent: #44c7b5;
+  --color-on-accent: #071716;
+  --color-accent-soft: rgba(68, 199, 181, 0.1);
+  --color-accent-strong: rgba(68, 199, 181, 0.42);
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
@@ -31,13 +31,13 @@ html[data-theme='industrial'] {
   /* Typography and geometry */
   --font-ui: "Microsoft YaHei UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-data: "Bahnschrift SemiBold", "DIN Alternate", Consolas, monospace;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
   --space-page: 20px;
-  --space-section: 16px;
-  --shadow-panel: 0 14px 32px rgba(2, 8, 20, 0.26);
-  --shadow-float: 0 20px 48px rgba(2, 8, 20, 0.46);
+  --space-section: 14px;
+  --shadow-panel: 0 8px 20px rgba(2, 8, 20, 0.16);
+  --shadow-float: 0 16px 36px rgba(2, 8, 20, 0.3);
 
   /* Legacy compatibility aliases */
   --current-color: var(--color-accent);
@@ -102,12 +102,7 @@ body,
 }
 
 body {
-  background-image:
-    radial-gradient(circle at 14% -6%, rgba(34, 211, 238, 0.09), transparent 30%),
-    linear-gradient(to right, rgba(34, 211, 238, 0.026) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(34, 211, 238, 0.022) 1px, transparent 1px),
-    linear-gradient(180deg, var(--color-canvas), var(--color-canvas-deep));
-  background-size: auto, 48px 48px, 48px 48px, auto;
+  background: var(--color-canvas);
 }
 
 #app,
@@ -165,7 +160,7 @@ label,
 #app .top-nav,
 #app .topbar-container {
   color: var(--color-text);
-  background: rgba(17, 28, 48, 0.96) !important;
+  background: var(--color-surface) !important;
   border-color: var(--color-border) !important;
   box-shadow: none !important;
 }
@@ -218,7 +213,7 @@ body .el-menu--popup .el-menu-item.is-active {
 }
 
 #app .sidebar-container .el-menu-item.is-active {
-  border-right: 3px solid var(--color-accent);
+  border-right: 2px solid var(--color-accent);
 }
 
 #app .tags-view-item {
@@ -249,7 +244,7 @@ body .el-menu--popup .el-menu-item.is-active {
 #app aside {
   position: relative;
   color: var(--color-text);
-  background: linear-gradient(180deg, rgba(22, 36, 58, 0.92), rgba(17, 28, 48, 0.96)) !important;
+  background: var(--color-surface) !important;
   border: 1px solid var(--color-border) !important;
   border-radius: var(--radius-lg) !important;
   box-shadow: var(--shadow-panel);
@@ -269,15 +264,7 @@ body .el-menu--popup .el-menu-item.is-active {
 #app .phm-header::before,
 #app .dashboard-topbar::before,
 #app .context-bar::before {
-  position: absolute;
-  top: 0;
-  right: 8%;
-  left: 8%;
-  height: 1px;
-  content: "";
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
-  opacity: 0.8;
+  display: none;
 }
 
 #app .page-title,
@@ -338,10 +325,10 @@ body .el-menu--popup .el-menu-item.is-active {
 #app .particle-card,
 #app .trend-card {
   color: var(--color-text) !important;
-  background: linear-gradient(180deg, rgba(22, 36, 58, 0.88), rgba(17, 28, 48, 0.96)) !important;
+  background: var(--color-surface) !important;
   border-color: var(--color-border) !important;
   border-radius: var(--radius-lg) !important;
-  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.04);
+  box-shadow: none;
 }
 
 #app .el-card {
@@ -830,7 +817,7 @@ code {
 }
 
 #app .bar-fill {
-  background: linear-gradient(90deg, var(--color-accent), var(--color-info)) !important;
+  background: var(--color-accent) !important;
 }
 
 /* Authentication and standalone pages */
@@ -839,12 +826,7 @@ code {
 #app .errPage-container,
 #app .wscn-http404-container {
   color: var(--color-text);
-  background:
-    radial-gradient(circle at 50% 18%, rgba(34, 211, 238, 0.1), transparent 30%),
-    linear-gradient(to right, rgba(34, 211, 238, 0.026) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(34, 211, 238, 0.022) 1px, transparent 1px),
-    linear-gradient(180deg, var(--color-canvas), var(--color-canvas-deep)) !important;
-  background-size: auto, 48px 48px, 48px 48px, auto !important;
+  background: var(--color-canvas) !important;
 }
 
 #app .login-form,
@@ -860,13 +842,7 @@ code {
 
 #app .login-form::before,
 #app .lock-box::before {
-  position: absolute;
-  top: 0;
-  right: 12%;
-  left: 12%;
-  height: 1px;
-  content: "";
-  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+  display: none;
 }
 
 #app .login-title,

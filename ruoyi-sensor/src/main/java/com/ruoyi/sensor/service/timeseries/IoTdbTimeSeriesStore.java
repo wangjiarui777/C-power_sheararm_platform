@@ -44,6 +44,40 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
     private static final String TELEMETRY_TABLE = "telemetry_metric";
     private static final String FRAME_TABLE = "vibration_frame";
     private static final String DIAGNOSIS_TABLE = "diagnosis_result";
+    private static final List<DiagnosisColumn> DIAGNOSIS_COLUMNS = Arrays.asList(
+        new DiagnosisColumn("record_id", "STRING", "TAG"),
+        new DiagnosisColumn("device_code", "STRING", "TAG"),
+        new DiagnosisColumn("point_key", "STRING", "TAG"),
+        new DiagnosisColumn("analysis_mode", "STRING", "TAG"),
+        new DiagnosisColumn("model_version", "STRING", "TAG"),
+        new DiagnosisColumn("batch_id", "INT64", "FIELD"),
+        new DiagnosisColumn("task_id", "INT64", "FIELD"),
+        new DiagnosisColumn("source_type", "STRING", "FIELD"),
+        new DiagnosisColumn("point_id", "INT64", "FIELD"),
+        new DiagnosisColumn("channel_id", "INT32", "FIELD"),
+        new DiagnosisColumn("model_release_id", "INT64", "FIELD"),
+        new DiagnosisColumn("source_file", "STRING", "FIELD"),
+        new DiagnosisColumn("sample_rate", "DOUBLE", "FIELD"),
+        new DiagnosisColumn("diagnosis_result", "STRING", "FIELD"),
+        new DiagnosisColumn("closed_prediction", "STRING", "FIELD"),
+        new DiagnosisColumn("confidence", "DOUBLE", "FIELD"),
+        new DiagnosisColumn("health_index", "INT32", "FIELD"),
+        new DiagnosisColumn("risk_level", "STRING", "FIELD"),
+        new DiagnosisColumn("alarm_level", "STRING", "FIELD"),
+        new DiagnosisColumn("diagnosis_detail", "STRING", "FIELD"),
+        new DiagnosisColumn("decision_reason", "STRING", "FIELD"),
+        new DiagnosisColumn("unknown_ratio", "DOUBLE", "FIELD"),
+        new DiagnosisColumn("segment_consistency", "DOUBLE", "FIELD"),
+        new DiagnosisColumn("mean_mahalanobis", "DOUBLE", "FIELD"),
+        new DiagnosisColumn("mean_entropy", "DOUBLE", "FIELD"),
+        new DiagnosisColumn("rms", "DOUBLE", "FIELD"),
+        new DiagnosisColumn("peak", "DOUBLE", "FIELD"),
+        new DiagnosisColumn("top_probabilities", "STRING", "FIELD"),
+        new DiagnosisColumn("evidence", "STRING", "FIELD"),
+        new DiagnosisColumn("timeseries_ref", "STRING", "FIELD"),
+        new DiagnosisColumn("sample_time", "TIMESTAMP", "FIELD"),
+        new DiagnosisColumn("update_time", "TIMESTAMP", "FIELD"),
+        new DiagnosisColumn("remark", "STRING", "FIELD"));
 
     @Value("${sensor.iotdb.enabled:true}")
     private boolean enabled;
@@ -352,14 +386,14 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
             return false;
         }
         List<String> columns = Arrays.asList("record_id", "device_code", "point_key", "analysis_mode",
-            "model_version", "batch_id", "task_id", "point_id", "channel_id", "model_release_id",
+            "model_version", "batch_id", "task_id", "source_type", "point_id", "channel_id", "model_release_id",
             "source_file", "sample_rate", "diagnosis_result", "closed_prediction", "confidence",
             "health_index", "risk_level", "alarm_level", "diagnosis_detail", "decision_reason",
             "unknown_ratio", "segment_consistency", "mean_mahalanobis", "mean_entropy", "rms", "peak",
             "top_probabilities", "evidence", "timeseries_ref", "sample_time", "update_time", "remark");
         List<TSDataType> types = Arrays.asList(TSDataType.STRING, TSDataType.STRING, TSDataType.STRING,
-            TSDataType.STRING, TSDataType.STRING, TSDataType.INT64, TSDataType.INT64, TSDataType.INT64,
-            TSDataType.INT32, TSDataType.INT64, TSDataType.STRING, TSDataType.DOUBLE, TSDataType.STRING,
+            TSDataType.STRING, TSDataType.STRING, TSDataType.INT64, TSDataType.INT64, TSDataType.STRING,
+            TSDataType.INT64, TSDataType.INT32, TSDataType.INT64, TSDataType.STRING, TSDataType.DOUBLE, TSDataType.STRING,
             TSDataType.STRING, TSDataType.DOUBLE, TSDataType.INT32, TSDataType.STRING, TSDataType.STRING,
             TSDataType.STRING, TSDataType.STRING, TSDataType.DOUBLE, TSDataType.DOUBLE, TSDataType.DOUBLE,
             TSDataType.DOUBLE, TSDataType.DOUBLE, TSDataType.DOUBLE, TSDataType.STRING, TSDataType.STRING,
@@ -380,6 +414,7 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
             tablet.addValue("model_version", 0, safeText(result.getModelVersion()));
             addValue(tablet, "batch_id", result.getBatchId());
             addValue(tablet, "task_id", result.getTaskId());
+            addValue(tablet, "source_type", result.getSourceType());
             addValue(tablet, "point_id", result.getPointId());
             addValue(tablet, "channel_id", result.getChannelId());
             addValue(tablet, "model_release_id", result.getModelReleaseId());
@@ -493,14 +528,14 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
                                                                 int limit)
     {
         ITableSessionPool pool = requireAvailablePool();
-        String sql = "SELECT record_id,batch_id,task_id,point_id,channel_id,model_release_id,source_file,"
+        String sql = "SELECT record_id,batch_id,task_id,source_type,point_id,channel_id,model_release_id,source_file,"
             + "sample_rate,diagnosis_result,closed_prediction,confidence,health_index,risk_level,alarm_level,"
             + "diagnosis_detail,decision_reason,unknown_ratio,segment_consistency,mean_mahalanobis,mean_entropy,"
             + "rms,peak,top_probabilities,evidence,timeseries_ref,sample_time,update_time,remark,"
             + "device_code,analysis_mode,model_version FROM " + DIAGNOSIS_TABLE
             + " WHERE 1=1"
             + (deviceCode == null || deviceCode.isBlank() ? "" : " AND device_code='" + literal(deviceCode) + "'")
-            + (pointId == null ? "" : " AND point_id=" + pointId)
+            + (pointId == null ? "" : " AND point_key='POINT-" + pointId + "'")
             + (from == null ? "" : " AND time >= " + toStoreTimestamp(from))
             + (to == null ? "" : " AND time <= " + toStoreTimestamp(to))
             + " ORDER BY time DESC LIMIT " + Math.max(1, Math.min(5000, limit));
@@ -646,7 +681,7 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
                     + "\"point_key\" STRING TAG,"
                     + "\"analysis_mode\" STRING TAG,"
                     + "\"model_version\" STRING TAG,"
-                    + "\"batch_id\" INT64 FIELD,\"task_id\" INT64 FIELD,\"point_id\" INT64 FIELD,"
+                    + "\"batch_id\" INT64 FIELD,\"task_id\" INT64 FIELD,\"source_type\" STRING FIELD,\"point_id\" INT64 FIELD,"
                     + "\"channel_id\" INT32 FIELD,\"model_release_id\" INT64 FIELD,"
                     + "\"source_file\" STRING FIELD,\"sample_rate\" DOUBLE FIELD,"
                     + "\"diagnosis_result\" STRING FIELD,\"closed_prediction\" STRING FIELD,"
@@ -659,6 +694,8 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
                     + "\"top_probabilities\" STRING FIELD,\"evidence\" STRING FIELD,"
                     + "\"timeseries_ref\" STRING FIELD,\"sample_time\" TIMESTAMP FIELD,"
                     + "\"update_time\" TIMESTAMP FIELD,\"remark\" STRING FIELD)");
+            ensureDiagnosisColumns(session);
+            validateDiagnosisColumns(session);
             session.executeNonQueryStatement("ALTER TABLE " + DIAGNOSIS_TABLE
                     + " SET PROPERTIES TTL=" + ttlMillis(diagnosisTtlDays));
         }
@@ -947,6 +984,62 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
         }
     }
 
+    /**
+     * CREATE TABLE IF NOT EXISTS does not evolve tables created by older releases.  Keep this
+     * list additive so an old monitoring.diagnosis_result table is upgraded before it is used.
+     */
+    private void ensureDiagnosisColumns(ITableSession session)
+            throws IoTDBConnectionException, StatementExecutionException
+    {
+        for (DiagnosisColumn column : DIAGNOSIS_COLUMNS)
+        {
+            session.executeNonQueryStatement("ALTER TABLE " + DIAGNOSIS_TABLE + " ADD COLUMN IF NOT EXISTS \""
+                + column.name + "\" " + column.dataType + " " + column.category);
+        }
+    }
+
+    private void validateDiagnosisColumns(ITableSession session)
+            throws IoTDBConnectionException, StatementExecutionException
+    {
+        Map<String, DiagnosisColumn> expected = DIAGNOSIS_COLUMNS.stream()
+            .collect(Collectors.toMap(column -> column.name, column -> column));
+        Map<String, String> actual = new LinkedHashMap<>();
+        String sql = "SELECT column_name,datatype,category FROM information_schema.columns WHERE database='"
+            + literal(database) + "' AND table_name='" + DIAGNOSIS_TABLE + "'";
+        try (SessionDataSet dataSet = session.executeQueryStatement(sql, queryTimeoutMs))
+        {
+            while (dataSet.hasNext())
+            {
+                List<Field> fields = dataSet.next().getFields();
+                String name = stringField(field(fields, 0));
+                if (name != null)
+                {
+                    String dataType = stringField(field(fields, 1));
+                    String category = stringField(field(fields, 2));
+                    actual.put(name.toLowerCase(Locale.ROOT),
+                        (dataType == null ? "" : dataType.toUpperCase(Locale.ROOT)) + " "
+                            + (category == null ? "" : category.toUpperCase(Locale.ROOT)));
+                }
+            }
+        }
+        List<String> mismatches = new ArrayList<>();
+        for (DiagnosisColumn column : expected.values())
+        {
+            String value = actual.get(column.name);
+            String expectedValue = column.dataType + " " + column.category;
+            if (!expectedValue.equals(value))
+            {
+                mismatches.add(column.name + " expected " + expectedValue + " but was "
+                    + (value == null ? "missing" : value));
+            }
+        }
+        if (!mismatches.isEmpty())
+        {
+            throw new IllegalStateException("IoTDB " + DIAGNOSIS_TABLE + " schema mismatch: "
+                + String.join("; ", mismatches));
+        }
+    }
+
     private Double decimalValue(java.math.BigDecimal value)
     {
         return value == null ? null : value.doubleValue();
@@ -970,34 +1063,35 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
         result.setRecordId(parseLong(stringField(field(fields, 0))));
         result.setBatchId(longField(field(fields, 1)));
         result.setTaskId(longField(field(fields, 2)));
-        result.setPointId(longField(field(fields, 3)));
-        result.setChannelId(intField(field(fields, 4)));
-        result.setModelReleaseId(longField(field(fields, 5)));
-        result.setSourceFile(stringField(field(fields, 6)));
-        result.setSampleRate(doubleField(field(fields, 7)));
-        result.setDiagnosisResult(stringField(field(fields, 8)));
-        result.setClosedPrediction(stringField(field(fields, 9)));
-        result.setConfidence(decimalField(field(fields, 10)));
-        result.setHealthIndex(intField(field(fields, 11)));
-        result.setRiskLevel(stringField(field(fields, 12)));
-        result.setAlarmLevel(stringField(field(fields, 13)));
-        result.setDiagnosisDetail(stringField(field(fields, 14)));
-        result.setDecisionReason(stringField(field(fields, 15)));
-        result.setUnknownRatio(decimalField(field(fields, 16)));
-        result.setSegmentConsistency(decimalField(field(fields, 17)));
-        result.setMeanMahalanobis(decimalField(field(fields, 18)));
-        result.setMeanEntropy(decimalField(field(fields, 19)));
-        result.setRms(doubleField(field(fields, 20)));
-        result.setPeak(doubleField(field(fields, 21)));
-        result.setTopProbabilities(stringField(field(fields, 22)));
-        result.setEvidence(stringField(field(fields, 23)));
-        result.setTimeseriesRef(stringField(field(fields, 24)));
-        result.setSampleTime(dateField(field(fields, 25)));
-        result.setUpdateTime(dateField(field(fields, 26)));
-        result.setRemark(stringField(field(fields, 27)));
-        result.setDeviceCode(stringField(field(fields, 28)));
-        result.setAnalysisMode(stringField(field(fields, 29)));
-        result.setModelVersion(stringField(field(fields, 30)));
+        result.setSourceType(stringField(field(fields, 3)));
+        result.setPointId(longField(field(fields, 4)));
+        result.setChannelId(intField(field(fields, 5)));
+        result.setModelReleaseId(longField(field(fields, 6)));
+        result.setSourceFile(stringField(field(fields, 7)));
+        result.setSampleRate(doubleField(field(fields, 8)));
+        result.setDiagnosisResult(stringField(field(fields, 9)));
+        result.setClosedPrediction(stringField(field(fields, 10)));
+        result.setConfidence(decimalField(field(fields, 11)));
+        result.setHealthIndex(intField(field(fields, 12)));
+        result.setRiskLevel(stringField(field(fields, 13)));
+        result.setAlarmLevel(stringField(field(fields, 14)));
+        result.setDiagnosisDetail(stringField(field(fields, 15)));
+        result.setDecisionReason(stringField(field(fields, 16)));
+        result.setUnknownRatio(decimalField(field(fields, 17)));
+        result.setSegmentConsistency(decimalField(field(fields, 18)));
+        result.setMeanMahalanobis(decimalField(field(fields, 19)));
+        result.setMeanEntropy(decimalField(field(fields, 20)));
+        result.setRms(doubleField(field(fields, 21)));
+        result.setPeak(doubleField(field(fields, 22)));
+        result.setTopProbabilities(stringField(field(fields, 23)));
+        result.setEvidence(stringField(field(fields, 24)));
+        result.setTimeseriesRef(stringField(field(fields, 25)));
+        result.setSampleTime(dateField(field(fields, 26)));
+        result.setUpdateTime(dateField(field(fields, 27)));
+        result.setRemark(stringField(field(fields, 28)));
+        result.setDeviceCode(stringField(field(fields, 29)));
+        result.setAnalysisMode(stringField(field(fields, 30)));
+        result.setModelVersion(stringField(field(fields, 31)));
         result.setCreateTime(fromStoreTimestamp(row.getTimestamp()));
         return result;
     }
@@ -1005,6 +1099,20 @@ public class IoTdbTimeSeriesStore implements TimeSeriesStore
     private Field field(List<Field> fields, int index)
     {
         return index < fields.size() ? fields.get(index) : null;
+    }
+
+    private static final class DiagnosisColumn
+    {
+        private final String name;
+        private final String dataType;
+        private final String category;
+
+        private DiagnosisColumn(String name, String dataType, String category)
+        {
+            this.name = name;
+            this.dataType = dataType;
+            this.category = category;
+        }
     }
 
     private Date dateField(Field field)

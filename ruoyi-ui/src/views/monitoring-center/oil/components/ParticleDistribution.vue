@@ -67,10 +67,10 @@ export default {
 .particle-card {
   min-width: 0;
   padding: 16px;
-  border: 1px solid var(--chart-border, #263645);
-  border-radius: 14px;
-  background: var(--chart-panel, #17212b);
-  color: var(--chart-text, #e6edf3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 .particle-head {
   display: flex;
@@ -78,26 +78,26 @@ export default {
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 13px;
-  border-bottom: 1px solid var(--chart-border, #263645);
+  border-bottom: 1px solid var(--color-border);
 }
 .particle-head span,
 .particle-total small {
   display: block;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 11px;
   letter-spacing: .08em;
 }
 h3 {
   margin: 4px 0 0;
-  color: var(--chart-text, #e6edf3);
+  color: var(--color-heading);
   font-size: 16px;
 }
 .particle-total { text-align: right; }
 .particle-total strong {
   display: block;
   margin-bottom: 2px;
-  color: #f0b44d;
-  font-family: "Bahnschrift SemiBold", "DIN Alternate", Consolas, monospace;
+  color: #d6a14a;
+  font-family: var(--font-data);
   font-size: 22px;
 }
 .particle-list {
@@ -113,22 +113,22 @@ h3 {
   margin-bottom: 6px;
   font-size: 12px;
 }
-.particle-label span { color: var(--chart-muted, #8ea0b5); }
+.particle-label span { color: var(--color-muted); }
 .particle-label strong {
-  color: var(--chart-text, #e6edf3);
-  font-family: "Bahnschrift SemiBold", "DIN Alternate", Consolas, monospace;
+  color: var(--color-text);
+  font-family: var(--font-data);
 }
 .particle-track {
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(120, 153, 186, .16);
+  background: var(--color-surface-soft);
 }
 .particle-track span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #f0b44d, #f59e0b);
+  background: #d6a14a;
   transition: width .24s ease;
 }
 @media (prefers-reduced-motion: reduce) {

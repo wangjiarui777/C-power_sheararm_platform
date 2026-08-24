@@ -78,19 +78,24 @@
       <el-table-column prop="deviceName" label="设备名称" min-width="170" />
       <el-table-column prop="deviceCode" label="设备编码" width="140" />
       <el-table-column prop="orgName" label="所属节点" min-width="170" />
-      <el-table-column prop="statusText" label="状态" width="100">
+      <el-table-column prop="statusText" label="状态" width="145">
         <template slot-scope="scope">
           <el-tag :type="statusTag(scope.row.status)" size="mini">{{ scope.row.statusText }}</el-tag>
+          <el-tag v-if="scope.row.telemetryFreshness !== 'realtime'" type="warning" size="mini">{{ freshnessText(scope.row.telemetryFreshness) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="healthIndex" label="健康指数" width="110">
         <template slot-scope="scope">
-          <el-progress :percentage="scope.row.healthIndex || 0" :show-text="false" :color="healthColor(scope.row.healthIndex)" />
+          <el-progress v-if="scope.row.healthIndex !== null && scope.row.healthIndex !== undefined" :percentage="scope.row.healthIndex" :show-text="false" :color="healthColor(scope.row.healthIndex)" />
+          <span v-else>--</span>
         </template>
       </el-table-column>
       <el-table-column prop="faultType" label="故障类型" width="120" />
       <el-table-column prop="latestVibration" label="振动" width="100" />
       <el-table-column prop="latestTemperature" label="温度" width="100" />
+      <el-table-column label="最新采样" width="170">
+        <template slot-scope="scope">{{ formatTime(scope.row.latestSampleTime) }}</template>
+      </el-table-column>
       <el-table-column label="操作" fixed="right" width="130">
         <template slot-scope="scope">
           <el-button type="text" size="mini" @click="openBrain(scope.row)">机器大脑</el-button>
@@ -102,17 +107,24 @@
       <article v-for="item in devices" :key="item.id" class="device-card" :class="item.status">
         <div class="device-card-head">
           <el-button v-hasPermi="['phm:device:edit']" type="text" :icon="item.favorite ? 'el-icon-star-on' : 'el-icon-star-off'" @click="toggleFavorite(item)" />
-          <el-tag :type="statusTag(item.status)" size="mini">{{ item.statusText }}</el-tag>
+          <span>
+            <el-tag :type="statusTag(item.status)" size="mini">{{ item.statusText }}</el-tag>
+            <el-tag v-if="item.telemetryFreshness !== 'realtime'" type="warning" size="mini">{{ freshnessText(item.telemetryFreshness) }}</el-tag>
+          </span>
         </div>
         <h3>{{ item.deviceName }}</h3>
         <p>{{ item.orgName }}</p>
         <div class="mini-row">
           <span>健康度</span>
-          <strong>{{ item.healthIndex || 0 }}%</strong>
+          <strong>{{ item.healthIndex === null || item.healthIndex === undefined ? '--' : `${item.healthIndex}%` }}</strong>
         </div>
         <div class="mini-row">
           <span>振动 / 温度</span>
           <strong>{{ item.latestVibration || '--' }} / {{ item.latestTemperature || '--' }}</strong>
+        </div>
+        <div class="mini-row">
+          <span>最新采样</span>
+          <strong>{{ formatTime(item.latestSampleTime) }}</strong>
         </div>
         <el-button type="primary" plain size="mini" @click="openBrain(item)">进入机器大脑</el-button>
       </article>
@@ -220,6 +232,16 @@ export default {
       if (value >= 80) return '#22c55e'
       if (value >= 60) return '#eab308'
       return '#ef4444'
+    },
+    formatTime(value) {
+      if (!value) return '--'
+      const date = new Date(value)
+      return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false })
+    },
+    freshnessText(value) {
+      if (value === 'delayed') return '数据滞后'
+      if (value === 'offline') return '无实时数据'
+      return ''
     }
   }
 }

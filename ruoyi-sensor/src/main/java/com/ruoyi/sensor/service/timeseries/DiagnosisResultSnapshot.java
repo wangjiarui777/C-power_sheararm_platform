@@ -11,6 +11,7 @@ public class DiagnosisResultSnapshot
     private Long recordId;
     private Long batchId;
     private Long taskId;
+    private String sourceType;
     private String deviceCode;
     private Long pointId;
     private Integer channelId;

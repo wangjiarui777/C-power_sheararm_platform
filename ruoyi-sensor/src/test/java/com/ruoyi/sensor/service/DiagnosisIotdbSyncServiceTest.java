@@ -15,6 +15,7 @@ import com.ruoyi.sensor.domain.entity.EnhancedInferenceRecordEntity;
 import com.ruoyi.sensor.mapper.DiagnosisIotdbSyncMapper;
 import com.ruoyi.sensor.mapper.EnhancedInferenceRecordMapper;
 import com.ruoyi.sensor.service.timeseries.TimeSeriesStore;
+import com.ruoyi.sensor.service.timeseries.DiagnosisResultSnapshot;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -74,6 +75,7 @@ class DiagnosisIotdbSyncServiceTest
         EnhancedInferenceRecordEntity record = new EnhancedInferenceRecordEntity();
         record.setId(42L);
         record.setCreateTime(new Date());
+        record.setSourceType("MAT_TCP");
         when(syncMapper.update(isNull(), any())).thenReturn(1);
         when(syncMapper.selectById(42L)).thenReturn(sync);
         when(recordMapper.selectById(42L)).thenReturn(record);
@@ -81,7 +83,9 @@ class DiagnosisIotdbSyncServiceTest
 
         service.processRecord(42L);
 
-        verify(store).writeDiagnosisResult(any());
+        ArgumentCaptor<DiagnosisResultSnapshot> snapshot = ArgumentCaptor.forClass(DiagnosisResultSnapshot.class);
+        verify(store).writeDiagnosisResult(snapshot.capture());
+        assertEquals("MAT_TCP", snapshot.getValue().getSourceType());
         verify(syncMapper, times(2)).update(isNull(), any());
     }
 }

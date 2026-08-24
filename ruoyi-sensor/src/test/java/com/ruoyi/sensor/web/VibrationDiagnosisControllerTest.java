@@ -12,10 +12,12 @@ import org.springframework.mock.web.MockMultipartFile;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.sensor.domain.entity.EnhancedInferenceRecordEntity;
 import com.ruoyi.sensor.domain.entity.PhmAttachmentEntity;
+import com.ruoyi.sensor.domain.entity.PhmDiagnosisBindingEntity;
 import com.ruoyi.sensor.domain.entity.ModelReleaseEntity;
 import com.ruoyi.sensor.domain.entity.PhmDeviceEntity;
 import com.ruoyi.sensor.domain.entity.PhmMeasurePointEntity;
 import com.ruoyi.sensor.mapper.ModelReleaseMapper;
+import com.ruoyi.sensor.mapper.PhmDiagnosisBindingMapper;
 import com.ruoyi.sensor.service.PhmService;
 import com.ruoyi.sensor.service.PhmDataScopeService;
 import com.ruoyi.sensor.service.PhmAttachmentStorageService;
@@ -62,13 +64,18 @@ class VibrationDiagnosisControllerTest
         method.setAccessible(true);
 
         Map<String, Object> result = (Map<String, Object>) method.invoke(controller,
-            Map.of("data", data), "DEV-1", "sample.mat", Map.of("channelId", 1));
+            Map.of("data", data), "DEV-1", "sample.mat", Map.of(
+                "taskId", "trusted-task", "requestId", "trusted-request", "pointId", 99L,
+                "channelId", 1, "sourceType", "MAT_TCP"));
 
         assertEquals(16000D, result.get("sampleRate"));
         assertEquals("single_pitting", result.get("closedPrediction"));
         assertEquals("mean_mahalanobis_accept", result.get("decisionReason"));
         assertEquals(0.125D, result.get("unknownRatio"));
         assertEquals(1, ((List<?>) result.get("topProbabilities")).size());
+        assertEquals("trusted-task", result.get("taskId"));
+        assertEquals(99L, result.get("pointId"));
+        assertEquals("MAT_TCP", result.get("sourceType"));
     }
 
     @Test
@@ -212,6 +219,7 @@ class VibrationDiagnosisControllerTest
         VibrationDiagnosisController controller = controllerWith(phm);
         setField(controller, "dataScopeService", scope);
         setField(controller, "modelReleaseMapper", mapper);
+        setField(controller, "diagnosisBindingMapper", mock(PhmDiagnosisBindingMapper.class));
         Map<String, Object> response = controller.diagnosisOptions();
         Map<String, Object> data = (Map<String, Object>) response.get("data");
         List<Map<String, Object>> points = (List<Map<String, Object>>) data.get("points");
@@ -220,11 +228,47 @@ class VibrationDiagnosisControllerTest
         assertEquals(1, ((List<?>) data.get("devices")).size());
         assertEquals(1, points.size());
         assertEquals(20L, points.get(0).get("id"));
+        assertEquals("UNBOUND", points.get(0).get("bindingStatus"));
         Map<String, Object> registered = versions.stream()
             .filter(item -> "2.0.0".equals(item.get("semanticVersion")))
             .findFirst().orElseThrow();
         assertFalse(registered.containsKey("artifactUri"));
         assertFalse(registered.containsKey("fileSha256"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void diagnosisOptionsMarkConflictingEnabledBindingsAsNotExecutable() throws Exception
+    {
+        PhmDeviceEntity device = new PhmDeviceEntity();
+        device.setId(10L);
+        device.setDeviceCode("DEV-010");
+        PhmMeasurePointEntity point = point(20L, 10L, "vibration", 7);
+        PhmDiagnosisBindingEntity binding = new PhmDiagnosisBindingEntity();
+        binding.setDeviceId(10L);
+        binding.setDeviceCode("DEV-010");
+        binding.setPointId(20L);
+        binding.setChannelId(7L);
+        binding.setEnabled(true);
+
+        PhmService phm = mock(PhmService.class);
+        when(phm.listMeasurePoints(null)).thenReturn(List.of(point));
+        PhmDataScopeService scope = mock(PhmDataScopeService.class);
+        when(scope.listDevices(any())).thenReturn(List.of(device));
+        PhmDiagnosisBindingMapper bindings = mock(PhmDiagnosisBindingMapper.class);
+        when(bindings.selectList(any())).thenReturn(List.of(binding, binding));
+        ModelReleaseMapper releases = mock(ModelReleaseMapper.class);
+        when(releases.selectList(any())).thenReturn(List.of());
+
+        VibrationDiagnosisController controller = controllerWith(phm);
+        setField(controller, "dataScopeService", scope);
+        setField(controller, "diagnosisBindingMapper", bindings);
+        setField(controller, "modelReleaseMapper", releases);
+        Map<String, Object> response = controller.diagnosisOptions();
+        List<Map<String, Object>> points = (List<Map<String, Object>>)
+            ((Map<String, Object>) response.get("data")).get("points");
+
+        assertEquals("CONFLICT", points.get(0).get("bindingStatus"));
     }
 
     @Test

@@ -26,7 +26,9 @@
           />
         </el-form-item>
         <el-form-item label="设备编码">
-          <el-input v-model.trim="deviceCode" clearable placeholder="可选" style="width: 190px" />
+          <el-select v-model="deviceCode" clearable filterable :loading="devicesLoading" placeholder="全部设备" style="width: 240px">
+            <el-option v-for="item in deviceOptions" :key="item.id || item.deviceCode" :label="deviceLabel(item)" :value="item.deviceCode" />
+          </el-select>
         </el-form-item>
         <el-form-item label="测点">
           <el-select v-model="pointId" clearable filterable :loading="pointsLoading" placeholder="全部测点" style="width: 240px">
@@ -90,6 +92,8 @@ export default {
     return {
       dateRange: defaultDateRange(),
       deviceCode: '',
+      deviceOptions: [],
+      devicesLoading: false,
       pointId: null,
       pointOptions: [],
       pointsLoading: false,
@@ -106,14 +110,23 @@ export default {
   methods: {
     async loadPointOptions() {
       this.pointsLoading = true
+      this.devicesLoading = true
       try {
         const response = await getDiagnosisOptions()
+        this.deviceOptions = response.data && response.data.devices ? response.data.devices : []
         this.pointOptions = response.data && response.data.points ? response.data.points : []
       } catch (error) {
+        this.deviceOptions = []
         this.pointOptions = []
       } finally {
         this.pointsLoading = false
+        this.devicesLoading = false
       }
+    },
+    deviceLabel(item) {
+      if (!item) return '--'
+      const name = item.deviceName || '未命名设备'
+      return `${name} · ${item.deviceCode}`
     },
     pointLabel(item) {
       if (!item) return '--'

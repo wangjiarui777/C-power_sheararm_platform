@@ -60,8 +60,8 @@ public class DiagnosisBatchService
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public BatchCreation create(PhmDeviceEntity device, String modelType, String modelVersion,
-        String clientRequestId, List<Map<String, Object>> items, String username)
+    public BatchCreation create(PhmDeviceEntity device, String clientRequestId, List<Map<String, Object>> items,
+        Map<Long, PointModel> pointModels, String username)
     {
         if (device == null)
         {
@@ -71,8 +71,8 @@ public class DiagnosisBatchService
         {
             throw new IllegalArgumentException("clientRequestId 为必填项且不能超过 128 个字符");
         }
-        List<ValidatedItem> validated = validateItems(device, items);
-        String requestHash = requestHash(device.getDeviceCode(), modelType, modelVersion, validated);
+        List<ValidatedItem> validated = validateItems(device, items, pointModels);
+        String requestHash = requestHash(device.getDeviceCode(), validated);
         DiagnosisBatchEntity existing = batchMapper.selectOne(new LambdaQueryWrapper<DiagnosisBatchEntity>()
             .eq(DiagnosisBatchEntity::getCreatedBy, username)
             .eq(DiagnosisBatchEntity::getClientRequestId, clientRequestId)
@@ -91,8 +91,8 @@ public class DiagnosisBatchService
         batch.setClientRequestId(clientRequestId);
         batch.setRequestHash(requestHash);
         batch.setDeviceCode(device.getDeviceCode());
-        batch.setModelType(modelType);
-        batch.setModelVersion(modelVersion);
+        batch.setModelType(batchModelType(validated));
+        batch.setModelVersion(batchModelVersion(validated));
         batch.setStatus("PENDING");
         batch.setTotalCount(validated.size());
         batch.setSuccessCount(0);
@@ -153,7 +153,8 @@ public class DiagnosisBatchService
             {
                 continue;
             }
-            ValidatedItem item = new ValidatedItem(point, attachment);
+            ValidatedItem item = new ValidatedItem(point, attachment,
+                new PointModel(failed.getModelType(), failed.getRequestedModelVersion()));
             retries.add(insertTask(batch, item,
                 Math.max(1, failed.getAttemptNo() == null ? 1 : failed.getAttemptNo()) + 1,
                 failed.getId(), username));
@@ -227,6 +228,8 @@ public class DiagnosisBatchService
             item.put("pointCode", point == null ? null : point.getPointCode());
             item.put("pointName", point == null ? null : point.getPointName());
             item.put("channelId", task.getChannelId());
+            item.put("modelType", task.getModelType());
+            item.put("modelVersion", task.getRequestedModelVersion());
             item.put("attachmentId", toLong(task.getInputRef()));
             item.put("taskId", task.getId());
             item.put("attemptNo", task.getAttemptNo());
@@ -242,6 +245,7 @@ public class DiagnosisBatchService
         result.put("deviceCode", batch.getDeviceCode());
         result.put("modelType", batch.getModelType());
         result.put("modelVersion", batch.getModelVersion());
+        result.put("modelPolicy", "POINT_BINDING");
         result.put("status", batch.getStatus());
         result.put("totalCount", batch.getTotalCount());
         result.put("successCount", batch.getSuccessCount());
@@ -258,7 +262,8 @@ public class DiagnosisBatchService
         return maxPoints;
     }
 
-    private List<ValidatedItem> validateItems(PhmDeviceEntity device, List<Map<String, Object>> items)
+    private List<ValidatedItem> validateItems(PhmDeviceEntity device, List<Map<String, Object>> items,
+        Map<Long, PointModel> pointModels)
     {
         if (items == null || items.isEmpty() || items.size() > maxPoints)
         {
@@ -301,7 +306,12 @@ public class DiagnosisBatchService
             {
                 throw new IllegalArgumentException("诊断附件未绑定所选测点，历史未绑定附件不能用于多测点批次");
             }
-            result.add(new ValidatedItem(point, attachment));
+            PointModel model = pointModels == null ? null : pointModels.get(pointId);
+            if (model == null || !hasText(model.modelType) || !hasText(model.modelVersion))
+            {
+                throw new IllegalArgumentException("测点未配置可执行的唯一主诊断模型: " + point.getPointCode());
+            }
+            result.add(new ValidatedItem(point, attachment, model));
         }
         result.sort(Comparator.comparing(item -> item.point.getId()));
         return result;
@@ -316,9 +326,10 @@ public class DiagnosisBatchService
         input.put("pointId", item.point.getId());
         input.put("channelId", item.point.getChannelId());
         input.put("attachmentId", item.attachment.getId());
-        input.put("modelType", batch.getModelType());
-        input.put("modelVersion", batch.getModelVersion());
+        input.put("modelType", item.model.modelType);
+        input.put("modelVersion", item.model.modelVersion);
         input.put("analysisMode", "batch");
+        input.put("sourceType", "MANUAL");
         Date now = new Date();
         InferenceTaskEntity task = new InferenceTaskEntity();
         task.setRequestId(UUID.randomUUID().toString());
@@ -329,11 +340,12 @@ public class DiagnosisBatchService
         task.setDeviceCode(batch.getDeviceCode());
         task.setPointId(item.point.getId());
         task.setChannelId(item.point.getChannelId());
-        task.setModelType(batch.getModelType());
-        task.setRequestedModelVersion(batch.getModelVersion());
+        task.setModelType(item.model.modelType);
+        task.setRequestedModelVersion(item.model.modelVersion);
         task.setInputType("ATTACHMENT");
         task.setInputRef(String.valueOf(item.attachment.getId()));
         task.setInputSha256(item.attachment.getSha256());
+        task.setSourceType("MANUAL");
         task.setStatus("PENDING");
         task.setInputJson(JSON.toJSONString(input));
         task.setCreatedBy(username);
@@ -374,15 +386,13 @@ public class DiagnosisBatchService
         return new ArrayList<>(latest.values());
     }
 
-    private String requestHash(String deviceCode, String modelType, String modelVersion,
-        List<ValidatedItem> items)
+    private String requestHash(String deviceCode, List<ValidatedItem> items)
     {
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("deviceCode", deviceCode);
-        canonical.put("modelType", modelType);
-        canonical.put("modelVersion", modelVersion);
         canonical.put("items", items.stream().map(item -> Map.of(
-            "pointId", item.point.getId(), "attachmentId", item.attachment.getId())).toList());
+            "pointId", item.point.getId(), "attachmentId", item.attachment.getId(),
+            "modelType", item.model.modelType, "modelVersion", item.model.modelVersion)).toList());
         try
         {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -431,12 +441,46 @@ public class DiagnosisBatchService
     {
         private final PhmMeasurePointEntity point;
         private final PhmAttachmentEntity attachment;
+        private final PointModel model;
 
-        private ValidatedItem(PhmMeasurePointEntity point, PhmAttachmentEntity attachment)
+        private ValidatedItem(PhmMeasurePointEntity point, PhmAttachmentEntity attachment, PointModel model)
         {
             this.point = point;
             this.attachment = attachment;
+            this.model = model;
         }
+    }
+
+    public static final class PointModel
+    {
+        private final String modelType;
+        private final String modelVersion;
+
+        public PointModel(String modelType, String modelVersion)
+        {
+            this.modelType = modelType;
+            this.modelVersion = modelVersion;
+        }
+
+        public String getModelType() { return modelType; }
+        public String getModelVersion() { return modelVersion; }
+    }
+
+    private String batchModelType(List<ValidatedItem> items)
+    {
+        return items.stream().map(item -> item.model.modelType).distinct().count() == 1
+            ? items.get(0).model.modelType : "mixed";
+    }
+
+    private String batchModelVersion(List<ValidatedItem> items)
+    {
+        return items.stream().map(item -> item.model.modelVersion).distinct().count() == 1
+            ? items.get(0).model.modelVersion : "mixed";
+    }
+
+    private boolean hasText(String value)
+    {
+        return value != null && !value.isBlank();
     }
 
     public static final class BatchCreation

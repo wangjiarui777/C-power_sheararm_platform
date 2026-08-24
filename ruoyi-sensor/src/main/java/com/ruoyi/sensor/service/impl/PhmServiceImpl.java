@@ -149,8 +149,14 @@ public class PhmServiceImpl implements PhmService, IPhmAlarmService
             devices = devices.stream().filter(item -> favoriteIds.contains(item.getId())).collect(Collectors.toList());
         }
 
-        Map<String, DeviceVibrationData> latestVibration = latestVibrationByDevice();
-        Map<String, DeviceTemperatureData> latestTemperature = latestTemperatureByDevice();
+        List<String> deviceCodes = devices.stream()
+                .map(PhmDeviceEntity::getDeviceCode)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toList());
+        Map<String, DeviceVibrationData> latestVibration = latestVibrationByDevice(deviceCodes);
+        Map<String, DeviceTemperatureData> latestTemperature = latestTemperatureByDevice(deviceCodes);
+        Map<String, PhmAlarmEventEntity> activeAlarms = latestAlarmsByDevice(deviceCodes, true);
+        Map<String, PhmAlarmEventEntity> latestAlarms = latestAlarmsByDevice(deviceCodes, false);
 
         List<Map<String, Object>> rows = new ArrayList<>();
         for (PhmDeviceEntity device : devices)
@@ -162,19 +168,25 @@ public class PhmServiceImpl implements PhmService, IPhmAlarmService
             row.put("deviceType", device.getDeviceType());
             row.put("orgName", device.getOrgName());
             row.put("location", device.getLocation());
-            row.put("status", device.getStatus());
-            row.put("statusText", statusText(device.getStatus()));
+            PhmAlarmEventEntity activeAlarm = activeAlarms.get(device.getDeviceCode());
+            String currentStatus = clusterStatus(device, activeAlarm);
+            row.put("status", currentStatus);
+            row.put("statusText", statusText(currentStatus));
             row.put("healthIndex", device.getHealthIndex());
-            row.put("faultType", device.getFaultType());
+            row.put("faultType", activeAlarm == null ? null : activeAlarm.getDiagnosisResult());
             row.put("runHours", device.getRunHours());
-            row.put("lastAlarmTime", device.getLastAlarmTime());
+            PhmAlarmEventEntity latestAlarm = latestAlarms.get(device.getDeviceCode());
+            row.put("lastAlarmTime", latestAlarm == null ? null : latestAlarm.getAlarmTime());
             row.put("favorite", favoriteIds.contains(device.getId()));
 
             DeviceVibrationData vib = latestVibration.get(device.getDeviceCode());
             DeviceTemperatureData temp = latestTemperature.get(device.getDeviceCode());
             row.put("latestVibration", vib == null ? null : vib.getVibrationValue());
             row.put("latestTemperature", temp == null ? null : temp.getTemperatureValue());
-            row.put("latestSampleTime", vib == null ? (temp == null ? null : temp.getCollectionTime()) : vib.getSampleTime());
+            Date latestSampleTime = latestSampleTime(vib, temp);
+            row.put("latestSampleTime", latestSampleTime);
+            row.put("telemetryAvailable", vib != null || temp != null);
+            row.put("telemetryFreshness", telemetryFreshness(latestSampleTime));
             rows.add(row);
         }
 
@@ -185,7 +197,7 @@ public class PhmServiceImpl implements PhmService, IPhmAlarmService
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("devices", rows);
-        result.put("stats", buildClusterStats(devices));
+        result.put("stats", buildClusterStats(rows));
         result.put("goodRateTrend", buildGoodRateTrend(devices));
         return result;
     }
@@ -1478,7 +1490,7 @@ public class PhmServiceImpl implements PhmService, IPhmAlarmService
             devices = devices.stream().filter(item -> deviceCode.equals(item.getDeviceCode())).collect(Collectors.toList());
         }
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("summary", buildClusterStats(devices));
+        result.put("summary", buildClusterStatsForDevices(devices));
         result.put("devices", getHistoryReportRows(orgName, deviceCode).stream().map(row -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("orgName", row.getOrgName());
@@ -1729,13 +1741,14 @@ public class PhmServiceImpl implements PhmService, IPhmAlarmService
                 .collect(Collectors.toSet());
     }
 
-    private Map<String, Object> buildClusterStats(List<PhmDeviceEntity> devices)
+    private Map<String, Object> buildClusterStats(List<Map<String, Object>> rows)
     {
-        long total = devices.size();
-        long stopped = devices.stream().filter(item -> "stopped".equals(item.getStatus())).count();
-        long normal = devices.stream().filter(item -> "normal".equals(item.getStatus())).count();
-        long alarming = devices.stream().filter(item -> statusWeight(item.getStatus()) < 6).count();
-        Map<String, Long> byStatus = devices.stream().collect(Collectors.groupingBy(PhmDeviceEntity::getStatus, Collectors.counting()));
+        long total = rows.size();
+        long stopped = rows.stream().filter(item -> "stopped".equals(item.get("status"))).count();
+        long normal = rows.stream().filter(item -> "normal".equals(item.get("status"))).count();
+        long alarming = rows.stream().filter(item -> statusWeight(String.valueOf(item.get("status"))) < 6).count();
+        Map<String, Long> byStatus = rows.stream()
+                .collect(Collectors.groupingBy(item -> String.valueOf(item.get("status")), Collectors.counting()));
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("total", total);
         stats.put("running", Math.max(0, total - stopped));
@@ -1745,6 +1758,26 @@ public class PhmServiceImpl implements PhmService, IPhmAlarmService
         stats.put("runningRate", total == 0 ? BigDecimal.ZERO : BigDecimal.valueOf(total - stopped).multiply(BigDecimal.valueOf(100)).divide(BigDecimal.valueOf(total), 2, RoundingMode.HALF_UP));
         stats.put("statusCount", byStatus);
         return stats;
+    }
+
+    private Map<String, Object> buildClusterStatsForDevices(List<PhmDeviceEntity> devices)
+    {
+        List<Map<String, Object>> rows = devices.stream().map(device -> {
+            Map<String, Object> row = new HashMap<>();
+            row.put("status", device.getStatus());
+            return row;
+        }).collect(Collectors.toList());
+        return buildClusterStats(rows);
+    }
+
+    private String clusterStatus(PhmDeviceEntity device, PhmAlarmEventEntity activeAlarm)
+    {
+        if (activeAlarm != null)
+        {
+            int level = Math.min(5, Math.max(1, Optional.ofNullable(activeAlarm.getAlarmLevel()).orElse(1)));
+            return "level" + level;
+        }
+        return "stopped".equals(device.getStatus()) ? "stopped" : "normal";
     }
 
     private List<Map<String, Object>> buildGoodRateTrend(List<PhmDeviceEntity> devices)
@@ -1797,6 +1830,30 @@ public class PhmServiceImpl implements PhmService, IPhmAlarmService
         return map;
     }
 
+    /**
+     * Cluster pages must read the latest row for every registered device. A
+     * global LIMIT 100 is not sufficient once the number of devices grows.
+     */
+    private Map<String, DeviceVibrationData> latestVibrationByDevice(Collection<String> deviceCodes)
+    {
+        Map<String, DeviceVibrationData> map = new HashMap<>();
+        for (String deviceCode : deviceCodes)
+        {
+            if (!StringUtils.hasText(deviceCode))
+            {
+                continue;
+            }
+            DeviceVibrationData query = new DeviceVibrationData();
+            query.setDeviceCode(deviceCode);
+            List<DeviceVibrationData> rows = vibrationDataService.selectDeviceVibrationDataList(query);
+            if (rows != null && !rows.isEmpty())
+            {
+                map.put(deviceCode, rows.get(0));
+            }
+        }
+        return map;
+    }
+
     private Map<String, DeviceTemperatureData> latestTemperatureByDevice()
     {
         Map<String, DeviceTemperatureData> map = new HashMap<>();
@@ -1805,6 +1862,85 @@ public class PhmServiceImpl implements PhmService, IPhmAlarmService
             map.putIfAbsent(item.getDeviceCode(), item);
         }
         return map;
+    }
+
+    private Map<String, DeviceTemperatureData> latestTemperatureByDevice(Collection<String> deviceCodes)
+    {
+        Map<String, DeviceTemperatureData> map = new HashMap<>();
+        for (String deviceCode : deviceCodes)
+        {
+            if (!StringUtils.hasText(deviceCode))
+            {
+                continue;
+            }
+            DeviceTemperatureData query = new DeviceTemperatureData();
+            query.setDeviceCode(deviceCode);
+            List<DeviceTemperatureData> rows = temperatureDataService.selectDeviceTemperatureDataList(query);
+            if (rows != null && !rows.isEmpty())
+            {
+                map.put(deviceCode, rows.get(0));
+            }
+        }
+        return map;
+    }
+
+    private Map<String, PhmAlarmEventEntity> latestAlarmsByDevice(Collection<String> deviceCodes, boolean activeOnly)
+    {
+        Map<String, PhmAlarmEventEntity> map = new HashMap<>();
+        if (deviceCodes == null || deviceCodes.isEmpty())
+        {
+            return map;
+        }
+        LambdaQueryWrapper<PhmAlarmEventEntity> wrapper = new LambdaQueryWrapper<PhmAlarmEventEntity>()
+                .in(PhmAlarmEventEntity::getDeviceCode, deviceCodes);
+        if (activeOnly)
+        {
+            wrapper.eq(PhmAlarmEventEntity::getStatus, STATUS_UNHANDLED)
+                    .orderByDesc(PhmAlarmEventEntity::getAlarmLevel)
+                    .orderByDesc(PhmAlarmEventEntity::getAlarmTime);
+        }
+        else
+        {
+            wrapper.orderByDesc(PhmAlarmEventEntity::getAlarmTime);
+        }
+        for (PhmAlarmEventEntity alarm : alarmEventMapper.selectList(wrapper))
+        {
+            map.putIfAbsent(alarm.getDeviceCode(), alarm);
+        }
+        return map;
+    }
+
+    private Date latestSampleTime(DeviceVibrationData vibration, DeviceTemperatureData temperature)
+    {
+        Date vibrationTime = vibration == null ? null : vibration.getSampleTime();
+        Date temperatureTime = temperature == null ? null : temperature.getCollectionTime();
+        if (vibrationTime == null)
+        {
+            return temperatureTime;
+        }
+        if (temperatureTime == null)
+        {
+            return vibrationTime;
+        }
+        return vibrationTime.after(temperatureTime) ? vibrationTime : temperatureTime;
+    }
+
+    private String telemetryFreshness(Date sampleTime)
+    {
+        if (sampleTime == null)
+        {
+            return "offline";
+        }
+        long ageSeconds = Math.max(0L, (System.currentTimeMillis() - sampleTime.getTime()) / 1000L);
+        if (ageSeconds <= 30)
+        {
+            return "realtime";
+        }
+        if (ageSeconds <= 300)
+        {
+            return "delayed";
+        }
+        return "offline";
     }
 
     private BigDecimal featureValue(DeviceVibrationData item, String featureCode)

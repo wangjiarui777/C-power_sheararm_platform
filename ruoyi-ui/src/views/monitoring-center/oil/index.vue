@@ -633,24 +633,25 @@ export default {
 
 <style scoped>
 .oil-monitoring-page {
-  --oil-amber: #f0b44d;
-  --oil-amber-soft: rgba(240, 180, 77, .12);
+  --oil-amber: #d6a14a;
+  --oil-amber-soft: rgba(214, 161, 74, .1);
   min-height: calc(100vh - 84px);
-  padding: 12px;
-  color: var(--chart-text, #e6edf3);
-  font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  padding: var(--space-page);
+  color: var(--color-text);
+  font-family: var(--font-ui);
 }
 .oil-surface {
-  border: 1px solid var(--chart-border, #263645);
-  border-radius: 14px;
-  background: var(--chart-panel, #17212b);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: none;
 }
 .oil-toolbar {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 18px;
-  margin: 12px 0 4px;
+  margin: var(--space-section) 0 4px;
   padding: 12px 16px;
 }
 .device-picker {
@@ -661,7 +662,7 @@ export default {
 }
 .device-picker label,
 .filter-field label {
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 12px;
 }
 .device-picker .el-select { width: 100%; }
@@ -669,7 +670,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 12px;
 }
 .oil-tabs { margin-top: 4px; }
@@ -688,14 +689,12 @@ export default {
   display: grid;
   grid-template-columns: minmax(210px, 1.25fr) repeat(3, minmax(130px, .75fr)) minmax(190px, 1fr);
   align-items: stretch;
-  margin: 10px 0 14px;
+  margin: var(--space-section) 0;
   overflow: hidden;
-  border: 1px solid var(--chart-border, #263645);
-  border-left: 4px solid var(--oil-amber);
-  border-radius: 14px;
-  background:
-    linear-gradient(90deg, var(--oil-amber-soft), transparent 28%),
-    var(--chart-panel, #17212b);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--oil-amber);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 .rail-normal { border-left-color: #10b981; }
 .rail-warning { border-left-color: #f59e0b; }
@@ -707,7 +706,7 @@ export default {
 .rail-reading {
   min-width: 0;
   padding: 15px 16px;
-  border-right: 1px solid var(--chart-border, #263645);
+  border-right: 1px solid var(--color-border);
 }
 .sample-identity {
   display: flex;
@@ -720,9 +719,9 @@ export default {
   height: 34px;
   flex: none;
   transform: rotate(45deg);
-  border: 1px solid rgba(240, 180, 77, .58);
+  border: 1px solid rgba(214, 161, 74, .58);
   border-radius: 50% 50% 50% 10%;
-  background: rgba(240, 180, 77, .14);
+  background: var(--oil-amber-soft);
 }
 .oil-drop i {
   position: absolute;
@@ -731,13 +730,13 @@ export default {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #f0b44d;
+  background: var(--oil-amber);
 }
 .sample-identity span:not(.oil-drop),
 .rail-reading > span {
   display: block;
   overflow: hidden;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -745,15 +744,15 @@ export default {
 .sample-identity strong {
   display: block;
   margin-top: 4px;
-  color: var(--chart-text, #e6edf3);
+  color: var(--color-heading);
   font-size: 17px;
 }
 .rail-reading strong {
   display: block;
   overflow: hidden;
   margin-top: 7px;
-  color: var(--chart-text, #e6edf3);
-  font-family: "Bahnschrift SemiBold", "DIN Alternate", Consolas, monospace;
+  color: var(--color-text);
+  font-family: var(--font-data);
   font-size: 19px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -761,7 +760,7 @@ export default {
 }
 .rail-reading strong small {
   margin-left: 5px;
-  color: var(--chart-muted, #8ea0b5);
+  color: var(--color-muted);
   font-size: 10px;
   font-weight: 400;
 }
@@ -798,7 +797,7 @@ export default {
 .device-option-code {
   float: right;
   margin-left: 16px;
-  color: #8492a6;
+  color: var(--color-muted);
 }
 @media (max-width: 1440px) {
   .oil-sample-rail { grid-template-columns: minmax(190px, 1.2fr) repeat(3, minmax(110px, .7fr)) minmax(155px, .9fr); }
@@ -814,8 +813,8 @@ export default {
   .oil-sample-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sample-identity { grid-column: 1 / -1; }
   .sample-identity,
-  .rail-reading { border-bottom: 1px solid var(--chart-border, #263645); }
-  .sample-time { border-right: 1px solid var(--chart-border, #263645); }
+  .rail-reading { border-bottom: 1px solid var(--color-border); }
+  .sample-time { border-right: 1px solid var(--color-border); }
   .realtime-grid,
   .particle-layout { grid-template-columns: 1fr; }
   .device-state-card { grid-column: auto; }
@@ -829,30 +828,30 @@ export default {
 
 <style>
 html body #app .oil-monitoring-page .context-bar {
-  border-color: var(--chart-border, #263645) !important;
-  background: var(--chart-panel, #17212b) !important;
-  color: var(--chart-text, #e6edf3) !important;
+  border-color: var(--color-border) !important;
+  background: var(--color-surface) !important;
+  color: var(--color-text) !important;
 }
 html body #app .oil-monitoring-page .context-title h1,
 html body #app .oil-monitoring-page .context-meta strong {
-  color: var(--chart-text, #e6edf3) !important;
+  color: var(--color-heading) !important;
 }
 html body #app .oil-monitoring-page .context-title p,
 html body #app .oil-monitoring-page .context-meta span,
 html body #app .oil-monitoring-page .eyebrow {
-  color: var(--chart-muted, #8ea0b5) !important;
+  color: var(--color-muted) !important;
 }
 html body #app .oil-monitoring-page .el-tabs__content {
   overflow: visible;
 }
 html body #app .oil-monitoring-page .el-alert {
-  border: 1px solid var(--chart-border, #263645) !important;
-  background: var(--chart-panel, #17212b) !important;
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-surface) !important;
 }
 html body #app .oil-monitoring-page .el-alert__title {
-  color: var(--chart-text, #e6edf3) !important;
+  color: var(--color-text) !important;
 }
 html body #app .oil-monitoring-page .el-alert__description {
-  color: var(--chart-muted, #8ea0b5) !important;
+  color: var(--color-muted) !important;
 }
 </style>

@@ -170,9 +170,18 @@ export default {
       if (this.selectedPointOptions.length > 1) return `${this.selectedPointOptions.length} 个测点`
       return this.selectedPointOption ? this.pointOptionLabel(this.selectedPointOption) : '--'
     },
+    isPointBindingBatch() {
+      return this.multiPointEnabled && this.selectedPointIds.length > 1
+    },
+    selectedPointBindingsReady() {
+      return this.selectedPointOptions.length === this.selectedPointIds.length && this.selectedPointOptions.every(point =>
+        point.bindingStatus === 'READY' && point.boundModelType && point.boundModelVersion)
+    },
     contextComplete() {
-      return Boolean(this.selectedDeviceCode && this.selectedPointIds.length && this.selectedModelType &&
-        this.selectedModelVersion && this.selectedPointOptions.length === this.selectedPointIds.length && this.selectedVersionOption &&
+      if (!this.selectedDeviceCode || !this.selectedPointIds.length) return false
+      if (this.isPointBindingBatch) return this.selectedPointBindingsReady
+      return Boolean(this.selectedModelType && this.selectedModelVersion &&
+        this.selectedPointOptions.length === this.selectedPointIds.length && this.selectedVersionOption &&
         this.selectedVersionOption.available)
     },
     mappingRows() {
@@ -426,7 +435,9 @@ export default {
       if (this.contextComplete) {
         this.contextNotice = '上下文已就绪，请为每个测点配置数据文件后开始诊断。'
       } else {
-        this.contextNotice = '请选择设备、振动测点、模型类型和可执行版本。'
+        this.contextNotice = this.isPointBindingBatch
+          ? '多测点批次要求每个测点各有一个可执行的模型绑定。'
+          : '请选择设备、振动测点、模型类型和可执行版本。'
       }
     },
     pointOptionLabel(item) {
@@ -434,6 +445,10 @@ export default {
       const device = item.deviceName || item.deviceCode || '未知设备'
       const channel = item.channelId == null ? '通道未配置' : `通道 ${item.channelId}`
       return `${point} / ${device} / ${channel}`
+    },
+    boundModelLabel(item) {
+      if (!item || item.bindingStatus !== 'READY') return '未就绪'
+      return `${item.boundModelType} / ${item.boundModelVersion}`
     },
     versionOptionLabel(item) {
       return `${item.semanticVersion} · ${modelStatusText(item.status)}${item.available ? '' : ' · 不可用'}`
@@ -516,7 +531,9 @@ export default {
         this.contextNotice = '上下文已更新，请配置每个测点的数据文件。'
       } else {
         this.polling = false
-        this.contextNotice = '请选择设备、振动测点、模型类型和可执行版本。'
+        this.contextNotice = this.isPointBindingBatch
+          ? '多测点批次要求每个测点各有一个可执行的模型绑定。'
+          : '请选择设备、振动测点、模型类型和可执行版本。'
       }
     },
     scheduleContextAnalysis() {
@@ -1366,7 +1383,10 @@ export default {
       formData.append('device_code', context.deviceCode)
       formData.append('point_id', context.pointId)
       if (context.channelId != null) formData.append('channel_id', context.channelId)
-      const response = await uploadDiagnosisToInferenceService(formData, this.currentServiceBaseURL, this.selectedModelVersion)
+      const point = this.pointOptions.find(item => String(item.id) === String(pointId))
+      const modelType = this.isPointBindingBatch ? point.boundModelType : this.selectedModelType
+      const modelVersion = this.isPointBindingBatch ? point.boundModelVersion : this.selectedModelVersion
+      const response = await uploadDiagnosisToInferenceService(formData, getServiceURL(modelType), modelVersion)
       const uploaded = this.normalizeAnalyzeResponse(response)
       if (!uploaded || !uploaded.attachmentId) throw new Error(`测点 ${pointId} 上传成功但未返回附件 ID`)
       this.$set(this.pointFileMappings, String(pointId), {
@@ -1395,7 +1415,7 @@ export default {
           pointId,
           attachmentId: this.pointFileMappings[String(pointId)].attachmentId
         }))
-        if (!this.multiPointEnabled) {
+        if (!this.isPointBindingBatch) {
           const item = items[0]
           const response = await inferWithAttachment({
             ...this.phmRequestPayload(item.pointId),
@@ -1419,8 +1439,6 @@ export default {
         const response = await createDiagnosisBatch({
           clientRequestId: requestId,
           deviceCode: this.selectedDeviceCode,
-          modelType: this.selectedModelType,
-          modelVersion: this.selectedModelVersion,
           items
         })
         const batch = this.normalizeAnalyzeResponse(response)

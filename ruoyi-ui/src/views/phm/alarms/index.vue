@@ -9,7 +9,9 @@
     </section>
 
     <section class="filter-bar">
-      <el-input v-model="query.deviceCode" placeholder="设备编码" size="small" clearable @keyup.enter.native="loadAlarms" />
+      <el-select v-model="query.deviceCode" placeholder="选择设备" size="small" clearable filterable :loading="devicesLoading" @change="loadAlarms">
+        <el-option v-for="device in devices" :key="device.id || device.deviceCode" :label="`${device.deviceName || '未命名设备'} · ${device.deviceCode}`" :value="device.deviceCode" />
+      </el-select>
       <el-select v-model="query.status" placeholder="处理状态" size="small" clearable @change="loadAlarms">
         <el-option label="未处理" value="unhandled" />
         <el-option label="已处理" value="handled" />
@@ -170,7 +172,7 @@
 
 <script>
 import echarts from '@/utils/echarts'
-import { listAlarms, getAlarm, handleAlarm, ignoreAlarm, listAlarmRules, saveAlarmRule, getFeatureTrend } from '@/api/phm'
+import { listAlarms, listPhmDevices, getAlarm, handleAlarm, ignoreAlarm, listAlarmRules, saveAlarmRule, getFeatureTrend } from '@/api/phm'
 import sensorWebSocket from '@/utils/sensor-websocket'
 import { industrialChartTheme } from '@/utils/industrialTheme'
 import { riskLevelText } from '@/utils/industrialLabels'
@@ -180,6 +182,7 @@ export default {
   data() {
     return {
       loading: false,
+      devicesLoading: false,
       actionVisible: false,
       detailVisible: false,
       detailLoading: false,
@@ -197,6 +200,7 @@ export default {
         remark: ''
       },
       rules: [],
+      devices: [],
       ruleForm: {},
       trendChart: null,
       alarms: [],
@@ -221,6 +225,7 @@ export default {
     }
   },
   created() {
+    this.loadDevices()
     this.loadAlarms()
     this.loadRules()
     this.connectAlarmSocket()
@@ -237,6 +242,17 @@ export default {
     }
   },
   methods: {
+    async loadDevices() {
+      this.devicesLoading = true
+      try {
+        const res = await listPhmDevices()
+        this.devices = res.data || []
+      } catch (error) {
+        this.devices = []
+      } finally {
+        this.devicesLoading = false
+      }
+    },
     refreshTrendTheme() {
       if (this.currentAlarm) this.loadTrendPreview(this.currentAlarm)
     },
